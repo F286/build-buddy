@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A voice-driven, full-screen 'build anything with AI' playground for young kids.",
   "type": "module",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "start": "node server/main.mjs",

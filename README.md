@@ -2,6 +2,8 @@
 
 **A full-screen, voice-first "build anything with AI" playground for young kids.**
 
+![License: MIT](https://img.shields.io/badge/license-MIT-blue) ![Node 20+](https://img.shields.io/badge/node-20%2B-green) ![No npm dependencies](https://img.shields.io/badge/npm%20dependencies-none-brightgreen)
+
 The screen starts empty except for a friendly robot named Sparky. Your kid holds the **space bar**,
 says what they want ("a red car I can drive around!"), and a few seconds later it's on the screen,
 playable. Then they keep going: *"make it blue"*, *"add a honking horn"*, *"now make it 3D"*. That loop
@@ -31,6 +33,7 @@ kid's voice is understood and spoken on the computer itself, so their voice neve
 - [Troubleshooting](#troubleshooting)
 - [Project layout](#project-layout)
 - [Credits](#credits)
+- [License](#license)
 
 ## What a session looks like
 
@@ -203,3 +206,8 @@ Build Buddy stands on these projects (downloaded by `setup.sh`, not included in 
 - [Piper](https://github.com/rhasspy/piper), backup voice (MIT); each voice model has its own license
 - [Three.js](https://threejs.org), 3D engine (MIT)
 - [Fredoka](https://fonts.google.com/specimen/Fredoka), the rounded font (SIL Open Font License, included in `public/fonts`)
+
+## License
+
+[MIT](LICENSE): free to use, copy, change and share, for any purpose. The projects listed under
+[Credits](#credits) keep their own licenses.
