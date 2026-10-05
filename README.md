@@ -76,7 +76,7 @@ cd build-buddy
 ## Run it
 
 ```bash
-./start.sh                  # full screen (kiosk); reopens itself if it gets closed
+./start.sh                  # full screen; close the window to quit
 ./start.sh --window         # in a normal window, for grown-ups trying it out
 ./start.sh --no-browser     # just the server; open http://127.0.0.1:4321 yourself
 ./start.sh --window --debug # also lets Chrome DevTools tools attach on port 9222
@@ -84,6 +84,10 @@ cd build-buddy
 
 **Grown-up controls:** press **Ctrl+Shift+P** for settings (AI brain, voice, names), the current
 creation's frame rate, and the **Quit** button. Press **Enter** to type a request instead of talking.
+
+**Add it to your app launcher (Linux):** run `./install-launcher.sh`, then find *Build Buddy* in your
+launcher. On Omarchy, press Super+Space and type `build`. If it's already open, the launcher jumps to
+the open window instead of starting a second copy. `./install-launcher.sh --remove` takes it out again.
 
 **Start it when the computer logs in:** on Omarchy/Hyprland, add
 `o.launch_on_start("/path/to/build-buddy/start.sh")` to `~/.config/hypr/autostart.lua`. On other
@@ -123,6 +127,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `tts` | `"kokoro"` | Voice: `kokoro` (natural), `piper` (faster), `browser` (the system's voices), or `off`. |
 | `kokoro.voice` / `kokoro.speed` | `"af_heart"` / `1.0` | One of 28 English voices; preview them in the Ctrl+Shift+P panel. |
 | `unmuteMic` | `true` | Linux: switch the microphone on at startup if it's muted in the system settings. |
+| `keepOpen` | `false` | Kid-proof mode: reopen the window if it's closed. Quit with Ctrl+Shift+P instead. |
 | `port` | `4321` | Local port for the app. |
 | `browser` | auto | Path to the browser, if it isn't found automatically. |
 
@@ -155,8 +160,8 @@ Buddy changes.
 
 ## Safety and privacy
 
-- **Hard to break.** In full-screen mode there's no address bar, tabs or menus, and the window
-  reopens if it's closed. Space and Enter always belong to the app, even while a game has focus.
+- **Hard to break.** In full-screen mode there's no address bar, tabs or menus. With
+  `"keepOpen": true` the window also reopens if it's closed, so only Ctrl+Shift+P → Quit stops it. Space and Enter always belong to the app, even while a game has focus.
   Every version is saved, so a restart picks up where they left off.
 - **Creations are sandboxed.** They can't reach the internet, open windows, navigate away, store
   anything, or touch the rest of the app. The only thing they can load is the bundled Three.js.
@@ -193,6 +198,7 @@ public/              the kid-facing screen
 public/stage-shim.js runs inside every creation: crash reports, talk keys, sound muting
 setup.sh             downloads and builds everything in vendor/
 start.sh             starts the app
+install-launcher.sh  adds Build Buddy to your Linux app launcher
 ```
 
 No dependencies to `npm install`. The server uses only Node's standard library.

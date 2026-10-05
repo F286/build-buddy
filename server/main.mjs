@@ -1,6 +1,6 @@
 // Build Buddy: a local web server plus a full-screen browser pointed at it.
 //
-//   node server/main.mjs              server + kiosk browser (reopens if it gets closed)
+//   node server/main.mjs              server + full-screen browser (closing it quits the app)
 //   node server/main.mjs --window     server + normal app window (for grown-ups testing)
 //   node server/main.mjs --no-browser server only; open http://127.0.0.1:4321 yourself
 //   add --debug to let Chrome DevTools tooling attach to the browser on port 9222
@@ -289,8 +289,9 @@ function launchBrowser(kiosk) {
     browser.on('exit', () => {
       browser = null;
       if (quitting) return;
-      // Closed by accident (or by a curious kid)? Bring it straight back. Back off if it
-      // keeps exiting immediately, e.g. because the profile is locked by another copy.
+      if (!config().keepOpen) return shutdown(); // closing the window quits the app
+      // Kid-proof mode: closed by accident (or by a curious kid)? Bring it straight back. Back
+      // off if it keeps exiting immediately, e.g. because the profile is locked by another copy.
       quickExits = Date.now() - t0 < 5000 ? quickExits + 1 : 0;
       setTimeout(start, quickExits > 3 ? 15000 : 800);
     });

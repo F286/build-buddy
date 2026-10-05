@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#bfe3ff"/>
+      <stop offset="1" stop-color="#e2ccff"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#sky)"/>
+  <g transform="translate(15 12) scale(0.82)" stroke-linejoin="round">
+    <line x1="60" y1="24" x2="60" y2="10" stroke="#0f766e" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="60" cy="9" r="7" fill="#ffb020" stroke="#0f766e" stroke-width="3"/>
+    <rect x="8" y="46" width="12" height="22" rx="5" fill="#5eead4" stroke="#0f766e" stroke-width="4"/>
+    <rect x="100" y="46" width="12" height="22" rx="5" fill="#5eead4" stroke="#0f766e" stroke-width="4"/>
+    <rect x="34" y="92" width="52" height="28" rx="12" fill="#5eead4" stroke="#0f766e" stroke-width="4"/>
+    <circle cx="60" cy="106" r="6" fill="#ff5a5f"/>
+    <rect x="16" y="22" width="88" height="70" rx="24" fill="#5eead4" stroke="#0f766e" stroke-width="4"/>
+    <rect x="27" y="33" width="66" height="46" rx="15" fill="#12172e"/>
+    <ellipse cx="47" cy="53" rx="7.5" ry="9" fill="#a5f3fc"/>
+    <ellipse cx="73" cy="53" rx="7.5" ry="9" fill="#a5f3fc"/>
+    <circle cx="36" cy="67" r="4.5" fill="#f9a8d4" opacity="0.55"/>
+    <circle cx="84" cy="67" r="4.5" fill="#f9a8d4" opacity="0.55"/>
+    <path d="M52 66 q8 6 16 0" fill="none" stroke="#a5f3fc" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -37,6 +37,9 @@ export const DEFAULTS = {
   // Linux: switch the default microphone on at startup if it's muted in the system settings.
   unmuteMic: true,
 
+  // Kid-proof mode: reopen the window if it gets closed (quit with Ctrl+Shift+P instead).
+  keepOpen: false,
+
   timeoutSec: 240,
   historyTurns: 8,
   browser: '', // path to Chrome / Chromium / Edge; auto-detected when empty

@@ -10,5 +10,6 @@
   "tts": "kokoro",
   "kokoro": { "voice": "af_heart", "speed": 1.0 },
   "unmuteMic": true,
+  "keepOpen": false,
   "port": 4321
 }
