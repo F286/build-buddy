@@ -1,0 +1,14 @@
+{
+  "kidName": "",
+  "kidAge": 5,
+  "buddyName": "Sparky",
+  "backends": ["claude", "codex"],
+  "claude": { "model": "sonnet", "effort": "low" },
+  "codex": { "model": "", "reasoning": "low" },
+  "command": { "cmd": "", "args": [] },
+  "stt": "whisper",
+  "tts": "kokoro",
+  "kokoro": { "voice": "af_heart", "speed": 1.0 },
+  "unmuteMic": true,
+  "port": 4321
+}

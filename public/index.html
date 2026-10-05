@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Build Buddy</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<template id="robotTpl">
+  <svg class="robot" viewBox="0 0 120 124" aria-hidden="true">
+    <line x1="60" y1="24" x2="60" y2="10" class="r-stroke" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="60" cy="9" r="7" class="bulb"/>
+    <rect x="8" y="46" width="12" height="22" rx="5" class="ear"/>
+    <rect x="100" y="46" width="12" height="22" rx="5" class="ear"/>
+    <rect x="34" y="92" width="52" height="28" rx="12" class="r-body"/>
+    <circle cx="60" cy="106" r="6" class="heart"/>
+    <rect x="16" y="22" width="88" height="70" rx="24" class="r-head"/>
+    <rect x="27" y="33" width="66" height="46" rx="15" class="screen"/>
+    <ellipse cx="47" cy="53" rx="7.5" ry="9" class="eye"/>
+    <ellipse cx="73" cy="53" rx="7.5" ry="9" class="eye"/>
+    <circle cx="36" cy="67" r="4.5" class="cheek"/>
+    <circle cx="84" cy="67" r="4.5" class="cheek"/>
+    <rect x="51" y="66" width="18" height="5" rx="2.5" class="mouth"/>
+  </svg>
+</template>
+
+<main id="stage">
+  <!-- never display:none - AI-made pages often measure the window as soon as they start -->
+  <iframe id="frame" title="Creation" sandbox="allow-scripts allow-pointer-lock" allow="autoplay"></iframe>
+
+  <section id="welcome">
+    <div class="floaters" aria-hidden="true">
+      <span>⭐</span><span>🚀</span><span>🦕</span><span>🎨</span><span>🌈</span><span>🎵</span><span>🚗</span><span>🐱</span>
+    </div>
+    <div class="hello">
+      <div class="big-buddy robot-slot"></div>
+      <div class="how" aria-label="Hold the space bar and talk">
+        <div class="spacebar"><span class="finger">👆</span></div>
+        <div class="plus">+</div>
+        <div class="talk">🗣️</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- a small card, not a cover: the current creation stays visible and playable underneath -->
+  <section id="building" hidden aria-live="polite">
+    <div id="blocks"></div>
+    <div class="what">
+      <div class="label"><span id="buildingLabel">Building</span><span class="dots"><i>.</i><i>.</i><i>.</i></span> <span id="buildingTime"></span></div>
+      <div id="buildingWhat"></div>
+      <div id="buildingNext" hidden></div>
+    </div>
+  </section>
+</main>
+
+<div id="buddySaid" class="bubble from-buddy" hidden></div>
+
+<footer id="dock">
+  <div class="side left">
+    <button id="undoBtn" class="round amber" aria-label="Go back" tabindex="-1">
+      <svg viewBox="0 0 48 48"><path d="M19 12 8 22l11 10" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 22h18a12 12 0 0 1 0 24h-6" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></svg>
+    </button>
+    <button id="galleryBtn" class="round violet" aria-label="My creations" tabindex="-1">
+      <svg viewBox="0 0 48 48"><path d="m24 5 5.6 11.8 12.9 1.6-9.5 8.9 2.4 12.8L24 33.8 12.6 40.1 15 27.3l-9.5-8.9 12.9-1.6Z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <button id="micBtn" aria-label="Talk" tabindex="-1">
+    <span class="ring"></span>
+    <svg class="mic" viewBox="0 0 48 48"><rect x="16" y="4" width="16" height="26" rx="8" fill="currentColor"/><path d="M10 22a14 14 0 0 0 28 0M24 36v8M16 44h16" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg>
+    <svg class="dots" viewBox="0 0 48 48"><circle cx="10" cy="24" r="5"/><circle cx="24" cy="24" r="5"/><circle cx="38" cy="24" r="5"/></svg>
+  </button>
+
+  <div class="side right">
+    <div id="buddy" class="buddy robot-slot"></div>
+    <button id="newBtn" class="round teal" aria-label="New page" tabindex="-1">
+      <svg viewBox="0 0 48 48"><rect x="10" y="6" width="28" height="36" rx="5" fill="none" stroke="currentColor" stroke-width="5"/><path d="M24 17v14M17 24h14" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</footer>
+
+<section id="gallery" class="overlay" hidden>
+  <div id="galleryGrid" class="grid"></div>
+  <button id="galleryClose" class="round close" aria-label="Close" tabindex="-1">
+    <svg viewBox="0 0 48 48"><path d="M12 12l24 24M36 12 12 36" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></svg>
+  </button>
+</section>
+
+<section id="parent" class="overlay" hidden>
+  <form id="parentForm" class="panel">
+    <h1>Grown-up settings</h1>
+    <label>AI brain
+      <select name="brains">
+        <option value="claude,codex">Claude, then ChatGPT if Claude fails</option>
+        <option value="codex,claude">ChatGPT, then Claude if ChatGPT fails</option>
+        <option value="claude">Claude only</option>
+        <option value="codex">ChatGPT only</option>
+        <option value="command">Custom command (config.json)</option>
+      </select>
+    </label>
+    <div class="row">
+      <label>Claude model <input name="claudeModel" placeholder="sonnet"></label>
+      <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
+    </div>
+    <div class="row">
+      <label>Listening
+        <select name="stt"><option value="whisper">On this computer (whisper)</option><option value="browser">Browser speech service</option></select>
+      </label>
+      <label>Talking
+        <select name="tts"><option value="kokoro">Natural voice (Kokoro)</option><option value="piper">Fast voice (Piper)</option><option value="browser">Browser voice</option><option value="off">Silent</option></select>
+      </label>
+    </div>
+    <div class="row">
+      <label>Natural voice
+        <select name="voice"></select>
+      </label>
+      <label>&nbsp;<button type="button" id="voicePreview">▶ Hear it</button></label>
+    </div>
+    <div class="row">
+      <label>Buddy's name <input name="buddyName"></label>
+      <label>Kid's name <input name="kidName" placeholder="(optional)"></label>
+    </div>
+    <p id="parentStatus" class="status"></p>
+    <div class="buttons">
+      <button type="submit" class="primary">Save</button>
+      <button type="button" id="parentClose">Close</button>
+      <button type="button" id="quitBtn" class="danger">Quit app</button>
+    </div>
+    <p class="hint">Ctrl+Shift+P opens this panel. Press Enter in the app to type instead of talk.</p>
+  </form>
+</section>
+
+<form id="typeBox" hidden>
+  <input id="typeInput" autocomplete="off" spellcheck="false" placeholder="Type what to build, then press Enter">
+</form>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

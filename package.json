@@ -1,0 +1,15 @@
+{
+  "name": "build-buddy",
+  "version": "0.1.0",
+  "description": "A voice-driven, full-screen 'build anything with AI' playground for young kids.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server/main.mjs",
+    "dev": "node server/main.mjs --no-browser",
+    "window": "node server/main.mjs --window"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,8 @@
+# Downloaded by setup.sh (speech models, voices, 3D engine)
+vendor/
+# Your kid's creations, logs, voice cache and browser profile
+data/
+# Your own settings (see config.example.json)
+config.json
+node_modules/
+.DS_Store
