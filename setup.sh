@@ -94,6 +94,21 @@ if [ ! -s vendor/kokoro/model/model.onnx ]; then
   rm -rf vendor/kokoro/model && mv vendor/kokoro/kokoro-multi-lang-v1_0 vendor/kokoro/model
 fi
 
+# ---------------------------------------------------------------------------- Parakeet
+say "Speech-to-text for little kids: Parakeet (via sherpa-onnx)"
+PARAKEET=vendor/parakeet/tdt-0.6b-v2
+if [ -s "$PARAKEET/encoder.int8.onnx" ]; then
+  echo "already installed"
+elif [ -x vendor/kokoro/sherpa-onnx/bin/sherpa-onnx-offline ]; then
+  echo "downloading the Parakeet speech model (about 660 MB)..."
+  mkdir -p "$PARAKEET"
+  for f in encoder.int8.onnx decoder.int8.onnx joiner.int8.onnx tokens.txt; do
+    curl -fL --progress-bar -o "$PARAKEET/$f" "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/$f"
+  done
+else
+  echo "needs sherpa-onnx (above) - whisper will be used instead"
+fi
+
 # ---------------------------------------------------------------------------- Piper
 say "Fast voice: Piper"
 case "$OS-$ARCH" in

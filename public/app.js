@@ -475,7 +475,8 @@ async function build(body) {
   }
 }
 
-function heard(text) {
+// `alt` is how the second speech listener heard it, when it heard something different.
+function heard(text, alt = '') {
   if (state.timeUp) return;
   state.lastActivity = Date.now();
   if (state.busy) {
@@ -483,7 +484,7 @@ function heard(text) {
     showNext();
     say(line('queued'));
   } else {
-    build({ text });
+    build({ text, alt });
   }
 }
 
@@ -774,19 +775,22 @@ async function stopListening() {
   }
 
   // Quiet voices are easier to understand once they're turned up.
-  const samples = downsample(concat(chunks), mic.rate, 16000);
+  // Speech engines want 16 kHz. The browser's own resampler does that cleanly (a quick average
+  // muddied little voices, and the engines' built-in resamplers are rougher still).
+  const samples = await resample(concat(chunks), mic.rate, 16000);
   const gain = Math.min(20, 0.9 / peak);
   if (gain > 1) for (let i = 0; i < samples.length; i++) samples[i] *= gain;
   const wav = encodeWav(samples, 16000);
   mood('thinking');
   micBtn.classList.add('thinking');
   let text = '';
+  let alt = '';
   let muted = false;
   mic.transcribing = true;
   try {
     const info = `ms=${Math.round(heldMs)}&speech=${Math.round(speechMs)}&peak=${peak.toFixed(4)}`;
     const res = await fetch(`/api/transcribe?${info}`, { method: 'POST', headers: { 'content-type': 'audio/wav', 'x-kidbuild': '1' }, body: wav });
-    ({ text = '', muted = false } = await res.json());
+    ({ text = '', alt = '', muted = false } = await res.json());
   } catch (err) {
     console.warn('transcribe failed', err);
   }
@@ -798,7 +802,7 @@ async function stopListening() {
     return say(line('muted'));
   }
   if (!text) return say(line('unclear'));
-  heard(text);
+  heard(text, alt);
 }
 
 function initBrowserRecognizer() {
@@ -828,18 +832,16 @@ function concat(chunks) {
   return out;
 }
 
-function downsample(input, from, to) {
+async function resample(input, from, to) {
   if (from === to) return input;
-  const ratio = from / to;
-  const out = new Float32Array(Math.floor(input.length / ratio));
-  for (let i = 0; i < out.length; i++) {
-    const start = Math.floor(i * ratio);
-    const end = Math.min(input.length, Math.floor((i + 1) * ratio));
-    let sum = 0;
-    for (let j = start; j < end; j++) sum += input[j];
-    out[i] = sum / Math.max(1, end - start);
-  }
-  return out;
+  const ctx = new OfflineAudioContext(1, Math.ceil((input.length * to) / from), to);
+  const buffer = ctx.createBuffer(1, input.length, from);
+  buffer.copyToChannel(input, 0);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+  source.start();
+  return (await ctx.startRendering()).getChannelData(0);
 }
 
 function encodeWav(samples, rate) {
@@ -1058,7 +1060,7 @@ function showParentStatus() {
   const c = state.config;
   const s = c.speech || {};
   $('#parentStatus').textContent =
-    `Listening: ${s.stt === false ? 'whisper NOT installed (run setup.sh)' : c.stt}. ` +
+    `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +

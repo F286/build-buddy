@@ -118,7 +118,7 @@ const LOOKS = [
   'comic book - halftone dots, bold colors and "POW" style bursts on actions',
 ];
 
-function userPrompt({ page, history, text, fix, fullOnly }) {
+function userPrompt({ page, history, text, alt, fix, fullOnly }) {
   const c = config();
   const parts = [];
   parts.push(page ? `<current_page>\n${page}\n</current_page>` : 'The screen is blank - nothing has been built yet.');
@@ -135,6 +135,8 @@ function userPrompt({ page, history, text, fix, fullOnly }) {
     parts.push(`The page just crashed with this problem:\n${fix}\nFix it without changing anything else. SAY: "Oops! Let me fix a wobbly bit." Keep DONE very short.`);
   } else {
     parts.push(`The kid just said: "${text}"`);
+    // Two speech-to-text listeners; when they disagree, both versions help work out the words.
+    if (alt) parts.push(`(The other listener heard: "${alt}". Little kids are hard to hear - use both versions and the conversation to work out what they meant.)`);
   }
   if (fullOnly) parts.push('IMPORTANT: this time reply with the complete page in one ```html block - no FIND/REPLACE edits.');
   return parts.join('\n\n');
@@ -351,7 +353,7 @@ async function ask(prompt, emit, state) {
   throw lastErr || new Error('No AI backends configured');
 }
 
-export async function build({ text, fix }, emit) {
+export async function build({ text, alt, fix }, emit) {
   if (busy) throw new Error('busy');
   busy = true;
   const state = { said: '' };
@@ -362,7 +364,7 @@ export async function build({ text, fix }, emit) {
     const titleBefore = p.title;
     log(`${fix ? 'FIX ' : 'KID '} ${(text || fix).replace(/\s+/g, ' ').slice(0, 200)}`);
 
-    let reply = await ask(userPrompt({ page, history, text, fix }), emit, state);
+    let reply = await ask(userPrompt({ page, history, text, alt, fix }), emit, state);
     let r = parseReply(reply.text);
     let newHtml = r.html;
     let edited = false;
@@ -373,7 +375,7 @@ export async function build({ text, fix }, emit) {
         edited = true;
       } catch (err) {
         log(`edit failed (${err.message}), asking for the full page`);
-        reply = await ask(userPrompt({ page, history, text, fix, fullOnly: true }), emit, state);
+        reply = await ask(userPrompt({ page, history, text, alt, fix, fullOnly: true }), emit, state);
         const again = parseReply(reply.text);
         newHtml = again.html;
         r = { ...again, say: r.say || again.say, done: again.done || r.done, title: r.title || again.title, emoji: r.emoji || again.emoji };

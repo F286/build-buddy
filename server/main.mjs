@@ -123,7 +123,7 @@ const routes = {
   },
 
   'POST /api/build': async (req, res) => {
-    const { text, fix } = await readJson(req);
+    const { text, alt, fix } = await readJson(req);
     if (!text?.trim() && !fix) return send(res, 400, { error: 'say something' });
     if (timeIsUp()) return send(res, 423, { error: 'time is up' });
     if (ai.isBusy()) return send(res, 409, { error: 'busy' });
@@ -132,7 +132,7 @@ const routes = {
       if (!res.destroyed) res.write(JSON.stringify(ev) + '\n');
     };
     try {
-      await ai.build({ text: text?.trim(), fix }, emit);
+      await ai.build({ text: text?.trim(), alt: alt?.trim(), fix }, emit);
     } catch (err) {
       console.error('build failed:', err.message);
       emit({ type: 'error', message: err.message });
@@ -146,10 +146,10 @@ const routes = {
   'POST /api/transcribe': async (req, res, url) => {
     const t0 = Date.now();
     const q = url.searchParams;
-    const text = await speech.transcribe(await readBody(req), { context: speechContext(), talkMs: Number(q.get('speech')) });
+    const { text, alt = '' } = await speech.transcribe(await readBody(req), { context: speechContext(), talkMs: Number(q.get('speech')) });
     const muted = !text && micMuted();
-    ai.log(`HEAR ${(q.get('ms') / 1000).toFixed(1)}s peak=${q.get('peak')} talk=${q.get('speech')}ms → ${JSON.stringify(text)}${muted ? ' (MIC MUTED)' : ''} (${Date.now() - t0}ms)`);
-    return { text, muted };
+    ai.log(`HEAR ${(q.get('ms') / 1000).toFixed(1)}s peak=${q.get('peak')} talk=${q.get('speech')}ms → ${JSON.stringify(text)}${alt ? ` / ${JSON.stringify(alt)}` : ''}${muted ? ' (MIC MUTED)' : ''} (${Date.now() - t0}ms)`);
+    return { text, alt, muted };
   },
 
   // Nothing was heard: is that because the microphone is muted?
@@ -191,7 +191,7 @@ const routes = {
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
-    if (['whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
+    if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
     if (['kokoro', 'piper', 'browser', 'off'].includes(b.tts)) patch.tts = b.tts;
     if (speech.KOKORO_VOICES.includes(b.voice)) patch.kokoro = { voice: b.voice };
     saveConfig(patch);

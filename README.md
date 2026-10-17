@@ -75,6 +75,7 @@ cd build-buddy
 | | What it is | Size |
 |---|---|---|
 | whisper.cpp + `small.en` | Speech-to-text (Sparky's ears) | ~500 MB |
+| Parakeet TDT 0.6B v2 | A second speech recognizer, listening alongside whisper | ~660 MB |
 | Kokoro (via sherpa-onnx) | Natural-sounding voice (Sparky's voice) | ~460 MB |
 | Piper | Faster, more robotic backup voice | ~110 MB |
 | Phaser | 2D game engine creations can use | ~1.4 MB |
@@ -140,7 +141,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
-| `stt` | `"whisper"` | Speech-to-text: `whisper` (on this computer), or `browser` (Chrome's online speech service; macOS/Windows Chrome only). |
+| `stt` | `"both"` | Speech-to-text: `both` (whisper and Parakeet together, the AI gets both versions), `whisper`, `parakeet`, or `browser` (Chrome's online speech service; macOS/Windows Chrome only). |
 | `tts` | `"kokoro"` | Voice: `kokoro` (natural), `piper` (faster), `browser` (the system's voices), or `off`. |
 | `kokoro.voice` / `kokoro.speed` | `"af_heart"` / `1.0` | One of 28 English voices; preview them in the Ctrl+Shift+P panel. |
 | `watch.enabled` | `true` | The overwatch: a stronger AI that checks on the game while they play and fixes it if it's broken or stuck. |
@@ -179,10 +180,14 @@ Buddy changes.
 - **Fast feedback.** With Claude, the AI's first sentence is spoken while the rest is still being written.
   Small changes come back as find-and-replace edits instead of a whole new page, and Sparky speaks
   sentence by sentence, preparing the next one while the current one plays.
-- **Built for little voices.** Speech is understood on the computer by whisper (`small.en`, about
-  1.5 s per request). It runs on the CPU on purpose: on the GPU it would make games stutter while it
-  works. Whisper is told what the kid is building and what they said lately, which fixes many mix-ups
-  ("tomato" vs "tornado"), and silence is never sent to it, so it can't invent a sentence. Listening
+- **Built for little voices.** Two speech recognizers listen at once, both on the computer:
+  whisper (`small.en`) and NVIDIA's Parakeet. They get *different* words wrong, so Sparky is given
+  both versions and works out what was meant. In one test whisper heard "a Cunado", Parakeet heard "a
+  panado", and Sparky built the tornado that was asked for. On toddler-style test speech, picking the
+  better of the two each time cut mistakes by about a fifth. Both together take about 2 s. They run on
+  the CPU on purpose: on the GPU, speech recognition makes games stutter while it works. Whisper is
+  also told what the kid is building and what they said lately; silence is never sent to either, so
+  they can't invent sentences; and rude words that a mumble gets misheard as are masked. Listening
   starts half a second before the talk key goes down and keeps going a moment after it's let go.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
@@ -256,6 +261,7 @@ No dependencies to `npm install`. The server uses only Node's standard library.
 Build Buddy stands on these projects (downloaded by `setup.sh`, not included in this repository):
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp), speech-to-text (MIT)
+- [Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) by NVIDIA, second speech recognizer (CC BY 4.0), run with sherpa-onnx
 - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), natural voice (Apache 2.0), run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache 2.0)
 - [Piper](https://github.com/rhasspy/piper), backup voice (MIT); each voice model has its own license
 - [Phaser](https://phaser.io), 2D game engine (MIT)

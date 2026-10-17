@@ -1,5 +1,6 @@
-// Speech in (whisper.cpp) and speech out (Kokoro via sherpa-onnx, or the faster but more robotic
-// Piper). All local: the kid's voice never leaves the computer, and nothing costs per use.
+// Speech in (Parakeet via sherpa-onnx, or whisper.cpp) and speech out (Kokoro via sherpa-onnx, or
+// the faster but more robotic Piper). All local: the kid's voice never leaves the computer, and
+// nothing costs per use.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -35,10 +36,24 @@ function whisperModel() {
   return fs.existsSync(file) || !fs.existsSync(fallback) ? file : fallback;
 }
 
+// Parakeet TDT 0.6B (NVIDIA), run by sherpa-onnx's recognizer on the CPU (~1 s). On clean
+// recordings of toddler-style speech it beat whisper small.en clearly; through the microphone the
+// two were about even, but they get *different* words wrong. So by default both listen, and the AI
+// gets both versions: picking the better one each time would cut mistakes by about a fifth.
+function parakeet() {
+  const c = config().parakeet;
+  const model = resolvePath(c.model);
+  const bin = findBin('sherpa-onnx-offline', c.bin, KOKORO_DIRS);
+  return { ok: Boolean(bin && fs.existsSync(path.join(model, 'encoder.int8.onnx'))), bin, model, threads: c.threads };
+}
+
+const whisperOk = () => Boolean(findBin('whisper-cli', config().whisper.bin, WHISPER_DIRS) && fs.existsSync(whisperModel()));
+
 export function status() {
   const c = config();
   return {
-    stt: c.stt === 'whisper' ? Boolean(findBin('whisper-cli', c.whisper.bin, WHISPER_DIRS) && fs.existsSync(whisperModel())) : c.stt,
+    // Parakeet falls back to whisper when it isn't installed.
+    stt: ['parakeet', 'both'].includes(c.stt) ? parakeet().ok || whisperOk() : c.stt === 'whisper' ? whisperOk() : c.stt,
     tts:
       c.tts === 'kokoro' ? kokoro().ok
       : c.tts === 'piper' ? Boolean(findBin('piper', c.piper.bin, PIPER_DIRS) && fs.existsSync(resolvePath(c.piper.voice)))
@@ -55,22 +70,68 @@ const words = s => s.toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ')
 // misheard ("tomato" for "tornado"); telling whisper what the conversation is about fixes many
 // of those. It must not contain made-up example sentences: whisper repeats its prompt when it
 // hears next to nothing.
-export async function transcribe(wav, { context = '', talkMs = Infinity } = {}) {
+// Resolves with { text, alt }: alt is what the second listener heard, when it heard it differently.
+export async function transcribe(wav, opts = {}) {
+  const mode = config().stt;
+  const p = mode === 'parakeet' || mode === 'both' ? parakeet() : null;
+  if (!p?.ok) return { text: await transcribeWhisper(wav, opts) };
+  if (mode === 'parakeet' || !whisperOk()) return { text: await transcribeParakeet(wav, p) };
+  // Both at once, sharing the CPU cores between them (~2.2 s together on an M1 Pro).
+  const cores = config().whisper.threads;
+  const whisperThreads = Math.max(2, Math.round(cores * 0.6));
+  const [w, k] = await Promise.allSettled([
+    transcribeWhisper(wav, { ...opts, threads: whisperThreads }),
+    transcribeParakeet(wav, { ...p, threads: Math.max(2, cores - whisperThreads + 1) }),
+  ]);
+  const heard = [w, k].map(r => (r.status === 'fulfilled' ? r.value : ''));
+  if (!heard[0] && !heard[1] && w.status === 'rejected') throw w.reason;
+  const [text, alt] = heard[0] ? heard : [heard[1], ''];
+  return { text, alt: alt && words(alt) !== words(text) ? alt : '' };
+}
+
+// Little kids' mumbles are sometimes "heard" as rude words. They'd show up on screen (and in the
+// log), so mask them before anything else sees the text.
+const RUDE = /\b(n[i1]gg\w*|f+u+c+k\w*|sh[i1]t\w*|b[i1]tch\w*|cunts?|whores?|sluts?|fag(got)?s?|retard\w*|assholes?)\b/gi;
+
+const tidy = text => {
+  const t = text
+    .replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, ' ') // [BLANK_AUDIO], (music), *laughs*
+    .replace(RUDE, '…')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return PHANTOMS.has(words(t)) ? '' : t;
+};
+
+async function transcribeParakeet(wav, p) {
+  const file = path.join(TMP, `rec-${Date.now()}.wav`);
+  fs.writeFileSync(file, wav);
+  const m = f => path.join(p.model, f);
+  try {
+    const out = await run(p.bin, [
+      `--encoder=${m('encoder.int8.onnx')}`, `--decoder=${m('decoder.int8.onnx')}`, `--joiner=${m('joiner.int8.onnx')}`,
+      `--tokens=${m('tokens.txt')}`, '--model-type=nemo_transducer', '--decoding-method=modified_beam_search',
+      '--max-active-paths=4', `--num-threads=${p.threads}`, file,
+    ], { timeoutSec: 60 });
+    // One JSON line per file: {"text": "...", "tokens": [...], ...}
+    const line = out.split('\n').find(l => l.startsWith('{'));
+    return tidy(line ? JSON.parse(line).text || '' : '');
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+}
+
+async function transcribeWhisper(wav, { context = '', talkMs = Infinity, threads } = {}) {
   const c = config();
   const bin = findBin('whisper-cli', c.whisper.bin, WHISPER_DIRS);
   if (!bin) throw new Error('whisper-cli not found - run ./setup.sh');
   const file = path.join(TMP, `rec-${Date.now()}.wav`);
   fs.writeFileSync(file, wav);
   try {
-    const args = ['-m', whisperModel(), '-f', file, '-l', 'en', '-nt', '-np', '-sns', '-t', String(c.whisper.threads)];
+    const args = ['-m', whisperModel(), '-f', file, '-l', 'en', '-nt', '-np', '-sns', '-t', String(threads || c.whisper.threads)];
     if (!c.whisper.gpu) args.push('-ng'); // the game needs the GPU more than whisper does
     if (context) args.push('--prompt', context.slice(-400));
-    const out = await run(bin, args, { timeoutSec: 60 });
-    const text = out
-      .replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, ' ') // [BLANK_AUDIO], (music), *laughs*
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (PHANTOMS.has(words(text))) return '';
+    const text = tidy(await run(bin, args, { timeoutSec: 60 }));
+    if (!text) return '';
     // A short mumble that comes back as one of the context sentences word for word is whisper
     // echoing its prompt, not the kid.
     const echoed = context.split(/(?<=[.!?])\s+/).some(sentence => words(sentence) === words(text));

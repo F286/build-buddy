@@ -26,8 +26,11 @@ export const DEFAULTS = {
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 
-  // Speech in:  whisper (local whisper.cpp, private, offline) | browser (Chrome's Web Speech API) | off
-  stt: 'whisper',
+  // Speech in: both (whisper and Parakeet listen together and the AI gets both versions; whisper
+  //            alone if Parakeet isn't installed) | whisper | parakeet (all local)
+  //            | browser (Chrome's Web Speech API) | off
+  stt: 'both',
+  parakeet: { bin: '', model: 'vendor/parakeet/tdt-0.6b-v2', threads: Math.max(2, Math.min(8, os.cpus().length - 2)) },
   // On the CPU by default: on the GPU, whisper stalls the game's drawing for up to half a second
   // right after the kid speaks. small.en on the CPU takes ~1.5 s with no stutter. For better
   // hearing of little kids, { model: 'large-v3-turbo-q5_0', gpu: true } makes about a quarter
