@@ -63,6 +63,8 @@ function publicConfig() {
     backends: c.backends,
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
+    claudeFast: Boolean(c.claude.fast),
+    fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     stt: c.stt,
     tts: c.tts,
@@ -189,6 +191,7 @@ const routes = {
     const patch = {};
     if (Array.isArray(b.backends)) patch.backends = b.backends.filter(n => ai.backendNames.includes(n));
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
+    if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;

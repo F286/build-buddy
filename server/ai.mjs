@@ -148,7 +148,7 @@ function userPrompt({ page, history, text, alt, fix, fullOnly }) {
 // overwatch use a stronger model and look at a screenshot.
 
 const backends = {
-  async claude({ system, prompt, onText = () => {}, model, effort, tools = '', timeoutSec }) {
+  async claude({ system, prompt, onText = () => {}, onSpeed = () => {}, model, effort, fast, tools = '', timeoutSec }) {
     const c = config().claude;
     const bin = findBin('claude', c.bin);
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
@@ -160,10 +160,15 @@ const backends = {
     if (tools) args.push('--permission-prompts', 'none'); // read-only tools only, never ask
     if (model || c.model) args.push('--model', model || c.model);
     if (effort || c.effort) args.push('--effort', effort || c.effort);
+    // Fast mode: the same model, answering much sooner. On a subscription it's billed as extra
+    // usage; without extra usage credits Claude says why and answers at normal speed instead.
+    const wantFast = fast ?? c.fast;
+    if (wantFast) args.push('--settings', JSON.stringify({ fastMode: true }));
 
     let buf = '';
     let streamed = '';
     let result = null;
+    let fastNote = '';
     const handle = line => {
       if (!line.trim()) return;
       let ev;
@@ -176,6 +181,8 @@ const backends = {
       if (d?.type === 'text_delta') {
         streamed += d.text;
         onText(d.text);
+      } else if (ev.type === 'system' && ev.subtype === 'notification' && /fast/i.test(ev.key || '')) {
+        fastNote = ev.text || ev.key;
       } else if (ev.type === 'result') {
         result = ev;
       }
@@ -197,6 +204,7 @@ const backends = {
     handle(buf);
     if (!result) throw new Error('Claude returned no result');
     if (result.is_error) throw new Error(result.result || result.subtype || 'Claude error');
+    if (wantFast) onSpeed(result.usage?.speed || 'unknown', result.usage?.speed === 'fast' ? '' : fastNote);
     return result.result || streamed;
   },
 
@@ -311,6 +319,10 @@ export function applyEdits(page, edits) {
 let busy = false;
 export const isBusy = () => busy;
 
+// How the last build that asked for fast mode actually ran, for the grown-ups' panel.
+let fastSeen = null;
+export const fastStatus = () => fastSeen;
+
 export function log(line) {
   fs.appendFile(path.join(DATA, 'log.txt'), `${new Date().toISOString()} ${line}\n`, () => {});
 }
@@ -325,11 +337,16 @@ async function ask(prompt, emit, state) {
     const backend = backends[name];
     if (!backend) continue;
     let text = '';
+    let speed = '';
     const started = Date.now();
     try {
       const reply = await backend({
         system,
         prompt,
+        onSpeed: (s, note) => {
+          speed = ` ${s}${note ? ` (${note})` : ''}`;
+          fastSeen = { speed: s, note, at: Date.now() };
+        },
         onText: chunk => {
           text += chunk;
           emit({ type: 'progress', chars: text.length });
@@ -342,7 +359,7 @@ async function ask(prompt, emit, state) {
           }
         },
       });
-      log(`ok   ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${reply.length} chars`);
+      log(`ok   ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${reply.length} chars${speed}`);
       return { text: reply, backend: name };
     } catch (err) {
       lastErr = err;

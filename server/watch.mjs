@@ -65,7 +65,7 @@ function saveScreenshot(dataUrl) {
 function watcher() {
   const c = config();
   const name = c.backends.find(b => b === 'claude' || b === 'codex');
-  if (name === 'claude') return { name, opts: { model: c.watch.model, effort: c.watch.effort, tools: 'Read' } };
+  if (name === 'claude') return { name, opts: { model: c.watch.model, effort: c.watch.effort, fast: false, tools: 'Read' } };
   if (name === 'codex') return { name, opts: { model: c.watch.codexModel || undefined, reasoning: 'high' } };
   return null;
 }

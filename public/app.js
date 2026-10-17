@@ -1027,6 +1027,7 @@ async function openParent() {
   const brains = c.backends.join(',');
   f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
   f.claudeModel.value = c.claudeModel || '';
+  f.claudeFast.value = c.claudeFast ? 'fast' : '';
   f.codexModel.value = c.codexModel || '';
   f.stt.value = c.stt;
   f.tts.value = c.tts;
@@ -1062,6 +1063,7 @@ function showParentStatus() {
   $('#parentStatus').textContent =
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
+    (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
     (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
@@ -1074,6 +1076,7 @@ $('#parentForm').addEventListener('submit', async e => {
   const c = await api('/api/config', {
     backends: f.brains.value.split(','),
     claudeModel: f.claudeModel.value,
+    claudeFast: f.claudeFast.value === 'fast',
     codexModel: f.codexModel.value,
     stt: f.stt.value,
     tts: f.tts.value,

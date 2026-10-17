@@ -122,11 +122,14 @@
     </label>
     <div class="row">
       <label>Claude model <input name="claudeModel" placeholder="opus"></label>
-      <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
+      <label>Claude speed
+        <select name="claudeFast"><option value="">Normal</option><option value="fast">Fast (extra usage)</option></select>
+      </label>
     </div>
+    <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
     <div class="row">
       <label>Listening
-        <select name="stt"><option value="both">On this computer (whisper + Parakeet)</option><option value="whisper">On this computer (whisper)</option><option value="parakeet">On this computer (Parakeet)</option><option value="browser">Browser speech service</option></select>
+        <select name="stt"><option value="both">whisper + Parakeet</option><option value="whisper">whisper only</option><option value="parakeet">Parakeet only</option><option value="browser">Browser speech service</option></select>
       </label>
       <label>Talking
         <select name="tts"><option value="kokoro">Natural voice (Kokoro)</option><option value="piper">Fast voice (Piper)</option><option value="browser">Browser voice</option><option value="off">Silent</option></select>

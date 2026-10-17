@@ -22,7 +22,9 @@ export const DEFAULTS = {
   backends: ['claude', 'codex'],
   // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
   // richer pages in about the same time (25 s vs 21 s). Higher effort roughly doubles the wait.
-  claude: { bin: '', model: 'opus', effort: 'low' },
+  // fast: Claude's fast mode for the builder - the same model, answering much sooner. On a Claude
+  // subscription it's paid from extra usage credits; with none left it runs at normal speed.
+  claude: { bin: '', model: 'opus', effort: 'low', fast: false },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 
