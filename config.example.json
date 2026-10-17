@@ -3,7 +3,7 @@
   "kidAge": 5,
   "buddyName": "Sparky",
   "backends": ["claude", "codex"],
-  "claude": { "model": "sonnet", "effort": "low" },
+  "claude": { "model": "opus", "effort": "low" },
   "codex": { "model": "", "reasoning": "low" },
   "command": { "cmd": "", "args": [] },
   "stt": "whisper",

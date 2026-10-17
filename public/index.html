@@ -46,6 +46,12 @@
   </section>
 
   <!-- a small card, not a cover: the current creation stays visible and playable underneath -->
+  <!-- the last minute of the time limit -->
+  <div id="countdown" hidden aria-live="off">
+    <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="26" r="16" fill="none" stroke="currentColor" stroke-width="4"/><path d="M24 16v10l6 4M18 4h12" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>
+    <span id="countdownNum">60</span>
+  </div>
+
   <section id="building" hidden aria-live="polite">
     <div id="blocks"></div>
     <div class="what">
@@ -89,9 +95,22 @@
   </button>
 </section>
 
+<!-- Shown when the time limit runs out. A grown-up adds time (or removes the limit) with Ctrl+Shift+P. -->
+<section id="timeUp" class="overlay" hidden>
+  <div class="time-up">
+    <div class="robot-slot"></div>
+    <h1>Time's up!</h1>
+    <p>Great building today. See you next time!</p>
+    <small>Grown-ups: press Ctrl+Shift+P to add more time.</small>
+  </div>
+</section>
+
 <section id="parent" class="overlay" hidden>
   <form id="parentForm" class="panel">
     <h1>Grown-up settings</h1>
+    <label>Time limit
+      <select name="timeLimit"></select>
+    </label>
     <label>AI brain
       <select name="brains">
         <option value="claude,codex">Claude, then ChatGPT if Claude fails</option>
@@ -102,7 +121,7 @@
       </select>
     </label>
     <div class="row">
-      <label>Claude model <input name="claudeModel" placeholder="sonnet"></label>
+      <label>Claude model <input name="claudeModel" placeholder="opus"></label>
       <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
     </div>
     <div class="row">

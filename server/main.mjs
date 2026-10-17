@@ -12,6 +12,7 @@ import { config, saveConfig, ROOT, DATA } from './config.mjs';
 import * as store from './store.mjs';
 import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
+import * as watch from './watch.mjs';
 import { findBin } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
@@ -66,21 +67,65 @@ function publicConfig() {
     stt: c.stt,
     tts: c.tts,
     voice: c.kokoro.voice,
-    three: fs.existsSync(path.join(THREE_DIR, 'build/three.module.js')),
     voices: speech.KOKORO_VOICES,
+    watch: { enabled: c.watch.enabled, firstAfterSec: c.watch.firstAfterSec, everySec: c.watch.everySec },
     speech: speech.status(),
   };
+}
+
+// The time limit. It's off unless a grown-up turns it on in the panel (the kid can't set it by
+// talking). It's kept on disk so closing and reopening the app doesn't get around it - but only
+// for a while: started half an hour or more after it ran out, the app starts with no limit.
+const TIMER_FILE = path.join(DATA, 'timer.json');
+const TIMER_GRACE_MS = 30 * 60000;
+let timerEndsAt = 0;
+let timerUpLog = null;
+
+function setTimerEnd(endsAt) {
+  timerEndsAt = endsAt;
+  clearTimeout(timerUpLog);
+  if (endsAt > Date.now()) timerUpLog = setTimeout(() => ai.log("TIMER time's up"), endsAt - Date.now());
+  try {
+    if (endsAt) fs.writeFileSync(TIMER_FILE, JSON.stringify({ endsAt }));
+    else fs.rmSync(TIMER_FILE, { force: true });
+  } catch {}
+}
+try {
+  const { endsAt } = JSON.parse(fs.readFileSync(TIMER_FILE, 'utf8'));
+  if (endsAt && Date.now() - endsAt < TIMER_GRACE_MS) {
+    setTimerEnd(endsAt);
+    ai.log(`TIMER carried over (${endsAt > Date.now() ? `${Math.ceil((endsAt - Date.now()) / 60000)} min left` : "time's up"})`);
+  } else setTimerEnd(0);
+} catch {}
+
+const timerInfo = () => ({ remainingMs: timerEndsAt ? Math.max(0, timerEndsAt - Date.now()) : null });
+const timeIsUp = () => Boolean(timerEndsAt) && Date.now() >= timerEndsAt;
+
+// What whisper should expect to hear: what's being built and what the kid said lately.
+function speechContext() {
+  const p = store.currentProject();
+  const said = p.history.filter(h => h.role === 'kid').slice(-3).map(h => h.text);
+  return [p.title, ...said].filter(Boolean).join('. ').replace(/\.\./g, '.');
 }
 
 const routes = {
   'GET /api/state': () => {
     const p = store.currentProject();
-    return { project: projectInfo(p), html: store.html(p), busy: ai.isBusy(), config: publicConfig() };
+    return { project: projectInfo(p), html: store.html(p), busy: ai.isBusy(), config: publicConfig(), timer: timerInfo() };
+  },
+
+  // { minutes: 20 } starts (or restarts) the countdown from now; 0 removes the limit.
+  'POST /api/timer': async req => {
+    const minutes = Number((await readJson(req)).minutes);
+    setTimerEnd(minutes > 0 ? Date.now() + Math.min(minutes, 600) * 60000 : 0);
+    ai.log(`TIMER ${minutes > 0 ? `${minutes} min` : 'off'}`);
+    return timerInfo();
   },
 
   'POST /api/build': async (req, res) => {
     const { text, fix } = await readJson(req);
     if (!text?.trim() && !fix) return send(res, 400, { error: 'say something' });
+    if (timeIsUp()) return send(res, 423, { error: 'time is up' });
     if (ai.isBusy()) return send(res, 409, { error: 'busy' });
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
     const emit = ev => {
@@ -95,14 +140,20 @@ const routes = {
     res.end();
   },
 
+  // The page reports how the creation is running (and a screenshot); see watch.mjs.
+  'POST /api/watch': async req => watch.review(await readJson(req)),
+
   'POST /api/transcribe': async (req, res, url) => {
     const t0 = Date.now();
-    const text = await speech.transcribe(await readBody(req));
-    const muted = !text && micMuted();
     const q = url.searchParams;
+    const text = await speech.transcribe(await readBody(req), { context: speechContext(), talkMs: Number(q.get('speech')) });
+    const muted = !text && micMuted();
     ai.log(`HEAR ${(q.get('ms') / 1000).toFixed(1)}s peak=${q.get('peak')} talk=${q.get('speech')}ms → ${JSON.stringify(text)}${muted ? ' (MIC MUTED)' : ''} (${Date.now() - t0}ms)`);
     return { text, muted };
   },
+
+  // Nothing was heard: is that because the microphone is muted?
+  'GET /api/mic': () => ({ muted: micMuted() }),
 
   'GET /api/tts': async (req, res, url) => {
     const wav = await speech.speak(url.searchParams.get('text'));
@@ -153,14 +204,16 @@ const routes = {
   },
 };
 
-const THREE_DIR = path.join(ROOT, 'vendor/three');
+// Libraries creations may import, served from vendor/ (see the import map in public/app.js).
+const LIBS = ['three', 'phaser'];
 
 function serveStatic(res, pathname) {
-  // Libraries creations may import (Three.js). Creations run in a sandboxed frame with no origin
-  // of their own, so these need CORS; they never change, so let the browser keep them.
-  const lib = pathname.startsWith('/lib/three/');
-  const base = lib ? THREE_DIR : PUBLIC;
-  const rel = lib ? pathname.slice('/lib/three/'.length) : pathname === '/' ? 'index.html' : pathname;
+  // Creations run in a sandboxed frame with no origin of their own, so libraries need CORS; they
+  // never change, so let the browser keep them.
+  const libName = /^\/lib\/([a-z]+)\//.exec(pathname)?.[1];
+  const lib = LIBS.includes(libName);
+  const base = lib ? path.join(ROOT, 'vendor', libName) : PUBLIC;
+  const rel = lib ? pathname.slice(`/lib/${libName}/`.length) : pathname === '/' ? 'index.html' : pathname;
   const file = path.normalize(path.join(base, rel));
   if (!file.startsWith(base + path.sep)) return send(res, 404, { error: 'not found' });
   fs.readFile(file, (err, buf) => {

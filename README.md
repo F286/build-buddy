@@ -41,9 +41,13 @@ kid's voice is understood and spoken on the computer itself, so their voice neve
 2. **Sparky answers out loud** within a couple of seconds, showing what it understood:
    *"A rocket ship zooming to the moon? Blast off!"* A small card at the top shows it's building.
 3. **It appears** with a ta-da sound, and Sparky explains how to play: *"Click anywhere to blast off!"*
-4. **Sparky suggests one small next step:** *"Should we add a little alien waving on the moon?"*
-5. **They keep building.** Changes take a few seconds. If they don't like something, the back
-   button undoes it.
+4. **The next idea is theirs.** Sparky never suggests what to add. At most it asks *"What's next?"*,
+   so they learn to come up with ideas and put them into words, instead of just saying yes or no.
+5. **They keep building, without starting over.** Changes take a few seconds and slot into the
+   game they're playing: their score and where they were come back. If they don't like something,
+   the back button undoes it.
+6. **A careful helper keeps watch.** Once they've played for a bit, a stronger AI looks at the game
+   and quietly fixes it if it's broken or stuck.
 
 ## Install
 
@@ -55,6 +59,8 @@ You need:
   - **Claude:** install [Claude Code](https://claude.com/claude-code), then run `claude` once and sign in with your Claude account.
   - **ChatGPT:** install Codex (`npm install -g @openai/codex`), then run `codex login` with your ChatGPT account.
 - To build the speech recognizer: `git`, `cmake` and a C++ compiler (on a Mac, `brew install whisper-cpp` instead).
+  Optional: `WHISPER_GPU=1 ./setup.sh` also builds the GPU version (on Linux it needs Vulkan drivers
+  and `glslc`) and fetches the larger speech model; see `whisper.gpu` below.
 
 Then:
 
@@ -71,6 +77,7 @@ cd build-buddy
 | whisper.cpp + `small.en` | Speech-to-text (Sparky's ears) | ~500 MB |
 | Kokoro (via sherpa-onnx) | Natural-sounding voice (Sparky's voice) | ~460 MB |
 | Piper | Faster, more robotic backup voice | ~110 MB |
+| Phaser | 2D game engine creations can use | ~1.4 MB |
 | Three.js | 3D engine creations can use | ~17 MB |
 
 ## Run it
@@ -82,8 +89,17 @@ cd build-buddy
 ./start.sh --window --debug # also lets Chrome DevTools tools attach on port 9222
 ```
 
-**Grown-up controls:** press **Ctrl+Shift+P** for settings (AI brain, voice, names), the current
-creation's frame rate, and the **Quit** button. Press **Enter** to type a request instead of talking.
+**Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, voice, names), the
+current creation's frame rate, and the **Quit** button. Press **Enter** to type a request instead of
+talking.
+
+**Time limit:** pick one at the top of the Ctrl+Shift+P panel (2 to 60 minutes) and press Save; the
+countdown starts then. For the last minute a clock counts down in the corner and Sparky says *"One
+more minute!"*. When it runs out, the game is put away and a *"Time's up!"* screen stays until a
+grown-up opens the panel again and adds time or picks *No limit*. Their progress in the game is
+kept for when it comes back. The limit is off unless a grown-up turns it on here; kids can't set
+it by asking Sparky. Closing and reopening the app doesn't get around it, but if the app is started
+half an hour or more after the time ran out, it starts with no limit.
 
 **Add it to your app launcher (Linux):** run `./install-launcher.sh`, then find *Build Buddy* in your
 launcher. On Omarchy, press Super+Space and type `build`. If it's already open, the launcher jumps to
@@ -97,11 +113,11 @@ Linux desktops, add a `start.sh` entry to your startup applications. On macOS, a
 
 | On screen | What it does |
 |---|---|
-| 🎤 big red button, or the **space bar** | Hold and talk, walkie-talkie style. Or tap once: it stops listening when they pause. |
+| 🎤 big red button, or the **space bar** | Hold and talk, walkie-talkie style. Or tap once: it stops listening when they pause. Listening starts half a second *before* the key goes down and carries on for a moment after it's let go, so first and last words aren't clipped. |
 | ↩️ yellow | Go back one step. Every version is kept, so nothing is ever lost. |
 | ⭐ purple | *My creations*: everything they've made, by emoji and name. |
 | ➕ teal | A fresh new page. The old one stays in *My creations*. |
-| 🤖 Sparky | Says what it understood straight away, then how to play, then one small idea for what to add next. |
+| 🤖 Sparky | Says what it understood straight away, then how to play. It never suggests ideas; those come from the kid. |
 
 Things to try: *a piano with rainbow keys*, *a fish tank where I can feed the fish*, *a dinosaur
 that dances when I click it*, *a 3D racing game*, *make it faster*, *add a second player*, *make the
@@ -120,12 +136,16 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `kidAge` | `5` | Sparky pitches words and games to this age. |
 | `buddyName` | `"Sparky"` | The robot's name. |
 | `backends` | `["claude", "codex"]` | Which AI to use, in order. If the first fails (offline, usage limit), the next takes over. |
-| `claude.model` / `claude.effort` | `"sonnet"` / `"low"` | Model and effort for Claude Code. |
+| `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. |
+| `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
 | `stt` | `"whisper"` | Speech-to-text: `whisper` (on this computer), or `browser` (Chrome's online speech service; macOS/Windows Chrome only). |
 | `tts` | `"kokoro"` | Voice: `kokoro` (natural), `piper` (faster), `browser` (the system's voices), or `off`. |
 | `kokoro.voice` / `kokoro.speed` | `"af_heart"` / `1.0` | One of 28 English voices; preview them in the Ctrl+Shift+P panel. |
+| `watch.enabled` | `true` | The overwatch: a stronger AI that checks on the game while they play and fixes it if it's broken or stuck. |
+| `watch.model` / `watch.effort` | `"opus"` / `"medium"` | Model and effort for the overwatch (with Claude; with Codex it uses high reasoning). |
+| `watch.firstAfterSec` / `watch.everySec` | `25` / `180` | First check after this much play, then this often while they keep playing the same version. |
 | `unmuteMic` | `true` | Linux: switch the microphone on at startup if it's muted in the system settings. |
 | `keepOpen` | `false` | Kid-proof mode: reopen the window if it's closed. Quit with Ctrl+Shift+P instead. |
 | `port` | `4321` | Local port for the app. |
@@ -144,17 +164,42 @@ Buddy changes.
 
 - **Each creation is one web page** (HTML, CSS and JavaScript). That's the format AI models write
   most fluently, and it covers what kids ask for: drawings, animations, games, music, toys and
-  stories. For 3D, the app ships [Three.js](https://threejs.org), so 3D games run on the GPU. Without
-  it, the AI hand-draws "3D" on a 2D canvas: a test kart game ran at 7 fps that way, and at 120 fps
-  with Three.js.
+  stories. Two game engines ship with the app: [Phaser](https://phaser.io) for 2D games (physics,
+  particles, tweens, so things bounce and sparkle instead of sitting still) and
+  [Three.js](https://threejs.org) for 3D. Both run on the GPU. Without a 3D engine, the AI hand-draws
+  "3D" on a 2D canvas: a test kart game ran at 7 fps that way, and at 120 fps with Three.js.
+- **Changes don't restart the game.** Each creation keeps the kid's progress (score, level,
+  position, things collected) in a small `KB.keep({...})` object. When a new version arrives, those
+  values are handed over, but only where they still fit (same kind of value), so a changed game
+  can't be pushed into a state it doesn't understand. If the new version still crashes with them,
+  it quietly starts fresh instead.
 - **Your subscription is the brain.** Build Buddy runs the official `claude` or `codex` command-line
   tools in non-interactive mode on your computer, so each request counts against your plan's normal
   usage, just as if you'd typed it yourself. It doesn't extract or reuse login tokens.
 - **Fast feedback.** With Claude, the AI's first sentence is spoken while the rest is still being written.
   Small changes come back as find-and-replace edits instead of a whole new page, and Sparky speaks
   sentence by sentence, preparing the next one while the current one plays.
+- **Built for little voices.** Speech is understood on the computer by whisper (`small.en`, about
+  1.5 s per request). It runs on the CPU on purpose: on the GPU it would make games stutter while it
+  works. Whisper is told what the kid is building and what they said lately, which fixes many mix-ups
+  ("tomato" vs "tornado"), and silence is never sent to it, so it can't invent a sentence. Listening
+  starts half a second before the talk key goes down and keeps going a moment after it's let go.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
+- **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
+  every 3 minutes after that while they keep playing it, Opus takes a careful look: a screenshot of
+  the game, its frame rate, recent errors and kept values. It fixes problems that don't show up as
+  errors, like a player who's invisible or stuck, a frozen screen, or a request that didn't take.
+  If everything works, it may give that version one tiny polish (something cut off at the edge, too
+  small to see, a missing bounce), but it never adds new things or changes what the kid chose, so
+  it's still entirely their creation. Usually it leaves things alone. Its changes slide in at a calm
+  moment without losing progress (fixes with a soft sparkle, polish silently). If the quick fixes
+  fail, it's called in straight away. The Ctrl+Shift+P panel shows its last verdict, and
+  `data/log.txt` has a `WATCH` line for every check.
+- **No two creations look the same.** Each new creation is nudged toward a different look (cartoon
+  outlines, paper cut-out, glowing night, pixel art, picture book, and so on), with a full scene
+  behind it, characters with personality, and a small hidden surprise or two to discover. What to
+  build is always the kid's idea; Sparky never suggests one.
 - **Smooth by default.** The AI follows a short performance checklist, and creations render at no
   more than 1.5× pixel density, so sharp screens don't quadruple the work.
 
@@ -164,9 +209,11 @@ Buddy changes.
   `"keepOpen": true` the window also reopens if it's closed, so only Ctrl+Shift+P → Quit stops it. Space and Enter always belong to the app, even while a game has focus.
   Every version is saved, so a restart picks up where they left off.
 - **Creations are sandboxed.** They can't reach the internet, open windows, navigate away, store
-  anything, or touch the rest of the app. The only thing they can load is the bundled Three.js.
-- **What leaves your computer:** only the text of each request, plus the current creation's code,
-  sent to Claude or ChatGPT. Listening and speaking happen on the computer itself.
+  anything, or touch the rest of the app. The only things they can load are the bundled Phaser and
+  Three.js.
+- **What leaves your computer:** the text of each request and the current creation's code, sent to
+  Claude or ChatGPT. The overwatch also sends a small screenshot of the game itself (never the
+  camera or the rest of the screen). Listening and speaking happen on the computer itself.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
 - **Kid-friendly by instruction.** Sparky is told to keep everything friendly and age-appropriate,
@@ -179,7 +226,7 @@ Buddy changes.
 | **Sparky can't hear** | Usually the microphone is muted in the system settings, so the app receives silence. On Linux the app switches it on at startup; if it gets muted mid-session, Sparky says *"My ears are turned off!"* Each recording is logged in `data/log.txt` as a `HEAR` line with its length, loudness and what was understood. |
 | **No voice** | Check the system volume, and the *Talking* line in the Ctrl+Shift+P panel. If Kokoro isn't installed, Sparky falls back to Piper. |
 | **"My brain got a little tangled"** | The AI request failed. Check `data/log.txt`. Common causes are being offline, a usage limit, or needing to sign in to `claude` / `codex` again. |
-| **A game feels slow** | Ctrl+Shift+P shows its frame rate. Asking Sparky to *"make it simpler"* or *"make it faster"* helps. For 3D, Sparky should be using Three.js. |
+| **A game feels slow** | Ctrl+Shift+P shows its frame rate. Asking Sparky to *"make it simpler"* or *"make it faster"* helps. For 2D games Sparky should be using Phaser, and for 3D, Three.js. |
 | **"Port 4321 is busy"** | Build Buddy is already running, or set a different `port` in `config.json`. |
 
 **Platforms:** developed on Linux (Arch Linux ARM on Apple Silicon, Hyprland, Chromium). macOS
@@ -192,10 +239,11 @@ but `setup.sh` needs WSL, or use `"stt": "browser", "tts": "browser"` with Chrom
 server/main.mjs      web server, API, full-screen browser launcher
 server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
 server/speech.mjs    whisper.cpp (listening), Kokoro and Piper (talking)
+server/watch.mjs     the overwatch: a stronger model that checks on games and fixes them
 server/store.mjs     creations and their versions, saved in data/projects/
 server/config.mjs    settings and their defaults
 public/              the kid-facing screen
-public/stage-shim.js runs inside every creation: crash reports, talk keys, sound muting
+public/stage-shim.js runs inside every creation: crash reports, talk keys, KB.keep, overwatch reports
 setup.sh             downloads and builds everything in vendor/
 start.sh             starts the app
 install-launcher.sh  adds Build Buddy to your Linux app launcher
@@ -210,6 +258,7 @@ Build Buddy stands on these projects (downloaded by `setup.sh`, not included in 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp), speech-to-text (MIT)
 - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), natural voice (Apache 2.0), run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache 2.0)
 - [Piper](https://github.com/rhasspy/piper), backup voice (MIT); each voice model has its own license
+- [Phaser](https://phaser.io), 2D game engine (MIT)
 - [Three.js](https://threejs.org), 3D engine (MIT)
 - [Fredoka](https://fonts.google.com/specimen/Fredoka), the rounded font (SIL Open Font License, included in `public/fonts`)
 

@@ -18,6 +18,11 @@ const state = {
   fixedVersions: new Set(),
   pageErrors: [],
   lastActivity: Date.now(),
+  loadedAt: 0, // when the current page was put on the stage
+  restoredAt: 0, // ...and if it was handed the kid's progress, when
+  kept: null, // the latest KB.keep values the page reported: { projectId, keep }
+  timeUp: false, // the time limit ran out: the creation is put away until a grown-up adds time
+  resumeKeep: null, // ...and this is the kid's progress to hand back when it returns
 };
 
 async function api(path, body) {
@@ -73,6 +78,9 @@ const sfx = {
   pop: () => tone(380 + Math.random() * 500, 0, 0.07, 'triangle', 0.04),
   tada: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.3, 'triangle', 0.12)),
   oops: () => (tone(420, 0, 0.16, 'sawtooth', 0.05), tone(300, 0.14, 0.24, 'sawtooth', 0.05)),
+  sparkle: () => [1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, 0.25, 'sine', 0.05)),
+  tick: () => tone(880, 0, 0.06, 'triangle', 0.06),
+  timeUp: () => [784, 659, 523, 392].forEach((f, i) => tone(f, i * 0.18, 0.5, 'triangle', 0.12)),
 };
 
 // ------------------------------------------------------------------------------------- voice out
@@ -94,10 +102,14 @@ const LINES = {
   freshPage: ['A fresh new page! What should we build?', "Brand new page! What's your idea?"],
   nothingYet: ["You haven't built anything yet. Let's make something!"],
   gallery: ['Here are the things you made! Pick one!'],
+  oneMinute: ['One more minute!'],
+  timeUp: ["Time's up! Great building today. See you next time!"],
+  moreTime: ["More time! Let's keep building!"],
+  // Nudges when the screen sits blank: open invitations only, never ideas (those are the kid's job).
   ideas: [
-    'You could make a rocket ship, a dancing dinosaur, or a piano! Hold the space bar and tell me.',
-    'How about a race car, a bouncy ball, or a fish tank? Hold the space bar and tell me your idea!',
-    'We could build a monster that tells jokes, or a rainbow you can paint! What do you want?',
+    'What do you want to build? Hold the space bar and tell me!',
+    "I'm ready when you are! Hold the space bar and tell me your idea.",
+    'Think of something fun, then hold the space bar and tell me all about it!',
   ],
 };
 const line = key => pick(LINES[key]);
@@ -199,10 +211,15 @@ const readingTime = text => 1200 + text.length * 55;
 
 let shim = '';
 let expectLoad = false;
-// Creations may load only the libraries this app ships (Three.js); everything else is blocked.
+// Creations may load only the libraries this app ships (Phaser, Three.js); everything else is
+// blocked.
 const LIB = `${location.origin}/lib/`;
 const IMPORT_MAP = JSON.stringify({
-  imports: { three: `${LIB}three/build/three.module.js`, 'three/addons/': `${LIB}three/addons/` },
+  imports: {
+    phaser: `${LIB}phaser/phaser.esm.min.js`,
+    three: `${LIB}three/build/three.module.js`,
+    'three/addons/': `${LIB}three/addons/`,
+  },
 });
 const CSP = [
   "default-src 'none'",
@@ -217,22 +234,53 @@ const CSP = [
   "base-uri 'none'",
 ].join('; ');
 
-function wrap(html) {
+// `restore` (the kid's progress from the previous version) is handed to KB.keep in the page.
+function wrap(html, restore) {
+  const handOver = restore ? `<script>window.__kbRestore=${JSON.stringify(restore).replace(/</g, '\\u003c')}<\/script>` : '';
   const head =
     `<meta http-equiv="Content-Security-Policy" content="${CSP}">` +
-    `<script>${shim}<\/script><script type="importmap">${IMPORT_MAP}<\/script>`;
+    `${handOver}<script>${shim}<\/script><script type="importmap">${IMPORT_MAP}<\/script>`;
   if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, m => m + head);
   if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, m => `${m}<head>${head}</head>`);
   return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
 }
 
-function showPage(html) {
+function showPage(html, { restore = null } = {}) {
   state.html = html || '';
   state.pageErrors = [];
+  state.loadedAt = Date.now();
+  state.restoredAt = restore ? Date.now() : 0;
+  if (!restore) state.kept = null;
   $('#welcome').hidden = Boolean(state.html);
   void frame.offsetWidth; // make sure the frame has its real size before the page starts
   expectLoad = true;
-  frame.srcdoc = state.html ? wrap(state.html) : '';
+  // While time is up, nothing runs: keep the page (and any progress for it) for later.
+  if (state.timeUp && restore) state.resumeKeep = restore.keep;
+  frame.srcdoc = state.html && !state.timeUp ? wrap(state.html, restore) : '';
+}
+
+// Ask the page something and wait (briefly) for its answer.
+let askId = 0;
+const answers = new Map();
+function askPage(type, timeoutMs) {
+  const id = ++askId;
+  return new Promise(resolve => {
+    const timer = setTimeout(() => answers.delete(id) && resolve(null), timeoutMs);
+    answers.set(id, d => (clearTimeout(timer), resolve(d)));
+    tellPage({ type, id });
+  });
+}
+
+// Put a new version of the same creation on the stage without losing the kid's progress: grab
+// the latest KB.keep values from the running page and hand them to the new one.
+async function swapPage(html, { continues = true } = {}) {
+  const projectId = state.project?.id;
+  let keep = null;
+  if (continues && state.html) {
+    const fresh = await askPage('keep?', 300);
+    keep = fresh?.keep ?? (state.kept?.projectId === projectId ? state.kept.keep : null);
+  }
+  showPage(html, { restore: keep ? { keep } : null });
 }
 
 // The page should never wander off: if it navigates or reloads itself, put it back.
@@ -247,7 +295,7 @@ frame.addEventListener('load', () => {
 });
 
 function focusStage() {
-  if (overlayOpen() || !state.html) return;
+  if (overlayOpen() || !state.html || state.timeUp) return;
   frame.focus();
   try {
     frame.contentWindow.focus();
@@ -265,6 +313,11 @@ addEventListener('message', e => {
   if (e.source !== frame.contentWindow || !d?.kidbuild) return;
   if (d.type === 'key') handleKey(d);
   if (d.type === 'error') pageError(d.message);
+  if (d.type === 'keep' && d.keep) state.kept = { projectId: state.project?.id, keep: d.keep };
+  if (d.id && answers.has(d.id)) {
+    answers.get(d.id)(d);
+    answers.delete(d.id);
+  }
   if (d.type === 'fps') {
     state.fps = d.fps;
     if (!$('#parent').hidden) showParentStatus();
@@ -275,11 +328,20 @@ addEventListener('message', e => {
 let fixTimer = null;
 function pageError(message) {
   if (/ResizeObserver|^Script error/i.test(message)) return;
+  // Crashed right after being handed the kid's progress? Maybe the old values don't suit the
+  // new version: start this version fresh instead (no fix needed yet).
+  if (state.restoredAt && Date.now() - state.restoredAt < 5000) {
+    console.warn('crashed with restored progress, starting fresh:', message);
+    showPage(state.html);
+    return;
+  }
   state.pageErrors.push(message);
   clearTimeout(fixTimer);
   fixTimer = setTimeout(() => {
     const v = `${state.project?.id}:${state.project?.version}`;
-    if (state.busy || state.fixStreak >= 2 || state.fixedVersions.has(v) || !state.pageErrors.length) return;
+    // The quick fixes didn't stick: ask the overwatch to take a careful look.
+    if (state.fixStreak >= 2 || state.fixedVersions.has(v)) return checkCreation({ urgent: true });
+    if (state.busy || !state.pageErrors.length) return;
     state.fixedVersions.add(v);
     const errors = [...new Set(state.pageErrors)].slice(0, 5).join('\n');
     say(line('fixing'));
@@ -384,31 +446,37 @@ async function build(body) {
   micBtn.classList.remove('thinking');
   state.busy = false;
 
+  const quiet = state.timeUp; // time ran out while it was building: keep the result for later
   if (!result || result.type === 'error') {
     console.warn('build failed', result?.message);
-    sfx.oops();
-    say(line('tangled'));
+    if (!quiet) {
+      sfx.oops();
+      say(line('tangled'));
+    }
   } else {
     state.project = { ...state.project, title: result.title, emoji: result.emoji, version: result.version };
     if (result.html) {
-      showPage(result.html);
-      sfx.tada();
-      cheer();
+      await swapPage(result.html, { continues: result.continues });
+      if (!quiet) {
+        sfx.tada();
+        cheer();
+      }
     }
-    if (!body.fix) {
+    if (!body.fix && !quiet) {
       if (result.done) say(result.done);
       else if (!result.saidEarly) say(result.say);
     }
   }
   if (!voice.current) mood(null);
 
-  if (state.queue.length) {
+  if (state.queue.length && !state.timeUp) {
     const text = state.queue.splice(0).join(' ... and then: ');
     build({ text });
   }
 }
 
 function heard(text) {
+  if (state.timeUp) return;
   state.lastActivity = Date.now();
   if (state.busy) {
     state.queue.push(text);
@@ -418,6 +486,147 @@ function heard(text) {
     build({ text });
   }
 }
+
+// ------------------------------------------------------------------------------------- overwatch
+
+// A stronger, slower model checks on the creation once the kid has played with it for a while,
+// then every few minutes while they keep playing it (or straight away if quick fixes didn't
+// help), and quietly fixes it if it's broken or stuck. See server/watch.mjs.
+const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '' };
+
+async function checkCreation({ urgent = false } = {}) {
+  const cfg = state.config.watch;
+  if (!cfg?.enabled || !state.html || state.timeUp || overwatch.running || !state.project?.version) return;
+  if (state.busy || mic.recording || mic.transcribing) return;
+  const { id: projectId, version } = state.project;
+  const key = `${projectId}:${version}`;
+  const last = overwatch.lastCheck.get(key);
+  if (urgent) {
+    if (overwatch.urgentDone.has(key)) return;
+  } else {
+    const shownSec = (Date.now() - state.loadedAt) / 1000;
+    const due = last ? Date.now() - last >= cfg.everySec * 1000 : shownSec >= cfg.firstAfterSec;
+    if (!due || overlayOpen()) return;
+  }
+
+  const answer = await askPage('inspect?', 4000);
+  const report = answer?.report;
+  if (!report) return;
+  // Nobody's played for a while since the last look: nothing new to learn, skip the check.
+  if (!urgent && last && report.idleSec > 90) return;
+  const { screenshot, ...rest } = report;
+  overwatch.lastCheck.set(key, Date.now());
+  if (urgent) overwatch.urgentDone.add(key);
+  overwatch.running = true;
+  try {
+    const r = await api('/api/watch', {
+      projectId,
+      version,
+      screenshot,
+      report: { ...rest, shownSec: (Date.now() - state.loadedAt) / 1000, errors: [...new Set([...(rest.errors || []), ...state.pageErrors])] },
+    });
+    overwatch.note = r.fixed ? `${r.verdict === 'polish' ? 'polished' : 'fixed'}: ${r.why}` : r.verdict ? `all good (${r.why})` : `skipped (${r.skipped})`;
+    overwatch.note += `, ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    if (r.fixed) await applyFix(projectId, version, r);
+  } catch (err) {
+    console.warn('overwatch check failed', err);
+  } finally {
+    overwatch.running = false;
+  }
+}
+
+// Put the overwatch's fix in at a calm moment, keeping the kid's progress. If the kid has moved
+// on to something newer meanwhile, the fix is for an old version: leave it.
+async function applyFix(projectId, version, r) {
+  while (state.busy || mic.recording || mic.transcribing || voice.current) await sleep(1000);
+  if (state.project?.id !== projectId || state.project?.version !== version) return;
+  state.project = { ...state.project, version: r.version };
+  state.fixStreak = 0;
+  await swapPage(r.html);
+  if (r.verdict === 'fix') sfx.sparkle(); // a polish slips in without a sound
+}
+
+setInterval(() => checkCreation(), 15000);
+
+// ------------------------------------------------------------------------------------- time limit
+
+// Set from the grown-up panel (the server keeps the clock, so a reload can't reset it). For the
+// last minute a clock counts down in the corner; when it runs out the creation is put away and
+// the "Time's up!" screen stays until a grown-up adds time or removes the limit.
+const timer = { endsAt: 0, warned: false, shownSec: -1 };
+const timeLeft = () => (timer.endsAt ? timer.endsAt - Date.now() : null);
+const clock = ms => `${Math.floor(Math.ceil(ms / 1000) / 60)}:${String(Math.ceil(ms / 1000) % 60).padStart(2, '0')}`;
+
+function setTimer(info) {
+  const left = info?.remainingMs;
+  timer.endsAt = left == null ? 0 : Date.now() + left;
+  timer.warned = left != null && left <= 60000; // already in the last minute: no announcement
+  tickTimer();
+}
+
+function tickTimer() {
+  const el = $('#countdown');
+  const left = timeLeft() ?? Infinity;
+  if (left <= 0) {
+    el.hidden = true;
+    if (!state.timeUp) timeIsUp();
+    return;
+  }
+  if (state.timeUp) moreTime();
+  if (left > 60000) {
+    el.hidden = true;
+    timer.warned = false;
+    return;
+  }
+  const sec = Math.ceil(left / 1000);
+  el.hidden = false;
+  el.style.setProperty('--left', String(left / 60000));
+  el.classList.toggle('hurry', sec <= 10);
+  if (sec !== timer.shownSec) {
+    timer.shownSec = sec;
+    $('#countdownNum').textContent = sec;
+    if (sec <= 10) sfx.tick();
+  }
+  if (!timer.warned) {
+    timer.warned = true;
+    say(line('oneMinute'));
+  }
+}
+
+async function timeIsUp() {
+  state.timeUp = true;
+  state.queue = [];
+  if (mic.recording) {
+    mic.recording = false; // drop what was being said
+    mic.chunks = [];
+    micBtn.classList.remove('listening');
+  }
+  hush();
+  $('#gallery').hidden = true;
+  $('#typeBox').hidden = true;
+  // Put the creation away so it really stops, remembering the kid's progress for when it's back.
+  const fresh = state.html ? await askPage('keep?', 300) : null;
+  state.resumeKeep = fresh?.keep ?? (state.kept?.projectId === state.project?.id ? state.kept.keep : null);
+  expectLoad = true;
+  frame.srcdoc = '';
+  $('#timeUp').hidden = false;
+  document.body.classList.add('time-is-up');
+  sfx.timeUp();
+  say(line('timeUp'));
+}
+
+function moreTime() {
+  state.timeUp = false;
+  $('#timeUp').hidden = true;
+  document.body.classList.remove('time-is-up');
+  hush();
+  const keep = state.resumeKeep;
+  state.resumeKeep = null;
+  if (state.html) showPage(state.html, { restore: keep ? { keep } : null });
+  say(line('moreTime'));
+}
+
+setInterval(tickTimer, 250);
 
 // ------------------------------------------------------------------------------------- listening
 
@@ -434,14 +643,24 @@ const mic = {
   peak: 0,
   transcribing: false,
   floor: 0.002,
+  tail: null, // the short wait after the key is let go
   recognizer: null,
 };
 
 async function initMic() {
   if (state.config.stt === 'browser') return initBrowserRecognizer();
   try {
+    // Noise suppression is off: it tends to smear small kids' high voices, and whisper copes with
+    // background noise better than with those artifacts. Echo cancellation stays on so the
+    // app's own sounds don't end up in the recording.
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: true },
+    });
+    // The microphone is open all the time (so recording starts instantly); if it goes away,
+    // e.g. the sound system restarts, open it again.
+    stream.getAudioTracks()[0].addEventListener('ended', () => {
+      mic.ready = false;
+      setTimeout(initMic, 1000);
     });
     await audio.audioWorklet.addModule('mic-worklet.js');
     const node = new AudioWorkletNode(audio, 'recorder');
@@ -467,8 +686,9 @@ function onSamples(frame) {
   if (!loud) mic.floor = mic.floor * 0.97 + rms * 0.03; // follow the room's background noise
 
   if (!mic.recording) {
-    mic.preroll.push(frame); // keep the last ~0.3 s so the first word isn't clipped
-    if (mic.preroll.length > 7) mic.preroll.shift();
+    // Keep the last half second, so a word started just before the key went down is caught.
+    mic.preroll.push(frame);
+    if (mic.preroll.length > 12) mic.preroll.shift();
     return;
   }
   micBtn.style.setProperty('--level', String(1 + Math.min(0.5, rms * 12)));
@@ -489,9 +709,15 @@ function onSamples(frame) {
 }
 
 function pressTalk() {
+  if (state.timeUp) return;
   state.lastActivity = Date.now();
   if (overlayOpen()) return closeOverlays();
-  if (mic.recording) return stopListening(); // second tap finishes
+  if (mic.recording) {
+    if (!mic.tail) return stopListening(); // second tap finishes
+    clearTimeout(mic.tail); // pressed again right after letting go: just keep listening
+    mic.tail = null;
+    return;
+  }
   if (!mic.ready && !mic.recognizer) {
     sfx.oops();
     return say(line('noMic'));
@@ -507,14 +733,22 @@ function pressTalk() {
 }
 
 function releaseTalk() {
-  if (!mic.recording) return;
-  if (mic.recognizer || performance.now() - mic.startedAt > 700) stopListening(); // walkie-talkie style
-  else mic.tapMode = true; // a quick tap: keep listening until they pause
+  if (!mic.recording || mic.tail) return;
+  if (mic.recognizer) return stopListening();
+  if (performance.now() - mic.startedAt > 700) {
+    // Walkie-talkie style. Kids often let go just before their last word ends, so keep
+    // listening a moment longer.
+    mic.tail = setTimeout(stopListening, 400);
+  } else {
+    mic.tapMode = true; // a quick tap: keep listening until they pause
+  }
 }
 
 async function stopListening() {
   if (!mic.recording) return;
   mic.recording = false;
+  clearTimeout(mic.tail);
+  mic.tail = null;
   sfx.stop();
   tellPage({ type: 'unmute' });
   micBtn.classList.remove('listening');
@@ -528,8 +762,14 @@ async function stopListening() {
   const heldMs = performance.now() - mic.startedAt;
   const { peak, speechMs, chunks } = mic;
   mic.chunks = [];
-  // A deliberate hold always gets transcribed; a quick tap with no talking does not.
-  if (speechMs < 200 && (mic.tapMode || heldMs < 600)) {
+  // Nothing but quiet: don't send it (whisper invents sentences from silence). If the sound
+  // system has the microphone muted, say so.
+  if (speechMs < 150 && peak < 0.05) {
+    const { muted } = await api('/api/mic').catch(() => ({}));
+    if (muted) {
+      sfx.oops();
+      return say(line('muted'));
+    }
     return say(line('silence'));
   }
 
@@ -651,7 +891,7 @@ onPress($('#undoBtn'), async () => {
     return say(line('atStart'));
   }
   state.project = r.project;
-  showPage(r.html);
+  await swapPage(r.html);
   sfx.stop();
   say(line('wentBack'));
 });
@@ -722,7 +962,7 @@ function handleKey(k) {
     return;
   }
   if (k.code === 'Escape') return down && closeOverlays();
-  if (!$('#parent').hidden) return;
+  if (state.timeUp || !$('#parent').hidden) return;
   if (k.code === 'Space') {
     if (k.repeat) return;
     return down ? pressTalk() : releaseTalk();
@@ -750,7 +990,7 @@ for (const type of ['keydown', 'keyup']) {
     if (APP_KEYS.has(code) || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyP')) {
       e.preventDefault();
       handleKey({ event: type, code, repeat: e.repeat, ctrl: e.ctrlKey, meta: e.metaKey, shift: e.shiftKey });
-    } else if (state.html && !overlayOpen()) {
+    } else if (state.html && !overlayOpen() && !state.timeUp) {
       // Focus slipped out of the creation (e.g. after a click on the dock): pass keys along.
       if (e.key.startsWith('Arrow')) e.preventDefault();
       tellPage({ type: 'key', event: type, key: e.key, code: e.code });
@@ -799,6 +1039,15 @@ async function openParent() {
   f.voice.value = c.voice;
   f.buddyName.value = c.buddyName;
   f.kidName.value = c.kidName;
+  // Time limit: leave it as it is, remove it, or start a new countdown from now.
+  const left = timeLeft();
+  const asIs = left == null ? '' : left > 0 ? `Keep going (${clock(left)} left)` : "Time's up (stay stopped)";
+  f.timeLimit.replaceChildren(
+    ...(asIs ? [new Option(asIs, 'keep')] : []),
+    new Option('No limit', '0'),
+    ...[2, 5, 10, 15, 20, 30, 45, 60].map(m => new Option(`${m} minutes${asIs ? ' from now' : ''}`, String(m))),
+  );
+  f.timeLimit.value = asIs ? 'keep' : '0';
   state.fps = null;
   showParentStatus();
   $('#parent').hidden = false;
@@ -812,7 +1061,9 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? 'whisper NOT installed (run setup.sh)' : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     `Showing: ${state.project?.title || 'blank page'}` +
-    (state.fps ? `, running at ${state.fps} frames per second.` : '.');
+    (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
+    (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
+    (timeLeft() == null ? '' : timeLeft() > 0 ? ` Time left: ${clock(timeLeft())}.` : " Time's up.");
 }
 
 $('#parentForm').addEventListener('submit', async e => {
@@ -830,6 +1081,8 @@ $('#parentForm').addEventListener('submit', async e => {
   });
   const sttChanged = c.stt !== state.config.stt;
   state.config = c;
+  const limit = f.timeLimit.value;
+  if (limit !== 'keep' && (limit !== '0' || timer.endsAt)) setTimer(await api('/api/timer', { minutes: Number(limit) }));
   closeOverlays();
   if (sttChanged) location.reload();
 });
@@ -847,7 +1100,7 @@ $('#quitBtn').addEventListener('click', () => api('/api/quit', {}).finally(() =>
 // Nudge with ideas if the screen sits blank and quiet for a while.
 let nudges = 0;
 setInterval(() => {
-  if (state.html || state.busy || voice.current || mic.recording || overlayOpen() || nudges >= 3) return;
+  if (state.html || state.busy || state.timeUp || voice.current || mic.recording || overlayOpen() || nudges >= 3) return;
   if (Date.now() - state.lastActivity < 75000) return;
   state.lastActivity = Date.now();
   nudges++;
@@ -868,10 +1121,12 @@ setInterval(() => {
   }
   state.config = s.config;
   state.project = s.project;
+  setTimer(s.timer); // before the page: if time is already up, it stays put away
   showPage(s.html);
   await initMic();
   await sleep(600);
   const name = state.config.kidName ? ` ${state.config.kidName}` : '';
+  if (state.timeUp) return;
   if (s.html) say(`Welcome back${name}! Hold the space bar to tell me what to change.`);
   else say(`Hi${name}! I'm ${state.config.buddyName}. Hold the space bar and tell me what you want to build!`);
   setTimeout(warmUp, 8000);

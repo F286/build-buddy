@@ -10,36 +10,64 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 OS=$(uname -s)
 ARCH=$(uname -m)
-WHISPER_MODEL=${WHISPER_MODEL:-small.en}
+WHISPER_MODEL=${WHISPER_MODEL:-small.en}  # extra model to fetch, if you want another one
 
 have node || { echo "Node.js 20+ is required (https://nodejs.org)"; exit 1; }
 have curl || { echo "curl is required"; exit 1; }
 
 # ---------------------------------------------------------------------------- whisper.cpp
 say "Speech-to-text: whisper.cpp"
+CMAKE=cmake
+if ! have cmake && have mise; then CMAKE="mise exec cmake@latest -- cmake"; fi
 if have whisper-cli; then
   echo "using $(command -v whisper-cli)"
 elif [ -x vendor/whisper.cpp/build/bin/whisper-cli ]; then
   echo "already built"
 else
   have git || { echo "git is required to build whisper.cpp"; exit 1; }
-  CMAKE=cmake
-  if ! have cmake; then
-    if have mise; then CMAKE="mise exec cmake@latest -- cmake"
-    elif [ "$OS" = Darwin ] && have brew; then echo "tip: 'brew install whisper-cpp' is the quickest route on a Mac"; exit 1
-    else echo "cmake is required (or install whisper.cpp from your package manager)"; exit 1
-    fi
+  if ! $CMAKE --version >/dev/null 2>&1; then
+    if [ "$OS" = Darwin ] && have brew; then echo "tip: 'brew install whisper-cpp' is the quickest route on a Mac"; exit 1; fi
+    echo "cmake is required (or install whisper.cpp from your package manager)"; exit 1
   fi
   [ -d vendor/whisper.cpp ] || git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git vendor/whisper.cpp
+  # On a Mac this build already uses the GPU (Metal).
   $CMAKE -S vendor/whisper.cpp -B vendor/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF >/dev/null
   $CMAKE --build vendor/whisper.cpp/build -j --config Release --target whisper-cli
 fi
 
-if [ ! -s "vendor/models/ggml-$WHISPER_MODEL.bin" ]; then
-  echo "downloading the $WHISPER_MODEL speech model..."
-  curl -fL --progress-bar -o "vendor/models/ggml-$WHISPER_MODEL.bin" \
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WHISPER_MODEL.bin"
+# Optional (WHISPER_GPU=1 ./setup.sh): a GPU build plus the larger model, which hears little kids
+# better but makes games stutter briefly while it works (see whisper in server/config.mjs).
+GPU=no
+[ "${WHISPER_GPU:-0}" = 1 ] && [ "$OS" = Darwin ] && GPU=yes # the Mac build above already uses Metal
+if [ "${WHISPER_GPU:-0}" = 1 ] && [ "$OS" = Linux ] && [ -d vendor/whisper.cpp ] && have glslc && pkg-config --exists vulkan 2>/dev/null; then
+  if [ -x vendor/whisper.cpp/build-vk/bin/whisper-cli ]; then
+    echo "GPU build: already built"
+    GPU=yes
+  else
+    echo "building the GPU (Vulkan) version..."
+    if [ ! -d vendor/spirv/include/spirv ]; then # header-only, kept in vendor/
+      rm -rf vendor/spirv-src && git clone -q --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git vendor/spirv-src
+      $CMAKE -S vendor/spirv-src -B vendor/spirv-src/build -DCMAKE_INSTALL_PREFIX="$PWD/vendor/spirv" -DSPIRV_HEADERS_ENABLE_TESTS=OFF >/dev/null
+      $CMAKE --install vendor/spirv-src/build >/dev/null && rm -rf vendor/spirv-src
+    fi
+    if $CMAKE -S vendor/whisper.cpp -B vendor/whisper.cpp/build-vk -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DGGML_CCACHE=OFF \
+         -DWHISPER_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_PREFIX_PATH="$PWD/vendor/spirv" \
+         -DCMAKE_CXX_FLAGS="-I$PWD/vendor/spirv/include" -DCMAKE_C_FLAGS="-I$PWD/vendor/spirv/include" >/dev/null &&
+       $CMAKE --build vendor/whisper.cpp/build-vk -j --config Release --target whisper-cli; then
+      GPU=yes
+    else
+      echo "the GPU build didn't work - the CPU build and the smaller speech model will be used"
+    fi
+  fi
 fi
+
+# small.en is the default; large-v3-turbo only comes with WHISPER_GPU=1.
+for MODEL in small.en $([ $GPU = yes ] && echo large-v3-turbo-q5_0) $WHISPER_MODEL; do
+  if [ ! -s "vendor/models/ggml-$MODEL.bin" ]; then
+    echo "downloading the $MODEL speech model..."
+    curl -fL --progress-bar -o "vendor/models/ggml-$MODEL.bin" "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$MODEL.bin"
+  fi
+done
 
 # ---------------------------------------------------------------------------- Kokoro
 say "Natural voice: Kokoro (via sherpa-onnx)"
@@ -102,6 +130,20 @@ else
   cp -r "$tmp/package/examples/jsm" vendor/three/addons
   cp "$tmp/package/LICENSE" vendor/three/
   echo "$THREE_VERSION" > vendor/three/VERSION
+  rm -rf "$tmp"
+fi
+
+# ---------------------------------------------------------------------------- Phaser
+say "2D game engine: Phaser"
+PHASER_VERSION=4.2.1
+if [ -s vendor/phaser/phaser.esm.min.js ]; then
+  echo "already installed"
+else
+  tmp=$(mktemp -d)
+  curl -fsSL "https://registry.npmjs.org/phaser/-/phaser-$PHASER_VERSION.tgz" | tar xz -C "$tmp"
+  mkdir -p vendor/phaser
+  cp "$tmp/package/dist/phaser.esm.min.js" "$tmp/package/LICENSE.md" vendor/phaser/
+  echo "$PHASER_VERSION" > vendor/phaser/VERSION
   rm -rf "$tmp"
 fi
 

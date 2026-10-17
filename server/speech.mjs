@@ -11,7 +11,9 @@ const TTS_CACHE = path.join(DATA, 'tts-cache');
 fs.mkdirSync(TMP, { recursive: true });
 fs.mkdirSync(TTS_CACHE, { recursive: true });
 
-const WHISPER_DIRS = [path.join(ROOT, 'vendor/whisper.cpp/build/bin'), path.join(ROOT, 'vendor/whisper.cpp/build/bin/Release')];
+// The GPU (Vulkan) build is used when setup.sh could make one; it only uses the GPU when
+// config.whisper.gpu is on (see config.mjs for why that's off by default).
+const WHISPER_DIRS = ['build-vk/bin', 'build/bin', 'build/bin/Release'].map(d => path.join(ROOT, 'vendor/whisper.cpp', d));
 const PIPER_DIRS = [path.join(ROOT, 'vendor/piper/piper')];
 const KOKORO_DIRS = [path.join(ROOT, 'vendor/kokoro/sherpa-onnx/bin')];
 
@@ -28,7 +30,9 @@ function kokoro() {
 
 function whisperModel() {
   const m = config().whisper.model;
-  return /[/\\]|\.bin$/.test(m) ? resolvePath(m) : path.join(ROOT, `vendor/models/ggml-${m}.bin`);
+  const file = /[/\\]|\.bin$/.test(m) ? resolvePath(m) : path.join(ROOT, `vendor/models/ggml-${m}.bin`);
+  const fallback = path.join(ROOT, 'vendor/models/ggml-small.en.bin');
+  return fs.existsSync(file) || !fs.existsSync(fallback) ? file : fallback;
 }
 
 export function status() {
@@ -45,23 +49,32 @@ export function status() {
 // Whisper invents these from silence or background noise.
 const PHANTOMS = new Set(['', 'you', 'thank you', 'thanks', 'thanks for watching', 'thank you for watching', 'bye', 'okay', 'so', 'uh', 'um', 'hmm']);
 
-export async function transcribe(wav) {
+const words = s => s.toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+// `context` is what the kid is building and has said lately. Young kids' words are easily
+// misheard ("tomato" for "tornado"); telling whisper what the conversation is about fixes many
+// of those. It must not contain made-up example sentences: whisper repeats its prompt when it
+// hears next to nothing.
+export async function transcribe(wav, { context = '', talkMs = Infinity } = {}) {
   const c = config();
   const bin = findBin('whisper-cli', c.whisper.bin, WHISPER_DIRS);
   if (!bin) throw new Error('whisper-cli not found - run ./setup.sh');
   const file = path.join(TMP, `rec-${Date.now()}.wav`);
   fs.writeFileSync(file, wav);
   try {
-    const out = await run(bin, [
-      '-m', whisperModel(), '-f', file, '-l', 'en', '-nt', '-np', '-sns',
-      '-t', String(c.whisper.threads),
-      '--prompt', 'A kid tells a robot what to build. I want a red race car! Make it go faster.',
-    ], { timeoutSec: 60 });
+    const args = ['-m', whisperModel(), '-f', file, '-l', 'en', '-nt', '-np', '-sns', '-t', String(c.whisper.threads)];
+    if (!c.whisper.gpu) args.push('-ng'); // the game needs the GPU more than whisper does
+    if (context) args.push('--prompt', context.slice(-400));
+    const out = await run(bin, args, { timeoutSec: 60 });
     const text = out
       .replace(/\[[^\]]*\]|\([^)]*\)|\*[^*]*\*/g, ' ') // [BLANK_AUDIO], (music), *laughs*
       .replace(/\s+/g, ' ')
       .trim();
-    return PHANTOMS.has(text.toLowerCase().replace(/[^a-z ]/g, '').trim()) ? '' : text;
+    if (PHANTOMS.has(words(text))) return '';
+    // A short mumble that comes back as one of the context sentences word for word is whisper
+    // echoing its prompt, not the kid.
+    const echoed = context.split(/(?<=[.!?])\s+/).some(sentence => words(sentence) === words(text));
+    return echoed && talkMs < 1500 ? '' : text;
   } finally {
     fs.rmSync(file, { force: true });
   }

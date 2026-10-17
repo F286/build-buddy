@@ -20,19 +20,31 @@ export const DEFAULTS = {
   //   codex   - OpenAI Codex CLI, signed in with a ChatGPT subscription (or an OpenAI API key)
   //   command - any program that reads a prompt on stdin and prints the reply (ollama, llm, gemini, ...)
   backends: ['claude', 'codex'],
-  claude: { bin: '', model: 'sonnet', effort: 'low' },
+  // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
+  // richer pages in about the same time (25 s vs 21 s). Higher effort roughly doubles the wait.
+  claude: { bin: '', model: 'opus', effort: 'low' },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 
   // Speech in:  whisper (local whisper.cpp, private, offline) | browser (Chrome's Web Speech API) | off
   stt: 'whisper',
-  whisper: { bin: '', model: 'small.en', threads: Math.max(2, Math.min(8, os.cpus().length - 2)) },
+  // On the CPU by default: on the GPU, whisper stalls the game's drawing for up to half a second
+  // right after the kid speaks. small.en on the CPU takes ~1.5 s with no stutter. For better
+  // hearing of little kids, { model: 'large-v3-turbo-q5_0', gpu: true } makes about a quarter
+  // fewer mistakes (2.8 s per request on an M1 Pro GPU), at the cost of that stutter.
+  whisper: { bin: '', model: 'small.en', gpu: false, threads: Math.max(2, Math.min(8, os.cpus().length - 2)) },
 
   // Speech out: kokoro (local, natural) | piper (local, faster, more robotic)
   //             | browser (OS voices via speechSynthesis) | off
   tts: 'kokoro',
   kokoro: { bin: '', model: 'vendor/kokoro/model', voice: 'af_heart', speed: 1.0, threads: Math.max(2, Math.min(6, os.cpus().length - 2)) },
   piper: { bin: '', voice: 'vendor/piper/voice.onnx', lengthScale: 1.1 },
+
+  // The overwatch: a careful model that checks on a creation once the kid has played with it for
+  // firstAfterSec, then every everySec while they keep playing the same version. It fixes it if
+  // it's broken or stuck, and otherwise may make a tiny polish (once per version). Uses the first
+  // of claude/codex in backends.
+  watch: { enabled: true, model: 'opus', effort: 'medium', codexModel: '', firstAfterSec: 25, everySec: 180, timeoutSec: 300 },
 
   // Linux: switch the default microphone on at startup if it's muted in the system settings.
   unmuteMic: true,
