@@ -51,6 +51,10 @@ export const DEFAULTS = {
   // of claude/codex in backends.
   watch: { enabled: true, model: 'opus', effort: 'medium', codexModel: '', firstAfterSec: 25, everySec: 180, timeoutSec: 300 },
 
+  // The ⭐ button that opens My creations (every creation they've made, to pick one and carry on).
+  // Hidden unless a grown-up turns it on.
+  creationsButton: false,
+
   // Linux: switch the default microphone on at startup if it's muted in the system settings.
   unmuteMic: true,
 

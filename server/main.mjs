@@ -64,6 +64,7 @@ function publicConfig() {
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
     claudeFast: Boolean(c.claude.fast),
+    creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     stt: c.stt,
@@ -193,6 +194,7 @@ const routes = {
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
+    if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
     if (['kokoro', 'piper', 'browser', 'off'].includes(b.tts)) patch.tts = b.tts;

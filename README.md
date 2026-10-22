@@ -116,7 +116,7 @@ Linux desktops, add a `start.sh` entry to your startup applications. On macOS, a
 |---|---|
 | 🎤 big red button, or the **space bar** | Hold and talk, walkie-talkie style. Or tap once: it stops listening when they pause. Listening starts half a second *before* the key goes down and carries on for a moment after it's let go, so first and last words aren't clipped. |
 | ↩️ yellow | Go back one step. Every version is kept, so nothing is ever lost. |
-| ⭐ purple | *My creations*: everything they've made, by emoji and name. |
+| ⭐ purple | *My creations*: everything they've made, by emoji and name. Hidden until a grown-up turns it on in the Ctrl+Shift+P panel. |
 | ➕ teal | A fresh new page. The old one stays in *My creations*. |
 | 🤖 Sparky | Says what it understood straight away, then how to play. It never suggests ideas; those come from the kid. |
 
@@ -148,6 +148,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `watch.enabled` | `true` | The overwatch: a stronger AI that checks on the game while they play and fixes it if it's broken or stuck. |
 | `watch.model` / `watch.effort` | `"opus"` / `"medium"` | Model and effort for the overwatch (with Claude; with Codex it uses high reasoning). |
 | `watch.firstAfterSec` / `watch.everySec` | `25` / `180` | First check after this much play, then this often while they keep playing the same version. |
+| `creationsButton` | `false` | Show the ⭐ *My creations* button, so the kid can go back to anything they've made. Also in the Ctrl+Shift+P panel. |
 | `unmuteMic` | `true` | Linux: switch the microphone on at startup if it's muted in the system settings. |
 | `keepOpen` | `false` | Kid-proof mode: reopen the window if it's closed. Quit with Ctrl+Shift+P instead. |
 | `port` | `4321` | Local port for the app. |

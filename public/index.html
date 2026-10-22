@@ -108,9 +108,14 @@
 <section id="parent" class="overlay" hidden>
   <form id="parentForm" class="panel">
     <h1>Grown-up settings</h1>
-    <label>Time limit
-      <select name="timeLimit"></select>
-    </label>
+    <div class="row">
+      <label>Time limit
+        <select name="timeLimit"></select>
+      </label>
+      <label>⭐ My creations button
+        <select name="creationsButton"><option value="">Hidden</option><option value="show">Shown</option></select>
+      </label>
+    </div>
     <label>AI brain
       <select name="brains">
         <option value="claude,codex">Claude, then ChatGPT if Claude fails</option>

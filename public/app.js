@@ -912,6 +912,11 @@ onPress($('#newBtn'), async () => {
 onPress($('#galleryBtn'), openGallery);
 onPress($('#galleryClose'), closeOverlays);
 
+// The ⭐ My creations button only shows when a grown-up has turned it on.
+function showButtons() {
+  $('#galleryBtn').hidden = !state.config.creationsButton;
+}
+
 async function openGallery() {
   if (state.busy) return say(line('wait'));
   hush();
@@ -1028,6 +1033,7 @@ async function openParent() {
   f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
+  f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
   f.stt.value = c.stt;
   f.tts.value = c.tts;
@@ -1077,6 +1083,7 @@ $('#parentForm').addEventListener('submit', async e => {
     backends: f.brains.value.split(','),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
+    creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     stt: f.stt.value,
     tts: f.tts.value,
@@ -1086,6 +1093,7 @@ $('#parentForm').addEventListener('submit', async e => {
   });
   const sttChanged = c.stt !== state.config.stt;
   state.config = c;
+  showButtons();
   const limit = f.timeLimit.value;
   if (limit !== 'keep' && (limit !== '0' || timer.endsAt)) setTimer(await api('/api/timer', { minutes: Number(limit) }));
   closeOverlays();
@@ -1126,6 +1134,7 @@ setInterval(() => {
   }
   state.config = s.config;
   state.project = s.project;
+  showButtons();
   setTimer(s.timer); // before the page: if time is already up, it stays put away
   showPage(s.html);
   await initMic();
