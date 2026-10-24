@@ -6,6 +6,8 @@
   "claude": { "model": "opus", "effort": "low" },
   "codex": { "model": "", "reasoning": "low" },
   "command": { "cmd": "", "args": [] },
+  "handsFree": false,
+  "talk": { "model": "sonnet", "effort": "low" },
   "stt": "both",
   "tts": "kokoro",
   "kokoro": { "voice": "af_heart", "speed": 1.0 },

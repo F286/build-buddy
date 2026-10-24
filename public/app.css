@@ -337,6 +337,20 @@ button {
   0%, 100% { transform: translateY(0); }
   40% { transform: translateY(-8px); }
 }
+/* hands-free: teal and gently breathing - Sparky is always listening, no need to press */
+.hands-free #micBtn { background: var(--teal); box-shadow: 0 8px 0 #0f8a7d; animation: breathe 3s ease-in-out infinite; }
+.hands-free #micBtn .ring { border-color: #14b8a666; }
+.hands-free #micBtn.thinking { background: var(--violet); box-shadow: 0 8px 0 #6d3fd6; animation: none; }
+/* ...and hearing someone wins over thinking: the kids always see they're being heard */
+.hands-free #micBtn.listening { background: #ff2d55; box-shadow: 0 3px 0 var(--coral-dark); animation: none; }
+.hands-free #micBtn.listening .ring { border-color: #ff2d55aa; }
+.hands-free #micBtn.listening .mic { display: block; }
+.hands-free #micBtn.listening .dots { display: none; }
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 8px 0 #0f8a7d, 0 0 0 0 #14b8a655; }
+  50% { box-shadow: 0 8px 0 #0f8a7d, 0 0 0 18px #14b8a600; }
+}
+.hands-free .spacebar, .hands-free .plus { display: none; }
 #micBtn.nomic { background: #8a8fb8; box-shadow: 0 8px 0 #6b7099; animation: none; }
 
 .buddy { width: 96px; height: 100px; }

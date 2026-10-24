@@ -1,6 +1,7 @@
 // Build Buddy: the kid holds Space (or the big red button), says what to build, and the
-// AI-made page appears on the stage. Everything else here is about making that loop feel
-// friendly and hard to break.
+// AI-made page appears on the stage. Or, hands-free, they just talk: Sparky listens all the
+// time and chats back (see "hands-free" below). Everything else here is about making that loop
+// feel friendly and hard to break.
 
 const $ = s => document.querySelector(s);
 const frame = $('#frame');
@@ -113,6 +114,7 @@ const LINES = {
     "I'm ready when you are! Hold the space bar and tell me your idea.",
     'Think of something fun, then hold the space bar and tell me all about it!',
   ],
+  ideasTalk: ['What do you want to build? Just tell me!', "I'm listening! Tell me your idea."],
 };
 const line = key => pick(LINES[key]);
 
@@ -170,6 +172,7 @@ function nextLine() {
   const item = voice.queue.shift();
   if (!item) {
     voice.current = null;
+    vad.quietUntil = performance.now() + 700; // hands-free: don't hear the end of our own voice
     if (!micBtn.classList.contains('listening')) mood(state.busy ? 'thinking' : null);
     clearTimeout(voice.hideTimer);
     voice.hideTimer = setTimeout(() => (buddySaid.hidden = true), 3500);
@@ -413,7 +416,7 @@ async function build(body) {
 
   // If the AI hasn't said anything after a few seconds, fill the silence.
   let heardBack = false;
-  const filler = setTimeout(() => !heardBack && !body.fix && !timer.overtime && say(line('filler')), 4000);
+  const filler = setTimeout(() => !heardBack && !body.fix && !timer.overtime && !handsFree() && say(line('filler')), 4000);
 
   let result = null;
   try {
@@ -435,7 +438,7 @@ async function build(body) {
           progress.lastEvent = Date.now();
         } else if (ev.type === 'say') {
           heardBack = true;
-          if (!body.fix) say(ev.text);
+          if (!body.fix && !handsFree()) say(ev.text); // hands-free: Sparky already answered
         } else if (ev.type === 'done' || ev.type === 'error') {
           result = ev;
         } else if (ev.type === 'timer') {
@@ -471,7 +474,7 @@ async function build(body) {
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
-      else if (!result.saidEarly) say(result.say);
+      else if (handsFree() ? !result.html : !result.saidEarly) say(result.say);
     }
   }
   if (!voice.current) mood(null);
@@ -486,12 +489,74 @@ async function build(body) {
 function heard(text, alt = '') {
   if (askingClosed()) return;
   state.lastActivity = Date.now();
+  if (handsFree()) return talkTo(text, alt);
   if (state.busy) {
     state.queue.push(text);
     showNext();
     say(line('queued'));
   } else {
     build({ text, alt });
+  }
+}
+
+// ------------------------------------------------------------------------------------- hands-free
+
+// Hands-free mode: nobody has to press anything. The microphone notices when someone starts
+// talking (see onSamples), and what they said goes to the voice in the middle (server/talk.mjs),
+// which answers out loud and passes requests on to the builder in the kids' own words.
+const handsFree = () => Boolean(state.config.handsFree) && state.config.stt !== 'browser';
+const vad = { loudMs: 0, quietUntil: 0, oopsAt: 0 };
+let talking = Promise.resolve();
+
+function talkTo(text, alt) {
+  talking = talking.then(() => talkTurn(text, alt)).catch(err => console.warn('talk failed', err));
+}
+
+async function talkTurn(text, alt) {
+  micBtn.classList.add('thinking');
+  mood('thinking');
+  let answered = false;
+  try {
+    const res = await fetch('/api/talk', { method: 'POST', headers: { 'content-type': 'application/json', 'x-kidbuild': '1' }, body: JSON.stringify({ text, alt }) });
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += value;
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines.filter(l => l.trim())) {
+        const ev = JSON.parse(line);
+        if (ev.type === 'say') say(ev.text);
+        if (ev.type === 'build') buildFromTalk(ev.text);
+        if (ev.type === 'error') throw new Error(ev.message);
+        answered = true;
+      }
+    }
+  } catch (err) {
+    console.warn('talk failed', err);
+    // The microphone hears everything, so if the brain is down (offline, say) don't answer every
+    // cough with an apology: once a minute is plenty.
+    if (!askingClosed() && Date.now() - vad.oopsAt > 60000) {
+      vad.oopsAt = Date.now();
+      sfx.oops();
+      say(line('tangled'));
+    }
+  }
+  if (!state.busy) micBtn.classList.remove('thinking');
+  if (!voice.current && !mic.recording) mood(state.busy ? 'thinking' : null);
+  return answered;
+}
+
+function buildFromTalk(text) {
+  if (askingClosed()) return;
+  if (state.busy) {
+    state.queue.push(text);
+    showNext();
+  } else {
+    build({ text });
   }
 }
 
@@ -681,7 +746,8 @@ const mic = {
   speechMs: 0,
   silenceMs: 0,
   peak: 0,
-  transcribing: false,
+  auto: false, // hands-free: started by itself when someone began talking
+  transcribing: 0, // how many recordings are being turned into words right now
   floor: 0.002,
   tail: null, // the short wait after the key is let go
   recognizer: null,
@@ -725,16 +791,21 @@ function onSamples(frame) {
   const loud = rms > Math.max(0.006, mic.floor * 4);
   if (!loud) mic.floor = mic.floor * 0.97 + rms * 0.03; // follow the room's background noise
 
+  const ms = (frame.length / mic.rate) * 1000;
+
   if (!mic.recording) {
     // Keep the last half second, so a word started just before the key went down is caught.
     mic.preroll.push(frame);
     if (mic.preroll.length > 12) mic.preroll.shift();
+    // Hands-free: someone started talking (not just a bang or a click), so start recording -
+    // with that last half second, so the first word is there too.
+    vad.loudMs = loud && canAutoListen() ? vad.loudMs + ms : 0;
+    if (vad.loudMs >= 160) startListening({ auto: true });
     return;
   }
   micBtn.style.setProperty('--level', String(1 + Math.min(0.5, rms * 12)));
   mic.chunks.push(frame);
   for (let i = 0; i < frame.length; i++) mic.peak = Math.max(mic.peak, Math.abs(frame[i]));
-  const ms = (frame.length / mic.rate) * 1000;
   if (loud) {
     mic.speechMs += ms;
     mic.silenceMs = 0;
@@ -742,17 +813,30 @@ function onSamples(frame) {
     mic.silenceMs += ms;
   }
   const elapsed = performance.now() - mic.startedAt;
+  // Hands-free: their turn is over after a pause. Little kids pause mid-sentence ("I want... a...
+  // dinosaur"), so it's not too short.
+  if (mic.auto) {
+    if (mic.silenceMs > 1000 || elapsed > 15000) stopListening();
+    return;
+  }
   // Tapped instead of held: stop by itself when they pause (or never start talking).
   if (mic.tapMode && mic.speechMs > 300 && mic.silenceMs > 1600) stopListening();
   else if (mic.tapMode && mic.speechMs < 150 && elapsed > 7000) stopListening();
   else if (elapsed > 30000) stopListening();
 }
 
+const canAutoListen = () =>
+  handsFree() && mic.ready && !mic.recording && !askingClosed() && !overlayOpen() && !voice.current && performance.now() > vad.quietUntil;
+
 function pressTalk() {
   if (state.timeUp) return;
   state.lastActivity = Date.now();
   if (overlayOpen()) return closeOverlays();
   if (timer.overtime) return voice.current || say(line('playOn'));
+  if (mic.auto) {
+    mic.auto = false; // hands-free was already recording: now it lasts while the key is held
+    return;
+  }
   if (mic.recording) {
     if (!mic.tail) return stopListening(); // second tap finishes
     clearTimeout(mic.tail); // pressed again right after letting go: just keep listening
@@ -764,12 +848,23 @@ function pressTalk() {
     return say(line('noMic'));
   }
   hush();
+  startListening();
+}
+
+// auto: hands-free, started by itself. It doesn't beep or quiet the game: kids also shout along
+// while they play, and most of that isn't meant for Sparky.
+function startListening({ auto = false } = {}) {
   resumeAudio();
-  sfx.listen();
-  tellPage({ type: 'mute' });
+  if (!auto) {
+    sfx.listen();
+    tellPage({ type: 'mute' });
+  }
   mood('listening');
   micBtn.classList.add('listening');
-  Object.assign(mic, { recording: true, tapMode: false, startedAt: performance.now(), speechMs: 0, silenceMs: 0, peak: 0, chunks: [...mic.preroll] });
+  const chunks = [...mic.preroll];
+  const peak = auto ? Math.max(0, ...chunks.map(c => c.reduce((m, x) => Math.max(m, Math.abs(x)), 0))) : 0;
+  Object.assign(mic, { recording: true, auto, tapMode: false, startedAt: performance.now(), speechMs: auto ? vad.loudMs : 0, silenceMs: 0, peak, chunks });
+  vad.loudMs = 0;
   if (mic.recognizer) mic.recognizer.start();
 }
 
@@ -787,11 +882,15 @@ function releaseTalk() {
 
 async function stopListening() {
   if (!mic.recording) return;
+  const auto = mic.auto;
   mic.recording = false;
+  mic.auto = false;
   clearTimeout(mic.tail);
   mic.tail = null;
-  sfx.stop();
-  tellPage({ type: 'unmute' });
+  if (!auto) {
+    sfx.stop();
+    tellPage({ type: 'unmute' });
+  }
   micBtn.classList.remove('listening');
   micBtn.style.setProperty('--level', '1');
   mood(state.busy ? 'thinking' : null);
@@ -803,6 +902,8 @@ async function stopListening() {
   const heldMs = performance.now() - mic.startedAt;
   const { peak, speechMs, chunks } = mic;
   mic.chunks = [];
+  // Hands-free: too short to be words (a cough, a bang, a laugh). Nothing to say about it.
+  if (auto && speechMs < 400) return mood(state.busy ? 'thinking' : null);
   // Nothing but quiet: don't send it (whisper invents sentences from silence). If the sound
   // system has the microphone muted, say so.
   if (speechMs < 150 && peak < 0.05) {
@@ -826,7 +927,7 @@ async function stopListening() {
   let text = '';
   let alt = '';
   let muted = false;
-  mic.transcribing = true;
+  mic.transcribing++;
   try {
     const info = `ms=${Math.round(heldMs)}&speech=${Math.round(speechMs)}&peak=${peak.toFixed(4)}`;
     const res = await fetch(`/api/transcribe?${info}`, { method: 'POST', headers: { 'content-type': 'audio/wav', 'x-kidbuild': '1' }, body: wav });
@@ -834,14 +935,14 @@ async function stopListening() {
   } catch (err) {
     console.warn('transcribe failed', err);
   }
-  mic.transcribing = false;
-  if (!state.busy) micBtn.classList.remove('thinking');
-  mood(state.busy ? 'thinking' : null);
+  mic.transcribing--;
+  if (!state.busy && !mic.transcribing) micBtn.classList.remove('thinking');
+  if (!mic.recording) mood(state.busy ? 'thinking' : null);
   if (muted) {
     sfx.oops();
     return say(line('muted'));
   }
-  if (!text) return say(line('unclear'));
+  if (!text) return auto ? undefined : say(line('unclear')); // hands-free: it wasn't words
   heard(text, alt);
 }
 
@@ -955,6 +1056,7 @@ onPress($('#galleryClose'), closeOverlays);
 // The ⭐ My creations button only shows when a grown-up has turned it on.
 function showButtons() {
   $('#galleryBtn').hidden = !state.config.creationsButton;
+  document.body.classList.toggle('hands-free', handsFree());
 }
 
 async function openGallery() {
@@ -1075,6 +1177,7 @@ async function openParent() {
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
   f.creationsButton.value = c.creationsButton ? 'show' : '';
+  f.handsFree.value = c.handsFree ? 'on' : '';
   f.codexModel.value = c.codexModel || '';
   f.stt.value = c.stt;
   f.tts.value = c.tts;
@@ -1108,7 +1211,7 @@ function showParentStatus() {
   const c = state.config;
   const s = c.speech || {};
   $('#parentStatus').textContent =
-    `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
+    `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}${c.handsFree ? (c.stt === 'browser' ? ' (hands-free needs listening on this computer)' : ', hands-free') : ''}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
@@ -1125,6 +1228,7 @@ $('#parentForm').addEventListener('submit', async e => {
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
     creationsButton: f.creationsButton.value === 'show',
+    handsFree: f.handsFree.value === 'on',
     codexModel: f.codexModel.value,
     stt: f.stt.value,
     tts: f.tts.value,
@@ -1158,7 +1262,7 @@ setInterval(() => {
   if (Date.now() - state.lastActivity < 75000) return;
   state.lastActivity = Date.now();
   nudges++;
-  say(line('ideas'));
+  say(line(handsFree() ? 'ideasTalk' : 'ideas'));
 }, 5000);
 
 (async function start() {
@@ -1182,7 +1286,9 @@ setInterval(() => {
   await sleep(600);
   const name = state.config.kidName ? ` ${state.config.kidName}` : '';
   if (state.timeUp) return;
-  if (s.html) say(`Welcome back${name}! Hold the space bar to tell me what to change.`);
+  if (s.html && handsFree()) say(`Welcome back${name}! Just tell me what to change.`);
+  else if (handsFree()) say(`Hi${name}! I'm ${state.config.buddyName}. Just talk to me and tell me what you want to build!`);
+  else if (s.html) say(`Welcome back${name}! Hold the space bar to tell me what to change.`);
   else say(`Hi${name}! I'm ${state.config.buddyName}. Hold the space bar and tell me what you want to build!`);
   setTimeout(warmUp, 8000);
 })();

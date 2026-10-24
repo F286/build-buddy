@@ -124,6 +124,30 @@ Linux desktops, add a `start.sh` entry to your startup applications. On macOS, a
 | ➕ teal | A fresh new page. The old one stays in *My creations*. |
 | 🤖 Sparky | Says what it understood straight away, then how to play. It never suggests ideas; those come from the kid. |
 
+### Hands-free: just talk
+
+Holding a key is hard for a 3-year-old, and two kids can't both hold it. In hands-free mode
+(Ctrl+Shift+P → *How the kids talk* → *Just talk*) nobody presses anything. The big button turns
+teal and gently breathes: Sparky is listening. It turns red while it hears someone, and Sparky
+answers when they pause.
+
+In this mode a quick AI sits in the middle and has a real back-and-forth with them:
+
+- *"I want a race car!"* → *"A race car! Coming right up!"*, and it's built. A simple request is
+  fine; little kids can't say much.
+- *"I want a game."* → *"A game! What happens in the game?"* → *"A game where I catch falling stars
+  with a basket."* → built. When it can't tell what they want, it asks an open question, so they
+  learn to describe their idea themselves.
+- *"Make it blue"* while something is still building → *"Okay, right after this one!"*
+- *"Vroom vroom!"*, kids talking to each other, the game's own sounds: ignored.
+- *"Can you give me an idea?"* → *"Your ideas are the best! What do you want to make?"*
+
+It still never suggests ideas or offers choices, and it passes on what they said in their own words
+without adding anything. It answers about 3 to 4 seconds after they stop talking. It doesn't listen
+while Sparky is talking (so it doesn't hear itself), and the space bar still works as before.
+It needs Claude (it uses Sonnet, through your subscription, kept running so each answer starts
+in about a second).
+
 Things to try: *a piano with rainbow keys*, *a fish tank where I can feed the fish*, *a dinosaur
 that dances when I click it*, *a 3D racing game*, *make it faster*, *add a second player*, *make the
 sky night time*. Sparky is told to keep everything friendly. Monsters come out goofy and zaps turn
@@ -146,6 +170,8 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
+| `handsFree` | `false` | Hands-free mode: the microphone is always on and Sparky chats back (see [Hands-free](#hands-free-just-talk)). Also in the Ctrl+Shift+P panel as *How the kids talk*. Needs Claude. |
+| `talk.model` / `talk.effort` | `"sonnet"` / `"low"` | The quick model in the middle in hands-free mode. |
 | `stt` | `"both"` | Speech-to-text: `both` (whisper and Parakeet together, the AI gets both versions), `whisper`, `parakeet`, or `browser` (Chrome's online speech service; macOS/Windows Chrome only). |
 | `tts` | `"kokoro"` | Voice: `kokoro` (natural), `piper` (faster), `browser` (the system's voices), or `off`. |
 | `kokoro.voice` / `kokoro.speed` | `"af_heart"` / `1.0` | One of 28 English voices; preview them in the Ctrl+Shift+P panel. |
@@ -195,6 +221,12 @@ Buddy changes.
   also told what the kid is building and what they said lately; silence is never sent to either, so
   they can't invent sentences; and rude words that a mumble gets misheard as are masked. Listening
   starts half a second before the talk key goes down and keeps going a moment after it's let go.
+- **Hands-free mode isn't a speech-to-speech model.** Those (like OpenAI's Realtime API) can't be
+  used with a ChatGPT or Claude subscription from another app; they need an API key billed per
+  use. Instead the app notices when someone starts and stops talking, the same on-device listeners
+  turn it into words, a Claude Sonnet process that stays running answers (first words in about a
+  second), and Kokoro says it. About 3 to 4 seconds from the end of what they said to Sparky's
+  answer.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
@@ -224,7 +256,9 @@ Buddy changes.
   Three.js.
 - **What leaves your computer:** the text of each request and the current creation's code, sent to
   Claude or ChatGPT. The overwatch also sends a small screenshot of the game itself (never the
-  camera or the rest of the screen). Listening and speaking happen on the computer itself.
+  camera or the rest of the screen). Listening and speaking happen on the computer itself. In
+  hands-free mode the microphone is always on, but the sound never leaves the computer and isn't
+  kept: only the words it hears are sent, to Claude.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
 - **Kid-friendly by instruction.** Sparky is told to keep everything friendly and age-appropriate,
@@ -251,6 +285,7 @@ server/main.mjs      web server, API, full-screen browser launcher
 server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
 server/speech.mjs    whisper.cpp (listening), Kokoro and Piper (talking)
 server/watch.mjs     the overwatch: a stronger model that checks on games and fixes them
+server/talk.mjs      hands-free mode's voice in the middle: chats, asks, passes requests on
 server/store.mjs     creations and their versions, saved in data/projects/
 server/config.mjs    settings and their defaults
 public/              the kid-facing screen

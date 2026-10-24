@@ -13,6 +13,7 @@ import * as store from './store.mjs';
 import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
 import * as watch from './watch.mjs';
+import * as talk from './talk.mjs';
 import { findBin } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
@@ -68,6 +69,7 @@ function publicConfig() {
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     stt: c.stt,
+    handsFree: Boolean(c.handsFree),
     tts: c.tts,
     voice: c.kokoro.voice,
     voices: speech.KOKORO_VOICES,
@@ -151,6 +153,24 @@ const routes = {
     res.end();
   },
 
+  // Hands-free mode: something the kids said, for the voice in the middle (talk.mjs). Streams
+  // { type: 'say', text } and { type: 'build', text } back.
+  'POST /api/talk': async (req, res) => {
+    const { text, alt } = await readJson(req);
+    if (!text?.trim()) return send(res, 400, { error: 'say something' });
+    if (timeIsUp()) return send(res, 423, { error: 'time is up' });
+    res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
+    const emit = ev => {
+      if (!res.destroyed) res.write(JSON.stringify(ev) + '\n');
+    };
+    try {
+      await talk.turn({ text: text.trim(), alt: alt?.trim() || '' }, emit);
+    } catch (err) {
+      emit({ type: 'error', message: err.message });
+    }
+    res.end();
+  },
+
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
   'POST /api/watch': async req => watch.review(await readJson(req)),
 
@@ -203,11 +223,14 @@ const routes = {
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
+    if (typeof b.handsFree === 'boolean') patch.handsFree = b.handsFree;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
     if (['kokoro', 'piper', 'browser', 'off'].includes(b.tts)) patch.tts = b.tts;
     if (speech.KOKORO_VOICES.includes(b.voice)) patch.kokoro = { voice: b.voice };
     saveConfig(patch);
+    talk.stop(); // names or the mode may have changed: start it afresh
+    talk.warm();
     return publicConfig();
   },
 
@@ -386,6 +409,7 @@ function shutdown() {
   if (quitting) return;
   quitting = true;
   console.log('Bye!');
+  talk.stop();
   browser?.kill();
   server.close();
   setTimeout(() => process.exit(0), 300);
@@ -402,6 +426,7 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`  brains: ${config().backends.join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();
+  talk.warm();
   if (!args.has('--no-browser')) launchBrowser(!args.has('--window'));
 });
 // Already running? That copy may have lost its window, or be an older version: ask it to quit
