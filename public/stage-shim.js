@@ -135,6 +135,9 @@
     e.code === 'Space' || e.key === ' ' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Escape' ||
     ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyP');
   const forward = e => {
+    // Browser shortcuts aren't for kids (F1 opens Chrome's help page over the whole app, Ctrl+P
+    // prints, Alt+Left goes back...). The page still sees the keys; the browser doesn't act on them.
+    if (/^F\d+$/.test(e.key) || e.ctrlKey || e.metaKey || e.altKey) e.preventDefault();
     if (!appKey(e)) return;
     if (e.code !== 'Escape') {
       e.preventDefault();

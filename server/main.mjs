@@ -327,6 +327,22 @@ function allowMicrophone(profile) {
   fs.writeFileSync(file, JSON.stringify(prefs));
 }
 
+// A copy that is just quitting may still be closing its window. Chrome hands a second window on
+// the same profile to the one already running (and the new one exits at once), so wait for the
+// old one to let go of it.
+async function profileFree(profile) {
+  for (let i = 0; i < 50; i++) {
+    let pid = 0;
+    try {
+      pid = Number(fs.readlinkSync(path.join(profile, 'SingletonLock')).split('-').pop());
+      process.kill(pid, 0);
+    } catch {
+      return; // no lock, or its owner is gone
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+}
+
 function launchBrowser(kiosk) {
   const bin = findBrowser();
   if (!bin) {
@@ -347,7 +363,8 @@ function launchBrowser(kiosk) {
     `--app=http://127.0.0.1:${port}/`,
   ];
   let quickExits = 0;
-  const start = () => {
+  const start = async () => {
+    await profileFree(profile);
     if (quitting) return;
     allowMicrophone(profile);
     const t0 = Date.now();
@@ -387,7 +404,20 @@ server.listen(port, '127.0.0.1', () => {
   unmuteMicrophone();
   if (!args.has('--no-browser')) launchBrowser(!args.has('--window'));
 });
-server.on('error', err => {
-  console.error(err.code === 'EADDRINUSE' ? `Port ${port} is busy - is Build Buddy already running?` : err.message);
+// Already running? That copy may have lost its window, or be an older version: ask it to quit
+// and take over, so starting Build Buddy always gives a fresh window.
+let takeover = 0;
+server.on('error', async err => {
+  if (err.code === 'EADDRINUSE' && takeover < 20) {
+    if (!takeover++) {
+      const quit = await fetch(`http://127.0.0.1:${port}/api/quit`, { method: 'POST', headers: { 'x-kidbuild': '1', 'content-type': 'application/json' }, body: '{}' })
+        .then(r => r.json())
+        .catch(() => null);
+      if (!quit?.ok) takeover = 20; // something else has the port
+      else console.log('Build Buddy was already running - starting it fresh');
+    }
+    if (takeover < 20) return setTimeout(() => server.listen(port, '127.0.0.1'), 500);
+  }
+  console.error(err.code === 'EADDRINUSE' ? `Port ${port} is busy - is something else using it?` : err.message);
   process.exit(1);
 });

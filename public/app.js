@@ -1020,6 +1020,7 @@ function handleKey(k) {
 const APP_KEYS = new Set(['Space', 'Enter', 'NumpadEnter', 'Escape']);
 for (const type of ['keydown', 'keyup']) {
   document.addEventListener(type, e => {
+    if (/^F\d+$/.test(e.key)) e.preventDefault(); // F1 opens Chrome's help page over the whole app
     if (e.target.closest?.('#typeBox, #parent')) {
       if (e.target.id === 'typeInput' && type === 'keydown' && (e.code === 'Enter' || e.code === 'NumpadEnter')) {
         e.preventDefault();
@@ -1031,8 +1032,8 @@ for (const type of ['keydown', 'keyup']) {
       }
       return; // let grown-ups type normally
     }
-    // Stop browser zoom and similar shortcuts from rearranging things.
-    if ((e.ctrlKey || e.metaKey) && ['Equal', 'Minus', 'Digit0', 'NumpadAdd', 'NumpadSubtract'].includes(e.code)) return e.preventDefault();
+    // Browser shortcuts aren't for kids: Ctrl+plus zooms, Ctrl+P prints, Alt+Left goes back...
+    if (e.ctrlKey || e.metaKey || e.altKey) e.preventDefault();
     const code = e.key === ' ' ? 'Space' : e.code;
     if (APP_KEYS.has(code) || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyP')) {
       e.preventDefault();

@@ -106,7 +106,9 @@ half an hour or more after the time ran out, it starts with no limit.
 
 **Add it to your app launcher (Linux):** run `./install-launcher.sh`, then find *Build Buddy* in your
 launcher. On Omarchy, press Super+Space and type `build`. If it's already open, the launcher jumps to
-the open window instead of starting a second copy. `./install-launcher.sh --remove` takes it out again.
+the open window instead of starting a second copy. If a copy is still running without its window,
+starting Build Buddy again closes that copy and opens a fresh one. `./install-launcher.sh --remove`
+takes it out again.
 
 **Start it when the computer logs in:** on Omarchy/Hyprland, add
 `o.launch_on_start("/path/to/build-buddy/start.sh")` to `~/.config/hypr/autostart.lua`. On other
