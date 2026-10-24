@@ -134,11 +134,19 @@ const routes = {
     const emit = ev => {
       if (!res.destroyed) res.write(JSON.stringify(ev) + '\n');
     };
+    const started = Date.now();
+    const endsAt = timerEndsAt;
     try {
       await ai.build({ text: text?.trim(), alt: alt?.trim(), fix }, emit);
     } catch (err) {
       console.error('build failed:', err.message);
       emit({ type: 'error', message: err.message });
+    }
+    // Fixing a wobbly bit doesn't use up play time: add it back (unless a grown-up changed the
+    // limit meanwhile).
+    if (fix && endsAt && timerEndsAt === endsAt) {
+      setTimerEnd(endsAt + (Date.now() - started));
+      emit({ type: 'timer', ...timerInfo() });
     }
     res.end();
   },

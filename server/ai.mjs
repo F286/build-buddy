@@ -28,7 +28,8 @@ export const PAGE_FORMAT = `The page is either:
 lines copied exactly from the current page
 =======
 the new lines
->>>>>>> REPLACE`;
+>>>>>>> REPLACE
+(exactly those three marker lines per edit - no extra ======= line)`;
 
 // How to build a page. Shared with the overwatch (watch.mjs), so its fixes follow the same rules.
 export function buildingRules() {
@@ -46,7 +47,7 @@ export function buildingRules() {
   return `# Building rules
 - One self-contained HTML page. No external files, images, fonts or network requests - they are blocked. Draw with emoji, SVG, CSS or <canvas>. Make sounds and music with the Web Audio API. Don't use speechSynthesis - you do the talking.
 ${libs.join('\n')}
-- Fill the whole window with no scrollbars (100vw x 100vh, overflow hidden) and handle resizing. Bright colors, big friendly shapes, smooth animation. Make it look delightful.
+- Fill the whole window with no scrollbars (100vw x 100vh, overflow hidden) and handle resizing. Keep the player and everything the kid needs to see or tap inside the window at any window size: stop things at the edges, and make toolbars and buttons shrink to fit. Bright colors, big friendly shapes, smooth animation. Make it look delightful.
 - Make it feel alive: things gently bob, blink, sway or twinkle even when nobody touches them, and every action gets a response - a bounce, a burst of particles, a happy sound.
 - Pages can't close, exit or lock the app, and can't limit play time. If the kid asks for that, tell them kindly that only a grown-up can set play time. A countdown inside a game is fine, but it never stops them playing.
 - Controls a ${c.kidAge}-year-old can manage: arrow keys, mouse clicks and drags (and touch). Make clickable things big. NEVER use the space bar or the Enter key - those are the talk buttons.
@@ -280,7 +281,10 @@ export function parseReply(raw) {
 
   if (!out.html) {
     const re = /^<{5,9} ?FIND[^\n]*\n([\s\S]*?)\n?^={5,9}[ \t]*\n([\s\S]*?)\n?^>{5,9} ?REPLACE[^\n]*$/gm;
-    out.edits = [...text.matchAll(re)].map(m => ({ find: m[1], replace: m[2] }));
+    // Models often add a second ======= before >>>>>>> REPLACE, like a merge conflict. Left in,
+    // it crashes the page, so drop any marker line from the new lines.
+    const unmark = s => s.split('\n').filter(l => !/^(={5,9}|<{5,9} ?FIND.*|>{5,9} ?REPLACE.*)[ \t]*$/.test(l)).join('\n');
+    out.edits = [...text.matchAll(re)].map(m => ({ find: m[1], replace: unmark(m[2]) }));
   }
 
   // A reply that ignored the format entirely is still worth saying out loud.

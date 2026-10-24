@@ -98,7 +98,9 @@ talking.
 countdown starts then. For the last minute a clock counts down in the corner and Sparky says *"One
 more minute!"*. When it runs out, the game is put away and a *"Time's up!"* screen stays until a
 grown-up opens the panel again and adds time or picks *No limit*. Their progress in the game is
-kept for when it comes back. The limit is off unless a grown-up turns it on here; kids can't set
+kept for when it comes back. If time runs out while Sparky is still building, nothing gets cut off:
+Sparky finishes it, and they get one more minute to play with it, but can't ask for anything new.
+Time spent fixing a wobbly bit (a creation that crashed) isn't counted. The limit is off unless a grown-up turns it on here; kids can't set
 it by asking Sparky. Closing and reopening the app doesn't get around it, but if the app is started
 half an hour or more after the time ran out, it starts with no limit.
 
