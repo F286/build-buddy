@@ -28,14 +28,6 @@ export const DEFAULTS = {
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 
-  // How the kids talk to it:
-  //   false - hold the space bar (or the big button) while talking, one at a time
-  //   true  - hands-free: the microphone is always on and Sparky chats back. A quick model in
-  //           the middle (talk, below; needs Claude) answers, asks when it can't tell what they
-  //           want, and passes their requests to the builder in their own words.
-  handsFree: false,
-  talk: { model: 'sonnet', effort: 'low' },
-
   // Speech in: both (whisper and Parakeet listen together and the AI gets both versions; whisper
   //            alone if Parakeet isn't installed) | whisper | parakeet (all local)
   //            | browser (Chrome's Web Speech API) | off
