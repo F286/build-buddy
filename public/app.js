@@ -451,7 +451,6 @@ async function build(body) {
   micBtn.classList.remove('thinking');
   state.busy = false;
   state.fixing = false;
-  if (timer.overtime === 'building') lastMinute();
 
   const quiet = state.timeUp; // time ran out while it was building: keep the result for later
   if (!result || result.type === 'error') {
@@ -484,7 +483,8 @@ async function build(body) {
 
 // `alt` is how the second speech listener heard it, when it heard something different.
 function heard(text, alt = '') {
-  if (askingClosed()) return;
+  if (state.timeUp) return;
+  if (timer.overtime) return graceBuild(text, alt);
   state.lastActivity = Date.now();
   if (state.busy) {
     state.queue.push(text);
@@ -561,10 +561,11 @@ setInterval(() => checkCreation(), 15000);
 // Set from the grown-up panel (the server keeps the clock, so a reload can't reset it). For the
 // last minute a clock counts down in the corner; when it runs out the creation is put away and
 // the "Time's up!" screen stays until a grown-up adds time or removes the limit.
-// If time runs out while something is being built, it's "overtime": no more asking, but the
-// build finishes (waiting up to OVERTIME_WAIT_MS) and they get one last minute to play with it.
+// If time runs out while they're still asking for something - saying it, waiting for it to be
+// heard, or waiting for it to be built - it's "overtime": no more asking, but that request
+// finishes (waiting up to OVERTIME_WAIT_MS) and they get one last minute to play with it.
 const OVERTIME_WAIT_MS = 4 * 60000;
-const timer = { endsAt: 0, warned: false, shownSec: -1, lastTick: Date.now(), overtime: null };
+const timer = { endsAt: 0, warned: false, shownSec: -1, lastTick: Date.now(), overtime: null, graceUsed: false };
 const timeLeft = () => (timer.endsAt ? timer.endsAt - Date.now() : null);
 const askingClosed = () => state.timeUp || Boolean(timer.overtime);
 const clock = ms => `${Math.floor(Math.ceil(ms / 1000) / 60)}:${String(Math.ceil(ms / 1000) % 60).padStart(2, '0')}`;
@@ -587,8 +588,13 @@ function tickTimer() {
   if (left <= 0) {
     el.hidden = true;
     if (state.timeUp) return;
-    if (!timer.overtime && state.busy) overtime();
-    if (timer.overtime === 'building' && left > -OVERTIME_WAIT_MS) return;
+    const working = state.busy || mic.recording || mic.transcribing;
+    if (!timer.overtime && working) overtime();
+    if (timer.overtime === 'building') {
+      if (!working) lastMinute(); // it's done (or there was nothing to build after all)
+      else if (left < -OVERTIME_WAIT_MS) timeIsUp();
+      return;
+    }
     timeIsUp();
     return;
   }
@@ -626,11 +632,22 @@ function stopAsking() {
 
 function overtime() {
   timer.overtime = 'building';
-  stopAsking();
+  // What's building now is the last thing; if nothing is, what they're saying (or what's being
+  // heard) is, and it can still be built - once. Requests waiting their turn are dropped.
+  timer.graceUsed = state.busy;
+  state.queue = [];
+  showNext();
   say(line('lastBuild'));
 }
 
-// The build is finished: one last minute to play with it, counted down like any last minute.
+// Time ran out while they were still saying this, or it was still being heard: build it anyway.
+function graceBuild(text, alt) {
+  if (timer.overtime !== 'building' || timer.graceUsed || state.busy) return;
+  timer.graceUsed = true;
+  build({ text, alt, grace: true });
+}
+
+// It's finished: one last minute to play with it, counted down like any last minute.
 function lastMinute() {
   timer.overtime = 'playing';
   timer.endsAt = Date.now() + 60000;
@@ -681,7 +698,7 @@ const mic = {
   speechMs: 0,
   silenceMs: 0,
   peak: 0,
-  transcribing: false,
+  transcribing: 0, // recordings being turned into words right now
   floor: 0.002,
   tail: null, // the short wait after the key is let go
   recognizer: null,
@@ -803,15 +820,34 @@ async function stopListening() {
   const heldMs = performance.now() - mic.startedAt;
   const { peak, speechMs, chunks } = mic;
   mic.chunks = [];
+  // Until it's words, what they said counts as a request in progress (if the time limit runs
+  // out meanwhile, it still gets built).
+  mic.transcribing++;
+  let heardIt;
+  try {
+    heardIt = await toWords(chunks, { heldMs, peak, speechMs });
+  } finally {
+    mic.transcribing--;
+  }
+  if (!state.busy && !mic.transcribing) micBtn.classList.remove('thinking');
+  mood(state.busy ? 'thinking' : null);
+  if (heardIt.muted) {
+    sfx.oops();
+    return say(line('muted'));
+  }
+  if (timer.overtime && !heardIt.text) return; // no "say that again" when there's no asking again
+  if (heardIt.silent) return say(line('silence'));
+  if (!heardIt.text) return say(line('unclear'));
+  heard(heardIt.text, heardIt.alt);
+}
+
+// What they said, as words: { text, alt }, or { silent: true }, or { muted: true }.
+async function toWords(chunks, { heldMs, peak, speechMs }) {
   // Nothing but quiet: don't send it (whisper invents sentences from silence). If the sound
   // system has the microphone muted, say so.
   if (speechMs < 150 && peak < 0.05) {
     const { muted } = await api('/api/mic').catch(() => ({}));
-    if (muted) {
-      sfx.oops();
-      return say(line('muted'));
-    }
-    return say(line('silence'));
+    return muted ? { muted: true } : { silent: true };
   }
 
   // Quiet voices are easier to understand once they're turned up.
@@ -823,26 +859,15 @@ async function stopListening() {
   const wav = encodeWav(samples, 16000);
   mood('thinking');
   micBtn.classList.add('thinking');
-  let text = '';
-  let alt = '';
-  let muted = false;
-  mic.transcribing = true;
   try {
     const info = `ms=${Math.round(heldMs)}&speech=${Math.round(speechMs)}&peak=${peak.toFixed(4)}`;
     const res = await fetch(`/api/transcribe?${info}`, { method: 'POST', headers: { 'content-type': 'audio/wav', 'x-kidbuild': '1' }, body: wav });
-    ({ text = '', alt = '', muted = false } = await res.json());
+    const { text = '', alt = '', muted = false } = await res.json();
+    return { text, alt, muted };
   } catch (err) {
     console.warn('transcribe failed', err);
+    return { text: '' };
   }
-  mic.transcribing = false;
-  if (!state.busy) micBtn.classList.remove('thinking');
-  mood(state.busy ? 'thinking' : null);
-  if (muted) {
-    sfx.oops();
-    return say(line('muted'));
-  }
-  if (!text) return say(line('unclear'));
-  heard(text, alt);
 }
 
 function initBrowserRecognizer() {

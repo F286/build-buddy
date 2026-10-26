@@ -104,6 +104,15 @@ try {
 const timerInfo = () => ({ remainingMs: timerEndsAt ? Math.max(0, timerEndsAt - Date.now()) : null });
 const timeIsUp = () => Boolean(timerEndsAt) && Date.now() >= timerEndsAt;
 
+// The kid was still saying what they wanted when time ran out (app.js: overtime): that one
+// request still gets built, if it arrives within a minute.
+let graceUsedFor = 0;
+function graceAllowed() {
+  if (Date.now() - timerEndsAt > 60000 || graceUsedFor === timerEndsAt) return false;
+  graceUsedFor = timerEndsAt;
+  return true;
+}
+
 // What whisper should expect to hear: what's being built and what the kid said lately.
 function speechContext() {
   const p = store.currentProject();
@@ -126,9 +135,9 @@ const routes = {
   },
 
   'POST /api/build': async (req, res) => {
-    const { text, alt, fix } = await readJson(req);
+    const { text, alt, fix, grace } = await readJson(req);
     if (!text?.trim() && !fix) return send(res, 400, { error: 'say something' });
-    if (timeIsUp()) return send(res, 423, { error: 'time is up' });
+    if (timeIsUp() && !(grace && text && graceAllowed())) return send(res, 423, { error: 'time is up' });
     if (ai.isBusy()) return send(res, 409, { error: 'busy' });
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
     const emit = ev => {
