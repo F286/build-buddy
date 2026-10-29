@@ -579,8 +579,6 @@ async function checkCreation({ urgent = false } = {}) {
   }
 }
 
-// Put the overwatch's fix in at a calm moment, keeping the kid's progress. If the kid has moved
-// on to something newer meanwhile, the fix is for an old version: leave it.
 // Run a page out of sight for a moment (silent, behind the stage, with a few arrow-key presses)
 // and collect the errors it throws.
 function tryPage(html, keep, ms = 2500) {
@@ -608,6 +606,9 @@ function tryPage(html, keep, ms = 2500) {
   });
 }
 
+// Put a fix (the overwatch's, or the team's check and polish) in at a calm moment, keeping the
+// kid's progress. If the kid has moved on to something newer meanwhile, the fix is for an old
+// version: leave it.
 async function applyFix(projectId, version, r) {
   while (state.busy || mic.recording || mic.transcribing || voice.current) await sleep(1000);
   if (state.project?.id !== projectId || state.project?.version !== version) return;
