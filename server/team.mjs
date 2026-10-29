@@ -124,10 +124,10 @@ MAIN:
 \`\`\`
 
 - The page is one module script: your shared code, then each part's code, then MAIN.
-- The shared code (at most about 25 lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
+- The shared code (at most about 20 lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
 - Each helper starts the moment its line is written, seeing your shared code and the jobs before it - so write all the jobs before MAIN, biggest first.
 - Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under 40 words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
-- Parts only define things: nothing runs until MAIN calls it. MAIN (about 20-40 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop and handles input.
+- Parts only define things: nothing runs until MAIN calls it. MAIN (about 15-30 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop and handles input.
 - The pieces are written apart, so they only fit if everyone follows the same rules - put them in the shared code and the jobs:
   - Time is always in seconds: MAIN's loop passes every update dt (seconds since the last frame, at most 0.05) and t (seconds since the start). Say so in the signatures, like update(dt, t).
   - MAIN owns the input: it keeps a shared input object up to date (like input.left, input.right, input.up and input.down for the arrow keys, input.x, input.y and input.pressed for the pointer, and input.tapped for a tap this frame), and the parts read it. A part that reacts to taps on its own things says so in its job, with the exact function MAIN calls, like hitTest(x, y) → true if tapped.
@@ -135,7 +135,7 @@ MAIN:
   - In 3D, MAIN owns the camera unless a job says otherwise.
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts.
-- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(4, n)}-${n} small parts of about 30 short lines each (about 2,000 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene) into two parts.
+- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about 25 short lines each (about 1,600 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene) into two parts.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.
 
 ${talkingRules()}
@@ -154,11 +154,11 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - Extra top-level names you need (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part.
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
-- About 30 short lines, about 2,000 characters (never more than 3,000): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
-- Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment.
+- About 25 short lines, about 1,600 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
+- Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
 - If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far.
 - The pieces only fit if you follow the team's rules: time is always in seconds - use dt and t exactly as passed to you (seconds since the last frame / since the start), and never divide them by 1000 again; read keys and the pointer from the shared input object (or the handler your job names) rather than adding your own listeners, unless your job says to; use exactly the names, ids, attributes and fields your job and the shared code give, and create everything your job says other pieces rely on.
-- In 3D: flat shapes you build yourself (roads, ribbons, custom planes) use side: THREE.DoubleSide so they can't vanish when seen from the other side; don't move the camera unless your job says to.
+- In 3D: flat shapes you build yourself (roads, ribbons, custom planes) use side: THREE.DoubleSide so they can't vanish when seen from the other side; nothing that should be seen sits inside, under or behind another shape (a moat is wider than the castle's base); don't move the camera unless your job says to.
 - Your piece shares every frame with the other helpers' pieces, so keep it light: at most about 40 moving things or particles; no CSS or SVG filters (drop-shadow, feDropShadow, blur) or box-shadow on anything that moves, and no canvas shadowBlur - for a soft shadow, draw a darker, see-through copy of the shape a little below it instead; in 3D, no new lights or shadow-casting unless your job says so, make geometries and materials once and reuse them, and use InstancedMesh for many copies.
 
 Some jobs are a change to the current page instead ("//@change <name>: <the job>"). Then reply with only FIND/REPLACE edits to the current page, each as:
@@ -302,7 +302,8 @@ function keepWarm(name, system, count) {
 // arrives. (Helpers are started once it's clear the lead is planning - see build().)
 export function warm() {
   if (!enabled()) return { warm: 0 };
-  return { warm: keepWarm('voice', voiceSystem(), 1) + keepWarm('lead', leadSystem(), 1) };
+  const leads = Math.max(1, Math.min(3, Number(config().team.leads) || 1));
+  return { warm: keepWarm('voice', voiceSystem(), 1) + keepWarm('lead', leadSystem(), leads) };
 }
 
 // Ask one member of the team. onText(chunk) gets the reply as it's written. Resolves with the
@@ -392,10 +393,13 @@ const CHANGES_HEAD = /^[ \t>*_#]*CHANGES[*_]*:[^\n]*\n/im;
 const MAIN_BLOCK = /^[ \t>*_#]*MAIN[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```/im;
 
 // Reads the lead's reply as it's written: a PLAN (shared code, then //@part jobs, then MAIN) or
-// CHANGES (//@change jobs). Each job is handed to onJob the moment its line is complete.
+// CHANGES (//@change jobs). Each job is handed to onJob the moment its line is complete. When
+// several leads race, onPlan() says whether this one's plan is the one used.
 class PlanReader {
-  constructor(onJob) {
+  constructor(onJob, onPlan = () => true) {
     this.onJob = onJob;
+    this.onPlan = onPlan;
+    this.lost = false;
     this.text = '';
     this.shared = null; // set once the plan's shared code is written
     this.changes = false; // set once the lead starts handing out changes
@@ -413,10 +417,12 @@ class PlanReader {
         // Jobs written inside the shared code block still count as jobs.
         const lines = plan[1].split('\n');
         this.shared = lines.filter(l => !JOB_LINE.test(l)).join('\n');
+        this.lost = !this.onPlan();
         lines.forEach(l => this.line(l));
         this.scanned = plan.index + plan[0].length;
       } else if (changes && !HEAD('PLAN').test(this.text.slice(0, changes.index))) {
         this.changes = true;
+        this.lost = !this.onPlan();
         this.scanned = changes.index + changes[0].length;
       } else return;
     }
@@ -429,6 +435,7 @@ class PlanReader {
   }
 
   line(l) {
+    if (this.lost) return;
     if (HEAD('MAIN').test(l)) this.inMain = true;
     const m = !this.inMain && JOB_LINE.exec(l);
     if (!m || m[1] !== (this.changes ? 'change' : 'part')) return;
@@ -620,7 +627,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       else free++;
     }
   };
-  const reader = new PlanReader(job => {
+  const startJob = (job, reader) => {
     jobs.push(job);
     const seen = jobs.slice();
     let startedAt = Date.now();
@@ -650,7 +657,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     part.catch(() => {}); // if the build stops early, nobody waits for it
     running.set(job.name, part);
     progress();
-  });
+  };
 
   // Helpers start up while the lead writes the shared code: straight away for something new,
   // or as soon as the lead starts a plan for a change.
@@ -662,21 +669,53 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   };
   if (!page && !crash) warmHelpers();
 
-  try {
-    const lead = await ask('lead', {
+  // The lead - or several leads racing (team.leads): how long a lead thinks before it writes varies
+  // a lot, so the first to start a plan (or to finish, for edits) is used and the others stop.
+  const leads = Math.max(1, Math.min(3, Number(config().team.leads) || 1));
+  const runs = [];
+  let winner = null;
+  const claim = i => {
+    if (winner == null) {
+      winner = i;
+      runs.forEach((run, j) => j !== i && run.stop.abort());
+    }
+    return winner === i;
+  };
+  for (let i = 0; i < leads; i++) {
+    const stop = new AbortController();
+    const reader = new PlanReader(job => startJob(job, reader), () => claim(i));
+    const run = { stop, reader };
+    run.done = ask('lead', {
       system: leadSystem(),
       prompt,
-      signal,
+      signal: AbortSignal.any([signal, stop.signal]),
       tally: spent,
       onText: chunk => {
+        if (winner != null && winner !== i) return;
         reader.push(chunk);
         if (!helpersWarm && (HEAD('PLAN').test(reader.text) || HEAD('CHANGES').test(reader.text))) warmHelpers();
         progress(chunk.length);
       },
+    }).then(reply => {
+      if (!claim(i)) throw new Error('another lead was quicker');
+      return reply;
     });
+    run.done.catch(() => {});
+    runs.push(run);
+  }
+
+  try {
+    let lead;
+    try {
+      lead = await Promise.any(runs.map(run => run.done));
+    } catch (err) {
+      throw err.errors?.find(e => !/^(stopped|another lead was quicker)$/.test(e.message)) || err.errors?.[0] || err;
+    }
+    const reader = runs[winner].reader;
     reader.push('\n');
     const leadAt = Date.now();
     stats.leadMs = leadAt - t0;
+    stats.lead = winner;
     const r = parseReply(lead.text);
     let html = null;
     let edited = false;
