@@ -124,14 +124,14 @@ Someone else has already answered the kid out loud, so don't write SAY - unless 
 # You lead a building team
 You have up to ${n} helpers who write code at the same time as each other, so the kid gets it much sooner. Hand out the work rather than writing it all yourself.
 
-For a change to the current page that is one thing - a color or a speed, or even something bigger like a second player or levels - write the edits yourself, so it all fits together, each as:
+For a small tweak to the current page - a color, a size, a speed, one sound: a few lines - write the edits yourself, each as:
 ${EDIT_FORMAT}
 
-When the kid asks for several separate things at once (like "make it night and give the car headlights and add a moon"), hand them out - helpers write the edits, one thing each, at the same time:
+For anything bigger - something new in the scene, a second player, levels, night time, a new way to play - or several things at once, hand it out: helpers write the edits at the same time, so the kid gets it much sooner:
 CHANGES:
 //@change <name>: <the job>
 //@change <name>: <the job>
-Each helper sees the current page and the kid's words, and starts the moment its line is written. Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Give every helper a different area of the page: never two jobs that change the same lines. Use 2-${n} changes, one per separate thing the kid asked for.
+Each helper sees the current page, the kid's words and all the jobs, and starts the moment its line is written, so write the lines straight away, biggest first. Split the work by area of the page so that no two jobs change the same lines - even one bigger thing splits well (a second player: one job adds the second car and draws it, one wires its W A S D keys, one gives it its own score). Anything one job adds and another uses - a variable, a function, an object's field, a sound - is named exactly, in both jobs ("adds player2 = { x, y, score }" ... "moves player2 with W A S D"). Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Use 2-${n} changes.
 
 For anything new, or when most of the page has to change, write the plan - start writing it straight away rather than thinking it all through first (each helper starts the moment its line appears, and the details are theirs):
 PLAN:
@@ -189,7 +189,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 
 Some jobs are a change to the current page instead ("//@change <name>: <the job>"). Then reply with only FIND/REPLACE edits to the current page, each as:
 ${EDIT_FORMAT}
-FIND must be copied exactly from the current page and match only once: include a couple of lines of context. Change only what your job needs - other helpers are changing other parts of the same page at the same time. Keep everything the kid already built, and the KB.keep names.
+FIND must be copied exactly from the current page and match only once: include a couple of lines of context. Change only what your job needs - other helpers are changing other parts of the same page at the same time. Something another job adds (by the name its job gives) will be there: use it, but don't make it yourself. Keep everything the kid already built, and the KB.keep names.
 
 ${buildingRules()}`, 'ask it once before you write your code, if your job is tricky.');
 }
@@ -1052,9 +1052,8 @@ function saveScreenshot(dataUrl) {
   return file;
 }
 
-// The team's new creation crashed when the app tried it out of sight, while the first look was
-// still on the stage: the fixer repairs it before it's shown, and the repaired page takes the
-// broken one's place (and version number).
+// The team's new page crashed when the app tried it out of sight, before showing it: the fixer
+// repairs it first, and the repaired page takes the broken one's place (and version number).
 export async function repair({ version, errors }) {
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);

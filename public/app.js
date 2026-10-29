@@ -474,9 +474,9 @@ async function build(body) {
   } catch (err) {
     result = { type: 'error', message: err.message };
   }
-  // The team's version of something new is about to replace the first look: try it out of sight
-  // first, and if it crashes, have it repaired while the kid keeps playing with the first look.
-  if (state.sketch && result?.html && result.backend === 'claude team') result = await repairFirst(result);
+  // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
+  // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
+  if (result?.html && result.backend === 'claude team') result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -521,9 +521,13 @@ async function build(body) {
 }
 
 async function repairFirst(result) {
-  const errors = [...new Set(await tryPage(result.html, null, 1500))];
+  const keep = result.continues && state.kept?.projectId === state.project?.id ? state.kept.keep : null;
+  let errors = await tryPage(result.html, keep, 1500);
+  // Only with the kid's old progress? Then it's started fresh when shown (see pageError).
+  if (errors.length && keep) errors = await tryPage(result.html, null, 1500);
+  errors = [...new Set(errors)];
   if (!errors.length) return result;
-  console.warn('the new creation crashed when tried, repairing it first:', errors[0]);
+  console.warn('the new version crashed when tried, repairing it first:', errors[0]);
   try {
     const r = await api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n') });
     return r.html ? { ...result, html: r.html, version: r.version } : result;

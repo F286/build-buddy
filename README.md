@@ -149,7 +149,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.helpers` | `6` | The most helpers working on one creation at a time (1 to 8). |
 | `team.leads` | `3` | How many leads start on each request at once (1 to 3). How long a lead takes before it starts writing varies a lot, so the first one to start a plan is used and the others stop: it saves the slow starts, for a little more of your plan. |
 | `team.lead` / `team.helper` / `team.fixer` / `team.checker` / `team.polisher` / `team.voice` / `team.sketch` | see [Team mode](#team-mode) | How each member of the team runs Claude Code: `model`, `effort`, `fast`, `advisor` and `args`. |
-| `team.firstLook` | `true` | For something new, a quick sketch of it is on screen within seconds, and the kid can play with it until the team's version replaces it. |
+| `team.firstLook` | `false` | For something new, a quick sketch of it is on screen within seconds, and the kid can play with it until the team's version replaces it. Off by default: the sketch takes the place of what was on screen, which can feel like a reset. |
 | `team.check` | `true` | Right after a creation appears, the checker takes a careful look and its fixes slide in at a calm moment. |
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
