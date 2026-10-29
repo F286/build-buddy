@@ -474,6 +474,9 @@ async function build(body) {
   } catch (err) {
     result = { type: 'error', message: err.message };
   }
+  // The team's version of something new is about to replace the first look: try it out of sight
+  // first, and if it crashes, have it repaired while the kid keeps playing with the first look.
+  if (state.sketch && result?.html && result.backend === 'claude team') result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -514,6 +517,18 @@ async function build(body) {
   if (state.queue.length && !askingClosed()) {
     const text = state.queue.splice(0).join(' ... and then: ');
     build({ text });
+  }
+}
+
+async function repairFirst(result) {
+  const errors = [...new Set(await tryPage(result.html, null, 1500))];
+  if (!errors.length) return result;
+  console.warn('the new creation crashed when tried, repairing it first:', errors[0]);
+  try {
+    const r = await api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n') });
+    return r.html ? { ...result, html: r.html, version: r.version } : result;
+  } catch {
+    return result;
   }
 }
 
@@ -634,13 +649,18 @@ setInterval(() => checkCreation(), 15000);
 // Team mode: right after a creation appears, the checker takes a careful look at the whole page;
 // its fixes slide in at a calm moment, keeping the kid's progress (see server/team.mjs check()).
 // Then the finishing touches (team.polish), on whatever is on the stage after the check.
+// A crash fix meanwhile doesn't stop it: it waits, and the fixed page is checked. A newer build
+// does (that one gets its own check).
+let checkRun = 0;
 async function checkTeamBuild(projectId, version) {
+  const run = ++checkRun;
   try {
     for (const polish of [false, ...Array(state.config.polishPasses ?? 1).fill(true)]) {
       // Let it start up and draw for a moment, then send how it's running and a screenshot.
       await sleep(1500);
-      if (state.busy || state.project?.id !== projectId) return;
-      if (!polish && state.project?.version !== version) return;
+      while (state.busy && state.fixing && run === checkRun) await sleep(1000);
+      if (run !== checkRun || state.busy || state.project?.id !== projectId) return;
+      if (!polish && !(state.project?.version >= version)) return;
       const v = state.project.version;
       const { screenshot, ...report } = (await askPage('inspect?', 4000))?.report || {};
       report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];

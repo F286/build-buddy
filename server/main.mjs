@@ -168,6 +168,9 @@ const routes = {
   // ready when the request arrives.
   'POST /api/warm': () => team.warm(),
 
+  // A team-built creation crashed when the app tried it before showing it: repair it first.
+  'POST /api/repair': async req => team.repair(await readJson(req)),
+
   // A team-built creation just appeared: take a careful look and fix what would spoil it.
   'POST /api/check': async req => team.check(await readJson(req)),
 

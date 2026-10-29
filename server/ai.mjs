@@ -39,14 +39,14 @@ export function buildingRules() {
   const three = libVersion('three');
   const libs = [];
   if (phaser) {
-    libs.push(`- For games and anything that moves in 2D (characters, racing, jumping, catching, bouncing, physics) use Phaser ${phaser}, already available offline: \`<script type="module">import Phaser from 'phaser';\`. Fill the window with \`scale: { mode: Phaser.Scale.RESIZE }\`, and use Arcade physics, tweens, particles and camera effects. This is Phaser 4: there is no Phaser.Geom.Point - use Phaser.Math.Vector2. There are no image files: make sprites from big emoji (\`this.add.text(x, y, '🐸', { fontSize: '96px', padding: { y: 16 } })\` - without the padding the top of the emoji is cut off) or from Graphics turned into textures (\`generateTexture\`). Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
+    libs.push(`- For games and anything that moves in 2D (characters, racing, jumping, catching, bouncing, physics) use Phaser ${phaser}, already available offline: \`<script type="module">import Phaser from 'phaser';\`. Fill the window with \`scale: { mode: Phaser.Scale.RESIZE }\`, and use Arcade physics, tweens, particles and camera effects. This is Phaser 4: there is no Phaser.Geom.Point - use Phaser.Math.Vector2. There are no image files: make sprites from Graphics turned into textures (\`generateTexture\`), drawn in the page's look, or from big emoji (\`this.add.text(x, y, '🐸', { fontSize: '96px', padding: { y: 16 } })\` - without the padding the top of the emoji is cut off). Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
   }
   if (three) {
     libs.push(`- For anything 3D use Three.js (r${three.split('.')[1]}, already available offline): \`<script type="module">import * as THREE from 'three'; import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\` (any 'three/addons/...' path works). Never hand-draw 3D on a 2D canvas.`);
   }
   if (libs.length) libs.push("- Those are the only libraries. Don't add your own import map.");
   return `# Building rules
-- One self-contained HTML page. No external files, images, fonts or network requests - they are blocked. Draw with emoji, SVG, CSS or <canvas>. Make sounds and music with the Web Audio API. Don't use speechSynthesis - you do the talking.
+- One self-contained HTML page. No external files, images, fonts or network requests - they are blocked. Draw with SVG, CSS or <canvas> (emoji for small extras). Make sounds and music with the Web Audio API. Don't use speechSynthesis - you do the talking.
 ${libs.join('\n')}
 - Emoji on a 2D canvas are drawn with the current fillStyle's transparency: set an opaque fillStyle and globalAlpha = 1 right before fillText-ing them, or they come out faint.
 - Fill the whole window with no scrollbars (100vw x 100vh, overflow hidden) and handle resizing. Keep the player and everything the kid needs to see or tap inside the window at any window size: stop things at the edges, and make toolbars and buttons shrink to fit. Bright colors, big friendly shapes, smooth animation. Make it look delightful.
@@ -63,6 +63,7 @@ ${libs.join('\n')}
 
 # Make it special
 - Every new creation should feel like its own little world, not a copy of the last one. Give it a look that fits it - a palette, a shape style, a mood - and vary it from thing to thing.
+- Draw it all in its look, so the whole scene looks like one picture: a big emoji among drawn things clashes with the look.
 - Fill the scene with depth: a background (sky, hills, a horizon, a room) behind the action, not just things on a flat color.
 - Give characters personality: faces with eyes that blink or follow, a wiggle when idle, a funny sound when touched.
 - Hide one or two small surprises that fit what they asked for, waiting to be found - something that reacts when clicked, a little background detail that moves. Never mention or hint at them; they're for discovering. Don't add big new things the kid didn't ask for.
@@ -443,7 +444,8 @@ export async function build({ text, alt, fix }, emit) {
     const continues = Boolean(page) && (r.edited || !(r.title && r.title !== titleBefore));
 
     if (text) p = store.addHistory(p, 'kid', text);
-    if (newHtml) p = store.addVersion(p, newHtml, { request: text || `(fix) ${fix.slice(0, 200)}`, backend: r.backend, continues });
+    // A new creation keeps the look it was given, for the team's checker and polisher.
+    if (newHtml) p = store.addVersion(p, newHtml, { request: text || `(fix) ${fix.slice(0, 200)}`, backend: r.backend, continues, ...(r.look && !continues ? { look: r.look } : {}) });
     if (r.title) p = store.setTitle(p, r.title, r.emoji);
     if (!fix) p = store.addHistory(p, 'buddy', [r.say, r.done].filter(Boolean).join(' '));
 

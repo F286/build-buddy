@@ -152,10 +152,12 @@ MAIN:
 - Parts only define things: nothing runs until MAIN calls it. MAIN (about 20-40 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop (in 3D it calls renderer.render(scene, camera) every frame) and handles input.
 - The pieces are written apart, so they only fit if everyone follows the same rules - put them in the shared code and the jobs:
   - Time is always in seconds: MAIN's loop passes every update dt (seconds since the last frame, at most 0.05) and t (seconds since the start). Say so in the signatures, like update(dt, t).
-  - MAIN owns the input: it keeps a shared input object up to date (like input.left, input.right, input.up and input.down for the arrow keys, input.x, input.y and input.pressed for the pointer, and input.tapped for a tap this frame), and the parts read it. A part that reacts to taps on its own things says so in its job, with the exact function MAIN calls, like hitTest(x, y) → true if tapped.
+  - MAIN owns the input: it keeps a shared input object up to date (like input.left, input.right, input.up and input.down for the arrow keys, input.x, input.y and input.pressed for the pointer, and input.tapped for a tap this frame), and the parts read it. A drag does what a finger would expect: sliding across a row of bells rings each one, dragging the star moves or steers it. A part that reacts to taps on its own things says so in its job, with the exact function MAIN calls, like hitTest(x, y) → true if tapped.
   - Anything one piece makes and another uses - an element's id or data- attribute, an object's fields, a mesh's userData - is named exactly in both jobs (or in the shared code).
   - In 3D, MAIN owns the camera unless a job says otherwise.
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
+- Give it everything a kid pictures when they ask for that kind of thing - what makes it what it is (a soccer game has a goalie to beat, a train has tracks and a station, a band has players who each make their own sound) - each in a job.
+- Everything is drawn in the look, so the whole scene looks like one picture: characters and things are shapes drawn in that style, not emoji (a big emoji clashes with a drawn look).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts.
 - <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about 25 short lines each (about 1,800 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene, a detailed star) into two parts.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.
@@ -175,7 +177,8 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - Define exactly what your job's first words say (the same names and parameters, returning the same things): the main code depends on it. Use the shared code's names, and use another part only as its job says.
 - What your job's first words define keeps exactly those names. Only the extra top-level names you add (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part. Whatever your piece needs before its first frame (its sizes, a background drawn once) happens in the function the main code calls first - not only when the window is resized.
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
-- The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
+- The kid can't read yet: no words or instructions on the page - pictures instead.
+- Draw everything in your piece in the look you're given (its colors, shapes and outlines), so it looks like part of one picture - not emoji, which clash with a drawn look.
 - About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
 - If your piece is the star (the thing the kid asked for), make it easy to recognize at a glance (a piano has its body and black keys, a dragon has wings) and big enough that its face and eyes are clear from where the camera looks - but in proportion with its world (a car fits on its road).
@@ -241,15 +244,17 @@ function polishSystem() {
 
 Make the 2 or 3 changes that matter most, for example:
 - What they asked for, or the look the page was given, isn't fully there or can't be seen (out of the camera's view, too faint, hidden) - watercolor that's just flat shapes, neon without a glow, paper cut-outs without soft shadows: make the look show, on the star first.
+- Something in the scene doesn't match the look: an emoji or a plain shape among drawn things (a photo-like emoji car in a chalk drawing) - draw it in the look.
+- It's missing something a kid pictures when they ask for that kind of thing (a soccer game with no goalie, a train with no tracks).
 - The main thing to do plays itself, or needs no skill or choice from the kid (flies that get caught without the kid doing anything).
 - The star of it isn't recognizable at a glance (a piano with no body or black keys, a dragon without wings), is too small to see its face, or is out of proportion with its world (a car wider than its road).
 - A game has nothing to beat or reach: no goal, no challenge that grows, no 'you did it' moment.
 - Something is cut off at an edge, overlapping, cluttered or muddy.
-- An arrow key, a tap or a drag gets a weak answer or none; doing the main thing has no satisfying reward, or nothing new ever happens as they keep playing.
+- An arrow key, a tap or a drag gets a weak answer or none (sliding a finger across a row of bells should ring each one); doing the main thing has no satisfying reward, or nothing new ever happens as they keep playing.
 - A sound never stops, plays twice at once, or is harsh.
 - A bug you can see in the code (something that can never be reached, caught or eaten; a count that's wrong; a thing that jumps).
 
-Keep it the kid's creation: don't change what they chose, don't add big new things, don't restyle it, keep the controls and the KB.keep names (the app provides KB.keep and the 'three' and 'phaser' imports). Keep it smooth: no CSS or SVG filters, shadowBlur, or objects made every frame.
+Keep it the kid's creation: don't change what they chose, don't add big new things they didn't ask for (what makes their thing what it is counts as asked for), don't restyle it, keep the controls and the KB.keep names (the app provides KB.keep and the 'three' and 'phaser' imports). Keep it smooth: no CSS or SVG filters, shadowBlur, or objects made every frame.
 
 If it's already as good as it can be, reply with just: OK
 Otherwise reply with WHY: <what you improved, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits, each as:
@@ -955,6 +960,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       emoji: r.emoji,
       html,
       edited,
+      look,
       backend: 'claude team',
       stats: { ...stats, ms: Date.now() - t0, how, tokens: spent.tokens },
     };
@@ -981,7 +987,7 @@ function running(report, shot) {
 }
 
 // Review a page; resolves with the fixed page (or null if nothing needs fixing) and why.
-export async function reviewPage({ page, asked, told, report, shot, change = false, polish = false }) {
+export async function reviewPage({ page, asked, told, look, report, shot, change = false, polish = false }) {
   const changed = !change
     ? ''
     : polish
@@ -989,7 +995,7 @@ export async function reviewPage({ page, asked, told, report, shot, change = fal
       : '\nThis was a change to a creation the kid already had: check that the change is really there and that what they had still works, but don\'t resize, move or restyle what was already there.';
   const reply = await ask(polish ? 'polisher' : 'checker', {
     system: polish ? polishSystem() : checkerSystem(),
-    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${changed}\n\n${running(report, shot)}`,
+    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${changed}\n\n${running(report, shot)}`,
     tools: shot ? 'Read' : '',
   });
   const edits = parseReply(reply.text).edits;
@@ -1009,6 +1015,35 @@ function saveScreenshot(dataUrl) {
   fs.writeFileSync(file, Buffer.from(m[2], 'base64'));
   return file;
 }
+
+// The team's new creation crashed when the app tried it out of sight, while the first look was
+// still on the stage: the fixer repairs it before it's shown, and the repaired page takes the
+// broken one's place (and version number).
+export async function repair({ version, errors }) {
+  let p = store.currentProject();
+  const v = p.versions.find(x => x.n === version);
+  if (!enabled() || !errors || p.current !== version || v?.backend !== 'claude team') return { skipped: 'stale' };
+  const page = store.html(p);
+  const t0 = Date.now();
+  const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+  try {
+    const html = await fix(page, `The page crashed when it ran:\n${String(errors).slice(0, 2000)}\nFix just that.`);
+    if (html === page || (await syntaxErrors(html)).length > (await syntaxErrors(page)).length) {
+      log(`REPAIR skip ${took()} (no usable fix)`);
+      return { skipped: 'no fix' };
+    }
+    p = store.currentProject();
+    if (p.current !== version || isBusy()) return { skipped: 'stale' };
+    const { n, at, ...meta } = v;
+    p = store.addVersion(store.dropVersion(p, version), html, meta);
+    log(`REPAIR fix  ${took()} ${String(errors).split('\n')[0].slice(0, 120)} → v${p.current}`);
+    return { html, version: p.current };
+  } catch (err) {
+    log(`REPAIR fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
+    return { skipped: 'failed' };
+  }
+}
+
 // Its fixes become a new version, which the app slides in at a calm moment, keeping the kid's
 // progress. Only for pages the team built, once each, and never over newer work. Then (polish)
 // the finishing touches, on the page as it is after the check.
@@ -1039,7 +1074,9 @@ export async function check({ projectId, version, report, screenshot, polish = f
     const asked = p.history.filter(h => h.role === 'kid').at(-1)?.text || '';
     const told = p.history.filter(h => h.role === 'buddy').at(-1)?.text || '';
     const change = Boolean(v.continues);
-    const r = await reviewPage({ page, asked, told, report, shot, change, polish });
+    // The look the creation was started with (a change keeps it).
+    const look = p.versions.filter(x => x.n <= version && x.look).at(-1)?.look;
+    const r = await reviewPage({ page, asked, told, look, report, shot, change, polish });
     if (!r.html) {
       log(r.skipped ? `${what} skip ${took()} ${r.why} (${r.skipped})` : `${what} ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
       return r.skipped ? { skipped: r.skipped } : { ok: true };
