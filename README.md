@@ -261,12 +261,14 @@ Buddy changes.
   fish could never reach, a frog that caught flies on its own, a car too big for its road, a
   dragon without real wings). Their changes are tried out of sight first, so they can never break
   a creation that works, and slide in while the kid plays. On a test set of eight new creations
-  and four changes (timed like at home), the full creation arrived after 25 s on average instead
-  of 45 s, and never later than 30 s instead of 72 s; Sparky's first words came after about 2.5 s
-  instead of 9 s, and changes took 22 s instead of 26 s. In blind side-by-side judging against the
-  classic way, the team's creations won 11 of 12 in each of the last rounds; scored one at a time
-  against fixed anchors (10 = nothing noticeably wrong), they averaged 7.5 out of 10 against the
-  classic way's 6.5. It writes about twice as much, so it uses more of your plan.
+  and four changes (timed like at home), a first look was on screen after about 14 s, and the full
+  creation after about 27 s on average instead of 45 s, never later than 34 s instead of 72 s;
+  Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s instead of 26 s.
+  In blind side-by-side judging against the classic way, the team's creations won 11 of 12; scored
+  one at a time against fixed anchors (10 = nothing noticeably wrong), they averaged 7.8 out of 10
+  against the classic way's 6.5 - as high as Opus at high effort with no time limit (7.9, taking 1.5
+  to 3 minutes per creation, with the same check and polish). It writes about twice as much, so it
+  uses more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
