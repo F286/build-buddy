@@ -155,7 +155,8 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
 - About 30 short lines, about 2,000 characters (never more than 3,000): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
-- Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second.
+- Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment.
+- If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far.
 - The pieces only fit if you follow the team's rules: time is always in seconds - use dt and t exactly as passed to you (seconds since the last frame / since the start), and never divide them by 1000 again; read keys and the pointer from the shared input object (or the handler your job names) rather than adding your own listeners, unless your job says to; use exactly the names, ids, attributes and fields your job and the shared code give, and create everything your job says other pieces rely on.
 - In 3D: flat shapes you build yourself (roads, ribbons, custom planes) use side: THREE.DoubleSide so they can't vanish when seen from the other side; don't move the camera unless your job says to.
 - Your piece shares every frame with the other helpers' pieces, so keep it light: at most about 40 moving things or particles; no CSS or SVG filters (drop-shadow, feDropShadow, blur) or box-shadow on anything that moves, and no canvas shadowBlur - for a soft shadow, draw a darker, see-through copy of the shape a little below it instead; in 3D, no new lights or shadow-casting unless your job says so, make geometries and materials once and reuse them, and use InstancedMesh for many copies.
@@ -193,7 +194,8 @@ function checkerSystem() {
 
 Check:
 1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
-2. Controls: the main thing the kid asked for works with the arrow keys AND with the pointer (tap, hold or drag), as the kid was told. Every promised control is really wired to what moves. Never the space bar or Enter.
+2. Controls: the main thing the kid asked for works with the arrow keys AND with the pointer (tap, hold or drag), as the kid was told. Every promised control is really wired to what moves. Never the space bar or Enter. Every arrow key and a tap anywhere gets some visible, audible answer - where one does nothing, add a small one (a wiggle, or sparkles and a pop where they tapped).
+2b. The goal: reaching it (the finish, the moon, catching one) gets a clear celebration, and play carries on after it.
 3. The start: the main character and the main action are on screen and clearly visible - not off-screen, clipped at an edge, behind something, too small, or out of the camera's view; things don't start on top of each other.
 4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame.
@@ -202,7 +204,7 @@ Check:
 
 The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the 'three' and 'phaser' imports: they exist.
 
-Don't restyle it, don't add new things, don't change what the kid chose. If nothing is really wrong, reply with just: OK
+Don't restyle it and don't change what the kid chose; beyond fixing, only add the small answers and celebrations above. If nothing is really wrong, reply with just: OK
 Otherwise reply with WHY: <what you fixed, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits that fix the real problems, each as:
 ${EDIT_FORMAT}
 FIND must be copied exactly from the page and match only once: include a couple of lines of context.`;
