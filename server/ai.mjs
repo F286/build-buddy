@@ -428,6 +428,7 @@ export async function build({ text, alt, fix }, emit) {
     // Team mode (team.mjs): a lead and helpers build it together. If the team can't, the
     // classic way still answers.
     let r = null;
+    if (!team.enabled() && config().team?.enabled) log('team mode is on, but Claude is not the first brain: building the classic way');
     if (team.enabled()) {
       try {
         r = await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);

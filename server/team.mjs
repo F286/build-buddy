@@ -364,8 +364,9 @@ export function warm() {
 }
 
 // Ask one member of the team. onText(chunk) gets the reply as it's written. Resolves with the
-// whole reply; the AbortSignal stops it.
-function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tally, tools = '' }) {
+// whole reply; the AbortSignal stops it. stallSec: once it has started writing, a reply that goes
+// quiet that long has stalled (a dropped stream) - it's stopped, so it can be asked again.
+function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stallSec, tally, tools = '' }) {
   const args = claudeArgs(name, system, tools);
   const r = roleConfig(name);
   return new Promise((resolve, reject) => {
@@ -385,10 +386,12 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
     let speed = '';
     let tokens = 0;
     let messageTokens = 0;
+    let quietSince = Date.now();
     const finish = err => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      clearInterval(stallTimer);
       signal?.removeEventListener('abort', stop);
       if (err) {
         proc.child.kill('SIGKILL');
@@ -441,6 +444,7 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
       }
     };
     const onData = chunk => {
+      quietSince = Date.now();
       buf += chunk;
       const lines = buf.split('\n');
       buf = lines.pop();
@@ -448,6 +452,8 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
     };
     const stop = () => finish(new Error('stopped'));
     const timer = setTimeout(() => finish(new Error(`claude ${name} took longer than ${timeoutSec || config().timeoutSec}s`)), (timeoutSec || config().timeoutSec) * 1000);
+    // (Not with an advisor: asking it pauses the reply.)
+    const stallTimer = stallSec && !r.advisor ? setInterval(() => streamed && Date.now() - quietSince > stallSec * 1000 && finish(new Error(`claude ${name} stalled`)), 1000) : null;
     signal?.addEventListener('abort', stop);
     proc.onData = onData;
     proc.early.splice(0).forEach(onData);
@@ -465,7 +471,9 @@ const JOB_LINE = /^[ \t>*_`-]*(?:\d+[.)][ \t]*)?\/\/[ \t]*@(part|change)[ \t]+([
 const HEAD = name => new RegExp(`^[ \\t>*_#]*${name}[*_]*:`, 'im');
 const SHARED_BLOCK = /^[ \t>*_#]*PLAN[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```[ \t]*\n/im;
 const CHANGES_HEAD = /^[ \t>*_#]*CHANGES[*_]*:[^\n]*\n/im;
-const MAIN_BLOCK = /^[ \t>*_#]*MAIN[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```/im;
+// MAIN may come with a few words, like "MAIN code:".
+const MAIN_HEAD = /^[ \t>*_#]*MAIN\b[^\n:]{0,30}:/im;
+const MAIN_BLOCK = /^[ \t>*_#]*MAIN\b[^\n:]{0,30}:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```/im;
 
 // Reads the lead's reply as it's written: a PLAN (shared code, then //@part jobs, then MAIN) or
 // CHANGES (//@change jobs). Each job is handed to onJob the moment its line is complete. When
@@ -511,7 +519,7 @@ class PlanReader {
 
   line(l) {
     if (this.lost) return;
-    if (HEAD('MAIN').test(l)) this.inMain = true;
+    if (MAIN_HEAD.test(l)) this.inMain = true;
     const m = !this.inMain && JOB_LINE.exec(l);
     if (!m || m[1] !== (this.changes ? 'change' : 'part')) return;
     let name = m[2].toLowerCase();
@@ -676,10 +684,48 @@ function applySome(page, edits) {
     try {
       html = applyEdits(html, [e]);
     } catch {
-      failed.push(e);
+      const core = applyCore(html, e);
+      if (core == null) failed.push(e);
+      else html = core;
     }
   }
   return { html, failed };
+}
+
+// Helpers changing the same page write their edits apart, so one edit's context lines may already
+// have been changed by another's, and its FIND no longer matches. Then it's applied with just the
+// lines it really changes - if those (or, for lines it only adds, the line just before or after
+// them) are on the page exactly once. Returns the new page, or null.
+export function applyCore(html, { find, replace }) {
+  const f = find.split('\n');
+  const r = replace.split('\n');
+  const same = (a, b) => a.trim() === b.trim();
+  let a = 0;
+  while (a < f.length && a < r.length && same(f[a], r[a])) a++;
+  let b = 0;
+  while (b < f.length - a && b < r.length - a && same(f[f.length - 1 - b], r[r.length - 1 - b])) b++;
+  const gone = f.slice(a, f.length - b).map(l => l.trim());
+  const added = r.slice(a, r.length - b);
+  const lines = html.split('\n');
+  const at = want => {
+    const hits = [];
+    for (let k = 0; k + want.length <= lines.length; k++) if (want.every((w, j) => lines[k + j].trim() === w)) hits.push(k);
+    return hits.length === 1 ? hits[0] : -1;
+  };
+  if (gone.some(Boolean)) {
+    const k = at(gone);
+    if (k < 0) return null;
+    lines.splice(k, gone.length, ...added);
+    return lines.join('\n');
+  }
+  // Only adds lines: put them after the line before them, or before the line after them.
+  const before = f.slice(0, a).map(l => l.trim()).filter(Boolean).at(-1);
+  const after = f.slice(f.length - b).map(l => l.trim()).find(Boolean);
+  let k = before ? at([before]) : -1;
+  if (k >= 0) lines.splice(k + 1, 0, ...added);
+  else if (after && (k = at([after])) >= 0) lines.splice(k, 0, ...added);
+  else return null;
+  return lines.join('\n');
 }
 
 const showEdits = edits => edits.map(e => `<<<<<<< FIND\n${e.find}\n=======\n${e.replace}\n>>>>>>> REPLACE`).join('\n\n');
@@ -692,17 +738,22 @@ async function applyEditsWithFixer(page, edits, signal, tally) {
   log(`team: ${first.failed.length} of ${edits.length} edits didn't fit, asking the fixer`);
   const reply = await ask('fixer', {
     system: fixerSystem(),
-    prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above):\n\n${showEdits(first.failed)}`,
+    prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above). If one is already done on the page, leave it out:\n\n${showEdits(first.failed)}`,
     signal,
     tally,
-  });
-  const again = parseReply(reply.text).edits;
-  const second = applySome(first.html, again);
-  return { html: second.html, failed: again.length ? second.failed : first.failed };
+    timeoutSec: 60,
+  }).catch(err => (signal?.aborted ? Promise.reject(err) : { text: '' }));
+  const r = parseReply(reply.text);
+  // The whole page, written again with the changes in: use it if it parses.
+  if (r.html && !(await syntaxErrors(r.html)).length) return { html: r.html, failed: [] };
+  // Nothing written again: the fixer found them already done (or couldn't say) - what fits stays.
+  if (!r.edits.length) return { html: first.html, failed: reply.text.trim() ? [] : first.failed };
+  const second = applySome(first.html, r.edits);
+  return { html: second.html, failed: second.failed };
 }
 
 async function fix(html, problem, signal, tally) {
-  const reply = await ask('fixer', { system: fixerSystem(), prompt: `<page>\n${html}\n</page>\n\n${problem}`, signal, tally });
+  const reply = await ask('fixer', { system: fixerSystem(), prompt: `<page>\n${html}\n</page>\n\n${problem}`, signal, tally, timeoutSec: 60 });
   const r = parseReply(reply.text);
   if (r.html) return r.html;
   return applySome(html, r.edits).html;
@@ -722,10 +773,12 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   let chars = 0;
   let helpersDone = 0;
   const jobs = [];
+  // team: the app shows the team at work, even before (or without) helpers.
   const progress = (n = 0) => {
     chars += n;
-    emit({ type: 'progress', chars, helpers: jobs.length, helpersDone });
+    emit({ type: 'progress', chars, helpers: jobs.length, helpersDone, team: true });
   };
+  progress();
 
   // The voice answers out loud while the lead plans (but never after the build is over).
   let voiceSay = '';
@@ -793,6 +846,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
           ask('helper', {
             system: helperSystem(),
             prompt,
+            stallSec: 20,
             onText: chunk => {
               if (i === 0) wrote = true;
               progress(chunk.length);
@@ -851,6 +905,10 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   const leads = Math.max(1, Math.min(3, Number(config().team.leads) || 1));
   const runs = [];
   let winner = null;
+  // A lead that only talks (it didn't understand, or there's nothing to build) doesn't stop the
+  // others: its answer is used only if none of them builds anything.
+  let talker = null;
+  const builds = t => HEAD('PLAN').test(t) || HEAD('CHANGES').test(t) || Boolean(parseReply(t).html) || parseReply(t).edits.length > 0;
   const claim = i => {
     if (winner == null) {
       winner = i;
@@ -868,6 +926,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     run.done = ask('lead', {
       system: leadSystem(),
       prompt,
+      stallSec: 30,
       signal: AbortSignal.any([signal, stop.signal]),
       tally: spent,
       onText: chunk => {
@@ -878,9 +937,17 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
         progress(chunk.length);
       },
     }).then(reply => {
+      if (winner == null && !builds(reply.text) && runs.some((other, j) => j !== i && !other.over)) {
+        talker ??= { i, reply };
+        throw new Error('it only talked');
+      }
       if (!claim(i)) throw new Error('another lead was quicker');
       return reply;
     });
+    run.done.then(
+      () => (run.over = true),
+      () => (run.over = true),
+    );
     run.done.catch(() => {});
     runs.push(run);
   }
@@ -915,7 +982,8 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     try {
       lead = await Promise.any(runs.map(run => run.done));
     } catch (err) {
-      throw err.errors?.find(e => !/^(stopped|another lead was quicker)$/.test(e.message)) || err.errors?.[0] || err;
+      if (!talker || !claim(talker.i)) throw err.errors?.find(e => !/^(stopped|another lead was quicker|it only talked)$/.test(e.message)) || err.errors?.[0] || err;
+      lead = talker.reply;
     }
     const reader = runs[winner].reader;
     reader.push('\n');
@@ -931,6 +999,14 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     // classic way takes over - one AI that sees the whole page keeps everything already on it
     // (a fresh plan would rebuild it, and things the kid made could go missing).
     const misfit = failed => new Error(`edits didn't fit: ${failed[0].find.trim().split('\n')[0].slice(0, 60)}`);
+    // A few that still don't fit (at most 2, and a third of them): what fits is shown if it parses
+    // - the app tries it first, and the checker makes sure the change is really there.
+    const fitOrThrow = async (fitted, all) => {
+      if (!fitted.failed.length) return fitted.html;
+      if (fitted.failed.length > 2 || fitted.failed.length * 3 > all.length || (await syntaxErrors(fitted.html)).length) throw misfit(fitted.failed);
+      log(`team: ${fitted.failed.length} of ${all.length} edits still didn't fit, shown without ${fitted.failed.length > 1 ? 'them' : 'it'}`);
+      return fitted.html;
+    };
     const timing = jobs => {
       stats.parts = jobs.map(p => ({ name: p.name, ms: p.doneAt - p.startedAt, startedMs: p.startedAt - t0, chars: (p.code || p.reply).length }));
       const slowest = jobs.reduce((a, p) => (p.doneAt > (a?.doneAt || 0) ? p : a), null);
@@ -949,9 +1025,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       const changes = await Promise.all(reader.jobs.map(j => running.get(j.name)));
       const edits = changes.flatMap(c => parseReply(c.reply).edits);
       if (!edits.length) throw new Error('the helpers wrote no changes');
-      const fitted = await applyEditsWithFixer(page, edits, signal, spent);
-      if (fitted.failed.length) throw misfit(fitted.failed);
-      html = fitted.html;
+      html = await fitOrThrow(await applyEditsWithFixer(page, edits, signal, spent), edits);
       edited = true;
       how = `lead ${secs(leadAt)}, ${changes.length} helpers changing it with ${edits.length} edits${timing(changes)}`;
     } else if (r.html) {
@@ -959,11 +1033,12 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       how = `lead wrote it all, ${secs(leadAt)}`;
     } else if (r.edits.length) {
       if (!page) throw new Error('edits on a blank page');
-      const fitted = await applyEditsWithFixer(page, r.edits, signal, spent);
-      if (fitted.failed.length) throw misfit(fitted.failed);
-      html = fitted.html;
+      html = await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent), r.edits);
       edited = true;
       how = `lead's ${r.edits.length} edits, ${secs(leadAt)}`;
+    } else if (crash) {
+      // A crash fix that changes nothing doesn't fix the crash: the classic way tries instead.
+      throw new Error('the fix changed nothing');
     } else if (!field(lead.text, 'SAY')) {
       // Not a page, not edits, and not just talking: a reply we couldn't read.
       throw new Error("couldn't read the lead's reply");
@@ -978,7 +1053,13 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       const problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems];
       if (problems.length) {
         log(`team: page doesn't parse (${problems.join('; ').slice(0, 200)}), asking the fixer`);
-        const repaired = await fix(html, `The page doesn't run: ${problems.join('\n')}\nFix just that.`, signal, spent);
+        // If the fixer itself fails, the page is shown as it is (the app tries it first, and fixes
+        // what crashes): it's never thrown away for that.
+        const repaired = await fix(html, `The page doesn't run: ${problems.join('\n')}\nFix just that.`, signal, spent).catch(err => {
+          if (signal.aborted) throw err;
+          log(`team: the fixer failed (${err.message.replace(/\s+/g, ' ').slice(0, 120)})`);
+          return html;
+        });
         const left = [...(await syntaxErrors(repaired)), ...blankProblems(repaired), ...repairNames(repaired).problems];
         log(`team: fixer ${left.length ? `didn't manage (${left[0].slice(0, 120)})` : 'fixed it'} at ${secs()}`);
         if (left.length < problems.length || !left.length) html = repaired;

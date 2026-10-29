@@ -339,9 +339,11 @@ function pageError(message) {
     showPage(state.html);
     return;
   }
-  state.pageErrors.push(message);
-  clearTimeout(fixTimer);
+  if (!state.pageErrors.includes(message) && state.pageErrors.length < 20) state.pageErrors.push(message);
+  // The wait starts at the first error: one that repeats every frame would otherwise put it off forever.
+  if (fixTimer) return;
   fixTimer = setTimeout(() => {
+    fixTimer = null;
     const v = `${state.project?.id}:${state.project?.version}`;
     // The quick fixes didn't stick: ask the overwatch to take a careful look.
     if (state.fixStreak >= 2 || state.fixedVersions.has(v)) return checkCreation({ urgent: true });
@@ -382,15 +384,17 @@ function startBlocks(body) {
   }, 140);
 }
 
-// Team mode: a little robot for each helper building a piece of it (see server/team.mjs).
-function showHelpers(count, done = 0) {
+// Team mode: a little robot for each helper building a piece of it (see server/team.mjs). Before
+// there are helpers - or when the lead makes a small change itself - one robot: the team's lead.
+function showHelpers(count, done = 0, team = false) {
   const el = $('#buildingTeam');
   const name = state.config.buddyName || 'Sparky';
-  if (!state.fixing) $('#buildingLabel').textContent = count ? `${name} + ${count} helper${count > 1 ? 's' : ''}` : `${name} is building`;
-  while (el.children.length > count) el.lastChild.remove();
-  while (el.children.length < count) el.append(Object.assign(document.createElement('span'), { textContent: '🤖' }));
+  const robots = count || (team ? 1 : 0);
+  if (!state.fixing) $('#buildingLabel').textContent = count ? `${name} + ${count} helper${count > 1 ? 's' : ''}` : team ? `${name}'s team` : `${name} is building`;
+  while (el.children.length > robots) el.lastChild.remove();
+  while (el.children.length < robots) el.append(Object.assign(document.createElement('span'), { textContent: '🤖' }));
   [...el.children].forEach((robot, i) => robot.classList.toggle('done', i < done));
-  el.hidden = !count;
+  el.hidden = !robots;
 }
 
 // What the kid asked for while this build was running (it's built next).
@@ -459,6 +463,7 @@ async function build(body) {
           progress.lastEvent = Date.now();
           if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone);
           else if (ev.note) showHelpers(0); // the team gave up: building the classic way
+          else if (ev.team) showHelpers(0, 0, true); // the team is at work: the lead plans
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);
@@ -536,7 +541,8 @@ async function repairFirst(result) {
   if (!errors.length) return result;
   console.warn(`the new version crashed when tried${withKeep ? ' with the kid\'s progress' : ''}, repairing it first:`, errors[0]);
   try {
-    const r = await api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n'), keep: withKeep ? keep : undefined });
+    // Not for long: after 30 s it's shown as it is, and the usual crash fixing takes over.
+    const r = await Promise.race([api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n'), keep: withKeep ? keep : undefined }), sleep(30000).then(() => ({}))]);
     if (!r.html || (await tryPage(r.html, withKeep ? keep : null, 1500)).length) return result;
     const took = await api('/api/repair', { version: result.version, accept: true });
     return took.version ? { ...result, html: r.html, version: took.version } : result;
@@ -922,8 +928,9 @@ function pressTalk() {
 
 // Team mode: get the team's programs started while the kid is still talking, so they're ready
 // the moment the request arrives (see server/team.mjs).
+// Also while something is building: what the kid says now is built next, by a team that's ready.
 function warmTeam() {
-  if (state.config.teamActive && !state.busy) api('/api/warm', {}).catch(() => {});
+  if (state.config.teamActive) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {
