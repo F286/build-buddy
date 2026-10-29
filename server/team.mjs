@@ -7,6 +7,9 @@
 //   helpers each write one piece (or one change), all at the same time. Each starts the moment
 //           the lead has written its job, while the lead is still writing the rest of the plan
 //   fixer   repairs the page if the pieces don't parse, or if edits didn't fit
+//   checker takes a careful look at the finished page right after it appears (does every piece
+//           fit, do the controls work, can it be played, is it smooth) and quietly fixes what
+//           would spoil it; the fix slides in at a calm moment, keeping the kid's progress
 //
 // Every one of them is the `claude` command-line tool, each with its own model, effort, fast
 // mode, advisor and extra options (config.team). A page is mostly code, and code takes about as
@@ -23,7 +26,8 @@ import vm from 'node:vm';
 import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
 import { findBin } from './bins.mjs';
-import { buddyIntro, talkingRules, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, WORK_DIR } from './ai.mjs';
+import * as store from './store.mjs';
+import { buddyIntro, talkingRules, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
 // Team mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
@@ -180,6 +184,26 @@ function helperPrompt({ page, text, alt, look, done, shared, jobs, job }) {
     `<jobs>\n${jobs.map(j => `//@part ${j.name}: ${j.job}`).join('\n')}\n</jobs>`,
     `Write the code for the ${job.name} part:\n//@part ${job.name}: ${job.job}`,
   ].filter(Boolean).join('\n\n');
+}
+
+function checkerSystem() {
+  const c = config();
+  return `You are the last check on a web page for a ${c.kidAge}-year-old who can't read. A team of AI helpers wrote it in pieces at the same time, and the kid has just started playing with it. Find and fix only real problems that would spoil it for them - quickly.
+
+Check:
+1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
+2. Controls: the main thing the kid asked for works with the arrow keys AND with the pointer (tap, hold or drag), as the kid was told. Every promised control is really wired to what moves. Never the space bar or Enter.
+3. The start: the main character and the main action are on screen and clearly visible - not off-screen, clipped at an edge, behind something, too small, or out of the camera's view; things don't start on top of each other.
+4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
+5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame.
+6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made.
+
+The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the 'three' and 'phaser' imports: they exist.
+
+Don't restyle it, don't add new things, don't change what the kid chose. If nothing is really wrong, reply with just: OK
+Otherwise reply with WHY: <what you fixed, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits that fix the real problems, each as:
+${EDIT_FORMAT}
+FIND must be copied exactly from the page and match only once: include a couple of lines of context.`;
 }
 
 function fixerSystem() {
@@ -734,3 +758,50 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// A careful look at a team-built page right after it appears (the app asks: POST /api/check).
+// Its fixes become a new version, which the app slides in at a calm moment, keeping the kid's
+// progress. Only for pages the team built, once each, and never over newer work.
+
+export async function check({ projectId, version }) {
+  if (!enabled() || config().team.check === false) return { skipped: 'off' };
+  let p = store.currentProject();
+  if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
+  if (p.versions.find(v => v.n === version)?.backend !== 'claude team') return { skipped: 'not built by the team' };
+  const page = store.html(p);
+  const t0 = Date.now();
+  const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+  try {
+    const asked = p.history.filter(h => h.role === 'kid').at(-1)?.text || '';
+    const told = p.history.filter(h => h.role === 'buddy').at(-1)?.text || '';
+    const reply = await ask('checker', { system: checkerSystem(), prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}` });
+    const edits = parseReply(reply.text).edits;
+    if (!edits.length) {
+      log(`CHECK ok   ${took()}`);
+      return { ok: true };
+    }
+    const why = field(reply.text, 'WHY') || 'fixed a few things';
+    let { html, failed } = applySome(page, edits);
+    if (failed.length === edits.length) {
+      log(`CHECK skip ${took()} ${why} (edits didn't fit)`);
+      return { skipped: "edits didn't fit" };
+    }
+    // Never make it worse: the page must parse at least as well as before.
+    if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length) {
+      log(`CHECK skip ${took()} ${why} (the fix didn't parse)`);
+      return { skipped: "fix didn't parse" };
+    }
+    // The kid may have moved on meanwhile: never overwrite newer work.
+    p = store.currentProject();
+    if (p.id !== projectId || p.current !== version || isBusy()) {
+      log(`CHECK stale ${took()} ${why}`);
+      return { skipped: 'stale' };
+    }
+    p = store.addVersion(p, html, { request: `(team check) ${why}`, backend: 'claude team check' });
+    log(`CHECK fix  ${took()} ${why} (${edits.length - failed.length} edits) → v${p.current}`);
+    return { fixed: true, verdict: 'fix', why, html: store.html(p), version: p.current };
+  } catch (err) {
+    log(`CHECK fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
+    return { skipped: 'failed' };
+  }
+}

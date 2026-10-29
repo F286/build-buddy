@@ -481,6 +481,7 @@ async function build(body) {
         sfx.tada();
         cheer();
       }
+      if (result.backend === 'claude team') checkTeamBuild(state.project.id, result.version);
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -569,6 +570,17 @@ async function applyFix(projectId, version, r) {
 }
 
 setInterval(() => checkCreation(), 15000);
+
+// Team mode: right after a creation appears, the checker takes a careful look at the whole page;
+// its fixes slide in at a calm moment, keeping the kid's progress (see server/team.mjs check()).
+async function checkTeamBuild(projectId, version) {
+  try {
+    const r = await api('/api/check', { projectId, version });
+    if (r.fixed) await applyFix(projectId, version, r);
+  } catch (err) {
+    console.warn('team check failed', err);
+  }
+}
 
 // ------------------------------------------------------------------------------------- time limit
 

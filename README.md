@@ -147,7 +147,8 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `claude.fast` | `false` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for building: the same model, answering much sooner. On a Claude subscription it's paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. Also in the panel as *Claude speed*. |
 | `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` (or `--team`). Needs `claude` first in `backends`. |
 | `team.helpers` | `6` | The most helpers working on one creation at a time (1 to 8). |
-| `team.lead` / `team.helper` / `team.fixer` / `team.voice` | see [Team mode](#team-mode) | How each member of the team runs Claude Code: `model`, `effort`, `fast`, `advisor` and `args`. |
+| `team.lead` / `team.helper` / `team.fixer` / `team.checker` / `team.voice` | see [Team mode](#team-mode) | How each member of the team runs Claude Code: `model`, `effort`, `fast`, `advisor` and `args`. |
+| `team.check` | `true` | Right after a creation appears, the checker takes a careful look and its fixes slide in at a calm moment. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
@@ -176,6 +177,7 @@ team, and each member is its own `claude` run:
 | `lead` | your `claude.model` / `claude.effort` | Plans the page: the code every piece shares, one job per helper (each starting with exactly what it defines, like `makeWorld(scene) → { update(dt) }`), and the code that puts the pieces together. Small changes it makes itself, as edits. |
 | `helper` | your `claude.model` / `claude.effort` | Each writes one piece, all at the same time. A helper starts the moment its job is written, while the lead is still writing the rest. |
 | `fixer` | your `claude.model` / `claude.effort` | Before anything is shown, every script on the page is checked; if one doesn't parse, or if edits don't fit, the fixer gets one try to repair it (if it can't, the usual wobbly-bit fixing takes over). |
+| `checker` | your `claude.model` / `claude.effort` | Right after the creation appears, takes a careful look at the whole page: do the pieces fit, do the controls work with both the keys and the pointer, is everything in view, can the goal really be reached, is it smooth. Its fixes (about 10 s later) slide in at a calm moment, keeping the kid's progress, so the kid never waits for it. |
 
 A creation then takes about as long as its biggest piece, instead of the whole page, and each
 helper puts its full attention on one thing. If the team gets stuck, that request is built the
@@ -246,11 +248,13 @@ Buddy changes.
 - **Built by a team.** In [team mode](#team-mode) (the default), a quick model answers out loud
   while a lead plans the creation and up to six helpers write its pieces at the same time, each
   starting the moment its job is written. Before anything is shown, every script is checked, and a
-  fixer repairs any that don't parse. On a test set of eight new creations it brought the average wait from 41 s to
-  32 s and the longest from 67 s to 37 s, and Sparky's first words from 7.7 s to 4 s on average. In
-  blind side-by-side judging against the classic way, its creations won 6 of the 8 (richer scenes,
-  livelier characters) and 2 of 4 changes, with one tie. It writes about twice as much, so it uses
-  more of your plan.
+  fixer repairs any that don't parse; right after it appears, a checker looks over the whole page
+  and quietly fixes what would spoil it (in tests: a piano key that crashed, food the fish could
+  never reach, a ladybug stuck flapping at the edge). On a test set of eight new creations the wait
+  went from 41 s to 32 s on average and from 67 s to 37 s at the longest, and Sparky's first words
+  from 7.7 s to 4 s. In blind side-by-side judging against the classic way, the team's creations
+  won 11 of 12 (all 8 new ones, and 3 of 4 changes), scoring 7.7 out of 10 against 6.3. It writes
+  about twice as much, so it uses more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and

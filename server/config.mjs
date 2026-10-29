@@ -27,22 +27,25 @@ export const DEFAULTS = {
   claude: { bin: '', model: 'opus', effort: 'low', fast: false },
   // Team mode (Claude only, see server/team.mjs): instead of one AI writing the whole page, a
   // lead plans it and up to `helpers` helpers write its pieces at the same time. In blind tests
-  // its creations beat the classic way's (6 of 8 new ones) and arrived sooner; it uses more of
-  // your plan.
+  // its creations beat the classic way's (11 of 12) and arrived sooner; it uses more of your plan.
   // enabled: false builds the classic way (one AI writes it all).
   // Each role is its own Claude Code run: model, effort, fast (fast mode), advisor (a stronger
   // model it can ask, e.g. "opus" for a sonnet helper) and args (any other `claude` options).
   // Left empty, the lead, helpers and fixer use the Claude settings above; the voice, which only
   // answers out loud, is a quick small model.
   // warm: start the team's programs while the kid is still talking.
+  // check: right after a creation appears, the checker takes a careful look (do the pieces fit,
+  // do the controls work, can it be played, is it smooth) and its fixes slide in at a calm moment.
   team: {
     enabled: true,
     helpers: 6,
     warm: true,
+    check: true,
     voice: { model: 'haiku', effort: 'low' },
     lead: { model: '', effort: '', advisor: '' },
     helper: { model: '', effort: '', advisor: '' },
     fixer: { model: '', effort: '' },
+    checker: { model: '', effort: '' },
   },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },

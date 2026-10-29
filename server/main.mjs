@@ -167,6 +167,9 @@ const routes = {
   // ready when the request arrives.
   'POST /api/warm': () => team.warm(),
 
+  // A team-built creation just appeared: take a careful look and fix what would spoil it.
+  'POST /api/check': async req => team.check(await readJson(req)),
+
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
   'POST /api/watch': async req => watch.review(await readJson(req)),
 
