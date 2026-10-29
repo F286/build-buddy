@@ -685,7 +685,7 @@ async function checkTeamBuild(projectId, version) {
       const { screenshot, ...report } = (await askPage('inspect?', 4000))?.report || {};
       report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];
       const r = await api('/api/check', { projectId, version: v, report, screenshot, polish });
-      if (r.fixed) await applyFix(projectId, v, r);
+      if (r.fixed) await applyFix(projectId, r.base ?? v, r); // (base: a newer version it was carried over onto)
     }
   } catch (err) {
     console.warn('team check failed', err);

@@ -1126,7 +1126,7 @@ export async function reviewPage({ page, asked, told, look, report, shot, notes 
   if (failed.length === edits.length) return { html: null, why, skipped: "edits didn't fit" };
   // Never make it worse: the page must parse at least as well as before.
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length) return { html: null, why, skipped: "the fix didn't parse" };
-  return { html, why, edits: edits.length - failed.length };
+  return { html, why, edits: edits.length - failed.length, applied: edits.filter(e => !failed.includes(e)) };
 }
 
 function saveScreenshot(dataUrl) {
@@ -1181,6 +1181,20 @@ export async function repair({ version, errors, keep, accept = false }) {
 // progress. Only for pages the team built, once each, and never over newer work. Then (polish)
 // the finishing touches, on the page as it is after the check.
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Is the current version a change (or fix) of `version` - the same creation, not something new and
+// not reached by going back?
+function continuesFrom(p, version) {
+  for (let n = p.current, steps = 0; n && steps < 50; steps++) {
+    if (n === version) return true;
+    const v = p.versions.find(x => x.n === n);
+    if (!v || v.from == null || !(v.continues || /check|polish|overwatch/.test(v.backend || ''))) return false;
+    n = v.from;
+  }
+  return false;
+}
+
 // How many polish passes follow the check (team.polish: true is one, a number is that many).
 export function polishPasses() {
   const v = config().team?.polish;
@@ -1214,15 +1228,29 @@ export async function check({ projectId, version, report, screenshot, polish = f
       log(r.skipped ? `${what} skip ${took()} ${r.why} (${r.skipped})` : `${what} ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
       return r.skipped ? { skipped: r.skipped } : { ok: true };
     }
-    // The kid may have moved on meanwhile: never overwrite newer work.
+    // The kid may have moved on meanwhile: never overwrite newer work. If they're getting a change
+    // built, wait for it; then the fix is carried over onto their newer version of the same
+    // creation - but only if every edit of it still fits there exactly.
+    for (let waited = 0; isBusy() && waited < 120; waited++) await sleep(1000);
     p = store.currentProject();
-    if (p.id !== projectId || p.current !== version || isBusy()) {
+    let html = r.html;
+    const base = p.current;
+    if (p.id === projectId && base !== version && !isBusy() && continuesFrom(p, version)) {
+      try {
+        html = applyEdits(store.html(p), r.applied);
+        if ((await syntaxErrors(html)).length > (await syntaxErrors(store.html(p))).length) html = null;
+      } catch {
+        html = null;
+      }
+      if (html) log(`${what} carried over from v${version} to v${base}`);
+    }
+    if (!html || p.id !== projectId || isBusy() || (base !== version && html === r.html)) {
       log(`${what} stale ${took()} ${r.why}`);
       return { skipped: 'stale' };
     }
-    p = store.addVersion(p, r.html, { request: `(team ${polish ? 'polish' : 'check'}) ${r.why}`, backend: polish ? 'claude team polish' : 'claude team check', continues: change });
+    p = store.addVersion(p, html, { request: `(team ${polish ? 'polish' : 'check'}) ${r.why}`, backend: polish ? 'claude team polish' : 'claude team check', continues: change || base !== version });
     log(`${what} fix  ${took()} ${r.why} (${r.edits} edits${shot ? ', saw a screenshot' : ''}) → v${p.current}`);
-    return { fixed: true, verdict: 'fix', why: r.why, html: store.html(p), version: p.current };
+    return { fixed: true, verdict: 'fix', why: r.why, html: store.html(p), version: p.current, base };
   } catch (err) {
     log(`${what} fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
     return { skipped: 'failed' };
