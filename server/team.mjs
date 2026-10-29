@@ -631,6 +631,39 @@ export function repairNames(html) {
   return { html, problems: left.length ? [`It calls ${left.join(', ')} but nothing on the page defines ${left.length > 1 ? 'them' : 'it'}: one piece named it differently (find it and use one name) or it's missing.`] : [] };
 }
 
+// Two pieces that both declared the same top-level name (like resize) stop the whole page: in a
+// module that's a SyntaxError. MAIN's copy is kept (or the shared code's, or else the first
+// part's), and each other piece's copy is renamed with its part's name, within that piece only.
+export async function renameClashes(html) {
+  const esc = s => s.replace(/\$/g, '\\$');
+  for (let round = 0; round < 5; round++) {
+    const errors = await syntaxErrors(html);
+    const name = errors.map(e => /Identifier '([\w$]+)' has already been declared/.exec(e)?.[1]).find(Boolean);
+    if (!name) return html;
+    const pieces = html.split(/^(\/\/ ---- [\w-]+)$/m); // text, marker, text, marker, ...
+    const label = i => (i === 0 ? 'shared' : pieces[i - 1].slice(8));
+    const declares = new RegExp(`^(?:async\\s+)?(?:function\\s*\\*?\\s*${esc(name)}\\s*\\(|class\\s+${esc(name)}\\b|(?:const|let|var)\\s+${esc(name)}\\b)`, 'm');
+    const owners = [];
+    for (let i = 0; i < pieces.length; i += 2) if (declares.test(pieces[i])) owners.push(i);
+    if (owners.length < 2) return html;
+    const keep = owners.find(i => label(i) === 'main') ?? owners.find(i => i === 0) ?? owners[0];
+    for (const i of owners.filter(i => i !== keep)) {
+      const renamed = `${label(i).replace(/\W/g, '_')}_${name}`;
+      const word = `(?<![\\w$.'"\`])${esc(name)}(?![\\w$'"\`])`;
+      pieces[i] = pieces[i]
+        .replace(new RegExp(`([{,]\\s*)${word}(\\s*[,}])`, 'g'), `$1${name}: ${renamed}$2`) // { resize, ... }
+        .replace(new RegExp(`(^\\s*|[{,]\\s*)${word}(?=\\s*\\([^()]*\\)\\s*\\{)`, 'gm'), `$1\u0000`) // a method of that name
+        .replace(new RegExp(`${word}(?!\\s*:(?!:))`, 'g'), renamed)
+        .replace(/\u0000/g, name);
+    }
+    const next = pieces.join('');
+    if ((await syntaxErrors(next)).some(e => e.includes(`Identifier '${name}'`)) || (await syntaxErrors(next)).length > errors.length) return html;
+    log(`team: two pieces both declared ${name}, so the extra ${owners.length > 2 ? 'copies were' : 'copy was'} renamed`);
+    html = next;
+  }
+  return html;
+}
+
 // Apply the edits that fit; return the ones that don't.
 function applySome(page, edits) {
   let html = page;
@@ -934,6 +967,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
 
     // Every script should parse: one repair before it's shown.
     if (html) {
+      html = await renameClashes(html);
       const named = repairNames(html);
       if (named.html !== html) log('team: a piece named its function differently, so the name the plan uses was added');
       html = named.html;
