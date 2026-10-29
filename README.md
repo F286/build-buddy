@@ -88,9 +88,10 @@ cd build-buddy
 ./start.sh --window         # in a normal window, for grown-ups trying it out
 ./start.sh --no-browser     # just the server; open http://127.0.0.1:4321 yourself
 ./start.sh --window --debug # also lets Chrome DevTools tools attach on port 9222
+./start.sh --classic        # one AI writes each creation by itself, instead of a team (see Team mode)
 ```
 
-**Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, voice, names), the
+**Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, how Claude builds, voice, names), the
 current creation's frame rate, and the **Quit** button. Press **Enter** to type a request instead of
 talking.
 
@@ -144,6 +145,10 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `backends` | `["claude", "codex"]` | Which AI to use, in order. If the first fails (offline, usage limit), the next takes over. |
 | `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. |
 | `claude.fast` | `false` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for building: the same model, answering much sooner. On a Claude subscription it's paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. Also in the panel as *Claude speed*. |
+| `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` (or `--team`). Needs `claude` first in `backends`. |
+| `team.helpers` | `6` | The most helpers working on one creation at a time (1 to 8). |
+| `team.lead` / `team.helper` / `team.fixer` / `team.voice` | see [Team mode](#team-mode) | How each member of the team runs Claude Code: `model`, `effort`, `fast`, `advisor` and `args`. |
+| `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
@@ -158,6 +163,48 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `keepOpen` | `false` | Kid-proof mode: reopen the window if it's closed. Quit with Ctrl+Shift+P instead. |
 | `port` | `4321` | Local port for the app. |
 | `browser` | auto | Path to the browser, if it isn't found automatically. |
+
+### Team mode
+
+Team mode is how Build Buddy builds by default. In the classic way, one AI writes the whole page
+from top to bottom, and the kid waits for every line of it. In team mode, Claude Code works as a
+team, and each member is its own `claude` run:
+
+| Role | Default | What it does |
+|---|---|---|
+| `voice` | `haiku`, low effort | Answers out loud straight away (about 1.5 s), while the others build. |
+| `lead` | your `claude.model` / `claude.effort` | Plans the page: the code every piece shares, one job per helper (each starting with exactly what it defines, like `makeWorld(scene) → { update(dt) }`), and the code that puts the pieces together. Small changes it makes itself, as edits. |
+| `helper` | your `claude.model` / `claude.effort` | Each writes one piece, all at the same time. A helper starts the moment its job is written, while the lead is still writing the rest. |
+| `fixer` | your `claude.model` / `claude.effort` | Before anything is shown, every script on the page is checked; if one doesn't parse, or if edits don't fit, the fixer gets one try to repair it (if it can't, the usual wobbly-bit fixing takes over). |
+
+A creation then takes about as long as its biggest piece, instead of the whole page, and each
+helper puts its full attention on one thing. If the team gets stuck, that request is built the
+classic way instead.
+
+Every role takes the same options, so you can tune how Claude Code runs:
+
+```json
+"team": {
+  "enabled": true,
+  "helpers": 6,
+  "lead":   { "model": "opus", "effort": "low", "fast": true },
+  "helper": { "model": "sonnet", "effort": "low", "advisor": "opus" },
+  "voice":  { "model": "haiku" },
+  "fixer":  { "model": "opus", "args": ["--fallback-model", "sonnet"] }
+}
+```
+
+- `model` / `effort`: any Claude Code model alias or name, and `low` to `max`.
+- `fast`: [fast mode](https://code.claude.com/docs/en/fast-mode) for that role (paid from extra
+  usage credits on a subscription). Fast mode for just the lead is the cheapest big speed-up: it
+  writes the plan, which every helper waits for.
+- `advisor`: a stronger model the role can ask for advice before it writes (Claude Code's advisor
+  tool; it must be at least as capable as the role's own model, e.g. `opus` advising `sonnet`).
+  Each consultation adds a few seconds.
+- `args`: any other `claude` command-line options for that role.
+
+A team build uses more of your plan than a classic one (several AIs read the request, and the pages
+come out bigger and more detailed), and runs up to `helpers` + 2 `claude` programs at once.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
@@ -196,6 +243,14 @@ Buddy changes.
   also told what the kid is building and what they said lately; silence is never sent to either, so
   they can't invent sentences; and rude words that a mumble gets misheard as are masked. Listening
   starts half a second before the talk key goes down and keeps going a moment after it's let go.
+- **Built by a team.** In [team mode](#team-mode) (the default), a quick model answers out loud
+  while a lead plans the creation and up to six helpers write its pieces at the same time, each
+  starting the moment its job is written. Before anything is shown, every script is checked, and a
+  fixer repairs any that don't parse. On a test set of eight new creations it brought the average wait from 41 s to
+  32 s and the longest from 67 s to 37 s, and Sparky's first words from 7.7 s to 4 s on average. In
+  blind side-by-side judging against the classic way, its creations won 6 of the 8 (richer scenes,
+  livelier characters) and 2 of 4 changes, with one tie. It writes about twice as much, so it uses
+  more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
@@ -250,6 +305,7 @@ but `setup.sh` needs WSL, or use `"stt": "browser", "tts": "browser"` with Chrom
 ```
 server/main.mjs      web server, API, full-screen browser launcher
 server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
+server/team.mjs      team mode: a lead and helpers that build a creation together, at the same time
 server/speech.mjs    whisper.cpp (listening), Kokoro and Piper (talking)
 server/watch.mjs     the overwatch: a stronger model that checks on games and fixes them
 server/store.mjs     creations and their versions, saved in data/projects/

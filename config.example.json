@@ -4,6 +4,7 @@
   "buddyName": "Sparky",
   "backends": ["claude", "codex"],
   "claude": { "model": "opus", "effort": "low" },
+  "team": { "enabled": true, "helpers": 6 },
   "codex": { "model": "", "reasoning": "low" },
   "command": { "cmd": "", "args": [] },
   "stt": "both",

@@ -227,6 +227,16 @@ button {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* team mode: a little robot for each helper building a piece, bobbing until its piece is done */
+#buildingTeam { display: flex; gap: 2px; font-size: 20px; line-height: 1.2; }
+#buildingTeam span { display: inline-block; animation: helper 0.8s ease-in-out infinite; }
+#buildingTeam span:nth-child(2n) { animation-delay: -0.3s; }
+#buildingTeam span:nth-child(3n) { animation-delay: -0.55s; }
+#buildingTeam span.done { animation: none; opacity: 0.45; }
+@keyframes helper {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  50% { transform: translateY(-5px) rotate(6deg); }
+}
 #buildingNext {
   font-size: 16px;
   color: #5b6090;

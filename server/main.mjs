@@ -13,6 +13,7 @@ import * as store from './store.mjs';
 import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
 import * as watch from './watch.mjs';
+import * as team from './team.mjs';
 import { findBin } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
@@ -64,6 +65,8 @@ function publicConfig() {
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
     claudeFast: Boolean(c.claude.fast),
+    team: Boolean(c.team.enabled),
+    teamActive: team.enabled(),
     creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
@@ -160,6 +163,10 @@ const routes = {
     res.end();
   },
 
+  // The kid started talking (or typing): in team mode, start the team's programs now so they're
+  // ready when the request arrives.
+  'POST /api/warm': () => team.warm(),
+
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
   'POST /api/watch': async req => watch.review(await readJson(req)),
 
@@ -210,6 +217,7 @@ const routes = {
     if (Array.isArray(b.backends)) patch.backends = b.backends.filter(n => ai.backendNames.includes(n));
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
+    if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
@@ -408,6 +416,8 @@ process.on('unhandledRejection', err => console.error('unexpected rejection:', e
 server.listen(port, '127.0.0.1', () => {
   const s = speech.status();
   console.log(`Build Buddy is running at http://127.0.0.1:${port}`);
+  const building = team.enabled() ? `a team (lead + up to ${team.maxHelpers()} helpers)` : config().team.enabled ? 'classic (team mode needs claude first in backends)' : 'classic';
+  console.log(`  building: ${building}`);
   console.log(`  brains: ${config().backends.join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();

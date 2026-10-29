@@ -57,6 +57,7 @@
     <div class="what">
       <div class="label"><span id="buildingLabel">Building</span><span class="dots"><i>.</i><i>.</i><i>.</i></span> <span id="buildingTime"></span></div>
       <div id="buildingWhat"></div>
+      <div id="buildingTeam" hidden aria-hidden="true"></div>
       <div id="buildingNext" hidden></div>
     </div>
   </section>
@@ -124,6 +125,9 @@
         <option value="codex">ChatGPT only</option>
         <option value="command">Custom command (config.json)</option>
       </select>
+    </label>
+    <label>How Claude builds
+      <select name="building"><option value="">One AI writes it all (classic)</option><option value="team">A team of AIs at once (faster, uses more of your plan)</option></select>
     </label>
     <div class="row">
       <label>Claude model <input name="claudeModel" placeholder="opus"></label>

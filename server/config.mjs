@@ -25,6 +25,25 @@ export const DEFAULTS = {
   // fast: Claude's fast mode for the builder - the same model, answering much sooner. On a Claude
   // subscription it's paid from extra usage credits; with none left it runs at normal speed.
   claude: { bin: '', model: 'opus', effort: 'low', fast: false },
+  // Team mode (Claude only, see server/team.mjs): instead of one AI writing the whole page, a
+  // lead plans it and up to `helpers` helpers write its pieces at the same time. In blind tests
+  // its creations beat the classic way's (6 of 8 new ones) and arrived sooner; it uses more of
+  // your plan.
+  // enabled: false builds the classic way (one AI writes it all).
+  // Each role is its own Claude Code run: model, effort, fast (fast mode), advisor (a stronger
+  // model it can ask, e.g. "opus" for a sonnet helper) and args (any other `claude` options).
+  // Left empty, the lead, helpers and fixer use the Claude settings above; the voice, which only
+  // answers out loud, is a quick small model.
+  // warm: start the team's programs while the kid is still talking.
+  team: {
+    enabled: true,
+    helpers: 6,
+    warm: true,
+    voice: { model: 'haiku', effort: 'low' },
+    lead: { model: '', effort: '', advisor: '' },
+    helper: { model: '', effort: '', advisor: '' },
+    fixer: { model: '', effort: '' },
+  },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 
@@ -87,7 +106,12 @@ function readUserConfig() {
   }
 }
 
-let current = merge(DEFAULTS, readUserConfig());
+// Team mode for this run only, without changing config.json: `./start.sh --team` (or
+// `--classic`), or KIDBUILD_TEAM=1 (or 0). Picking a way of building in the panel replaces it.
+let runTeam = process.argv.includes('--team') || process.env.KIDBUILD_TEAM === '1' ? true : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0' ? false : null;
+const withRunTeam = c => (runTeam === null ? c : { ...c, team: { ...c.team, enabled: runTeam } });
+
+let current = withRunTeam(merge(DEFAULTS, readUserConfig()));
 if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());
 if (process.env.KIDBUILD_PORT) current.port = Number(process.env.KIDBUILD_PORT);
 
@@ -99,7 +123,8 @@ export function config() {
 export function saveConfig(patch) {
   const user = merge(readUserConfig(), patch);
   fs.writeFileSync(FILE, JSON.stringify(user, null, 2) + '\n');
-  current = merge(DEFAULTS, user);
+  if (patch.team && 'enabled' in patch.team) runTeam = null;
+  current = withRunTeam(merge(DEFAULTS, user));
   return current;
 }
 

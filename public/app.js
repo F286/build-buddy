@@ -365,6 +365,7 @@ function startBlocks(body) {
   $('#buildingLabel').textContent = body.fix ? `${name} is fixing` : `${name} is building`;
   $('#buildingWhat').textContent = body.fix ? 'A wobbly bit 🔧' : `“${body.text}”`;
   $('#buildingTime').textContent = '';
+  showHelpers(0);
   showNext();
   $('#building').hidden = false;
   clearInterval(progress.timer);
@@ -377,6 +378,17 @@ function startBlocks(body) {
     if (progress.shown < progress.target) addBlock();
     $('#buildingTime').textContent = `${Math.floor((Date.now() - progress.started) / 1000)}s`;
   }, 140);
+}
+
+// Team mode: a little robot for each helper building a piece of it (see server/team.mjs).
+function showHelpers(count, done = 0) {
+  const el = $('#buildingTeam');
+  const name = state.config.buddyName || 'Sparky';
+  if (!state.fixing) $('#buildingLabel').textContent = count ? `${name} + ${count} helper${count > 1 ? 's' : ''}` : `${name} is building`;
+  while (el.children.length > count) el.lastChild.remove();
+  while (el.children.length < count) el.append(Object.assign(document.createElement('span'), { textContent: '🤖' }));
+  [...el.children].forEach((robot, i) => robot.classList.toggle('done', i < done));
+  el.hidden = !count;
 }
 
 // What the kid asked for while this build was running (it's built next).
@@ -433,6 +445,8 @@ async function build(body) {
         if (ev.type === 'progress') {
           progress.target = Math.max(progress.target, Math.floor(ev.chars / 110));
           progress.lastEvent = Date.now();
+          if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone);
+          else if (ev.note) showHelpers(0); // the team gave up: building the classic way
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);
@@ -788,6 +802,13 @@ function pressTalk() {
   micBtn.classList.add('listening');
   Object.assign(mic, { recording: true, tapMode: false, startedAt: performance.now(), speechMs: 0, silenceMs: 0, peak: 0, chunks: [...mic.preroll] });
   if (mic.recognizer) mic.recognizer.start();
+  warmTeam();
+}
+
+// Team mode: get the team's programs started while the kid is still talking, so they're ready
+// the moment the request arrives (see server/team.mjs).
+function warmTeam() {
+  if (state.config.teamActive && !state.busy) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {
@@ -1074,6 +1095,7 @@ for (const type of ['keydown', 'keyup']) {
 
 function openTypeBox() {
   hush();
+  warmTeam();
   $('#typeBox').hidden = false;
   $('#typeInput').value = '';
   $('#typeInput').focus();
@@ -1099,6 +1121,8 @@ async function openParent() {
   f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
+  f.building.value = c.team ? 'team' : '';
+  state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
   f.stt.value = c.stt;
@@ -1136,6 +1160,7 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
+    (c.team && !c.teamActive ? 'Team building needs Claude as the first AI brain, so it builds the classic way. ' : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
     (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
@@ -1149,6 +1174,7 @@ $('#parentForm').addEventListener('submit', async e => {
     backends: f.brains.value.split(','),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
+    ...(f.building.value !== state.buildingShown && { team: f.building.value === 'team' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     stt: f.stt.value,

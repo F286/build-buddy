@@ -8,6 +8,7 @@ import path from 'node:path';
 import { config, DATA, ROOT } from './config.mjs';
 import { findBin, run } from './bins.mjs';
 import * as store from './store.mjs';
+import * as team from './team.mjs';
 
 const WORK = path.join(DATA, 'tmp');
 fs.mkdirSync(WORK, { recursive: true });
@@ -38,7 +39,7 @@ export function buildingRules() {
   const three = libVersion('three');
   const libs = [];
   if (phaser) {
-    libs.push(`- For games and anything that moves in 2D (characters, racing, jumping, catching, bouncing, physics) use Phaser ${phaser}, already available offline: \`<script type="module">import Phaser from 'phaser';\`. Fill the window with \`scale: { mode: Phaser.Scale.RESIZE }\`, and use Arcade physics, tweens, particles and camera effects. There are no image files: make sprites from big emoji (\`this.add.text(x, y, '🐸', { fontSize: '96px' })\`) or from Graphics turned into textures (\`generateTexture\`). Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
+    libs.push(`- For games and anything that moves in 2D (characters, racing, jumping, catching, bouncing, physics) use Phaser ${phaser}, already available offline: \`<script type="module">import Phaser from 'phaser';\`. Fill the window with \`scale: { mode: Phaser.Scale.RESIZE }\`, and use Arcade physics, tweens, particles and camera effects. This is Phaser 4: there is no Phaser.Geom.Point - use Phaser.Math.Vector2. There are no image files: make sprites from big emoji (\`this.add.text(x, y, '🐸', { fontSize: '96px', padding: { y: 16 } })\` - without the padding the top of the emoji is cut off) or from Graphics turned into textures (\`generateTexture\`). Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
   }
   if (three) {
     libs.push(`- For anything 3D use Three.js (r${three.split('.')[1]}, already available offline): \`<script type="module">import * as THREE from 'three'; import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\` (any 'three/addons/...' path works). Never hand-draw 3D on a 2D canvas.`);
@@ -47,6 +48,7 @@ export function buildingRules() {
   return `# Building rules
 - One self-contained HTML page. No external files, images, fonts or network requests - they are blocked. Draw with emoji, SVG, CSS or <canvas>. Make sounds and music with the Web Audio API. Don't use speechSynthesis - you do the talking.
 ${libs.join('\n')}
+- Emoji on a 2D canvas are drawn with the current fillStyle's transparency: set an opaque fillStyle and globalAlpha = 1 right before fillText-ing them, or they come out faint.
 - Fill the whole window with no scrollbars (100vw x 100vh, overflow hidden) and handle resizing. Keep the player and everything the kid needs to see or tap inside the window at any window size: stop things at the edges, and make toolbars and buttons shrink to fit. Bright colors, big friendly shapes, smooth animation. Make it look delightful.
 - Make it feel alive: things gently bob, blink, sway or twinkle even when nobody touches them, and every action gets a response - a bounce, a burst of particles, a happy sound.
 - Pages can't close, exit or lock the app, and can't limit play time. If the kid asks for that, tell them kindly that only a grown-up can set play time. A countdown inside a game is fine, but it never stops them playing.
@@ -73,12 +75,28 @@ ${libs.join('\n')}
 - If they say it's slow or choppy, simplify what's drawn rather than adding more.`;
 }
 
-export function systemPrompt() {
+// Who the buddy is and who it's talking to. Shared with team mode (team.mjs).
+export function buddyIntro() {
   const c = config();
   const who = `a ${c.kidAge}-year-old${c.kidName ? ` named ${c.kidName}` : ''}`;
   return `You are ${c.buddyName}, a cheerful robot building buddy for ${who}. The kid talks to you out loud, and you build what they ask for on a big full-screen web page: pictures, animated scenes, toys, little games, musical instruments, stories - anything they can imagine. This is how they learn to build with AI: they describe an idea, see it, and make it better one small step at a time. The ideas must always be theirs: you build what they ask for, but you never tell them what to build.
 
-Their words come through speech-to-text, so they are sometimes misheard ("a rice car" is probably "a race car", "die no sore" is "dinosaur"). Guess the most likely meaning. Kids ramble, too - pick out what they want.
+Their words come through speech-to-text, so they are sometimes misheard ("a rice car" is probably "a race car", "die no sore" is "dinosaur"). Guess the most likely meaning. Kids ramble, too - pick out what they want.`;
+}
+
+export function talkingRules() {
+  const c = config();
+  return `# Talking to a ${c.kidAge}-year-old
+- Tiny sentences, simple words, warm and excited. Never say code, HTML, JavaScript, CSS, file, browser, bug or error.
+- They can't read yet: never put instructions as text on the page - say them in DONE. Use big emoji and pictures instead of words.
+- Always tell them how to use it: "Press the arrow keys to drive!", "Click the stars to pop them!"
+- Never suggest ideas, additions or next steps, and never offer choices - not even as a question ("Should it go faster?", "A cat or a dog?"). The kid has to come up with what comes next; a suggestion turns their turn into just saying yes or no. An open question like "What's next?" or "What do you want to change?" is fine.
+- If they ask you for ideas, don't give any. Turn it back to them: "What do you love? What would be fun to see?"
+- If you can't tell what they want, say what you heard and ask them to tell you more in their own words. Don't guess options for them.`;
+}
+
+export function systemPrompt() {
+  return `${buddyIntro()}
 
 # Reply format (always exactly this)
 
@@ -91,13 +109,7 @@ ${PAGE_FORMAT}
 
 If you only need to talk (you didn't understand, or they asked you something), write just SAY and no page.
 
-# Talking to a ${c.kidAge}-year-old
-- Tiny sentences, simple words, warm and excited. Never say code, HTML, JavaScript, CSS, file, browser, bug or error.
-- They can't read yet: never put instructions as text on the page - say them in DONE. Use big emoji and pictures instead of words.
-- Always tell them how to use it: "Press the arrow keys to drive!", "Click the stars to pop them!"
-- Never suggest ideas, additions or next steps, and never offer choices - not even as a question ("Should it go faster?", "A cat or a dog?"). The kid has to come up with what comes next; a suggestion turns their turn into just saying yes or no. An open question like "What's next?" or "What do you want to change?" is fine.
-- If they ask you for ideas, don't give any. Turn it back to them: "What do you love? What would be fun to see?"
-- If you can't tell what they want, say what you heard and ask them to tell you more in their own words. Don't guess options for them.
+${talkingRules()}
 
 ${buildingRules()}`;
 }
@@ -119,12 +131,13 @@ const LOOKS = [
   'comic book - halftone dots, bold colors and "POW" style bursts on actions',
 ];
 
-function userPrompt({ page, history, text, alt, fix, fullOnly }) {
+export const pickLook = () => LOOKS[Math.floor(Math.random() * LOOKS.length)];
+
+export function userPrompt({ page, history, text, alt, fix, fullOnly, look = pickLook() }) {
   const c = config();
   const parts = [];
   parts.push(page ? `<current_page>\n${page}\n</current_page>` : 'The screen is blank - nothing has been built yet.');
   if (!fix) {
-    const look = LOOKS[Math.floor(Math.random() * LOOKS.length)];
     parts.push(`${page ? 'If this turns into a fresh new page, try' : 'For this new creation, try'} this look, unless the kid asked for something else: ${look}.`);
   }
   const recent = history.slice(-c.historyTurns * 2);
@@ -326,6 +339,9 @@ export const isBusy = () => busy;
 // How the last build that asked for fast mode actually ran, for the grown-ups' panel.
 let fastSeen = null;
 export const fastStatus = () => fastSeen;
+export function noteSpeed(speed, note) {
+  fastSeen = { speed, note, at: Date.now() };
+}
 
 export function log(line) {
   fs.appendFile(path.join(DATA, 'log.txt'), `${new Date().toISOString()} ${line}\n`, () => {});
@@ -374,6 +390,28 @@ async function ask(prompt, emit, state) {
   throw lastErr || new Error('No AI backends configured');
 }
 
+// The classic way: one AI writes the whole reply (with a full-page retry if its edits don't fit).
+async function classic({ page, history, text, alt, fix }, emit, state) {
+  let reply = await ask(userPrompt({ page, history, text, alt, fix }), emit, state);
+  let r = parseReply(reply.text);
+  let newHtml = r.html;
+  let edited = false;
+  if (!newHtml && r.edits.length) {
+    try {
+      if (!page) throw new Error('edits on a blank page');
+      newHtml = applyEdits(page, r.edits);
+      edited = true;
+    } catch (err) {
+      log(`edit failed (${err.message}), asking for the full page`);
+      reply = await ask(userPrompt({ page, history, text, alt, fix, fullOnly: true }), emit, state);
+      const again = parseReply(reply.text);
+      newHtml = again.html;
+      r = { ...again, say: r.say || again.say, done: again.done || r.done, title: r.title || again.title, emoji: r.emoji || again.emoji };
+    }
+  }
+  return { ...r, html: newHtml, edited, backend: reply.backend };
+}
+
 export async function build({ text, alt, fix }, emit) {
   if (busy) throw new Error('busy');
   busy = true;
@@ -385,30 +423,26 @@ export async function build({ text, alt, fix }, emit) {
     const titleBefore = p.title;
     log(`${fix ? 'FIX ' : 'KID '} ${(text || fix).replace(/\s+/g, ' ').slice(0, 200)}`);
 
-    let reply = await ask(userPrompt({ page, history, text, alt, fix }), emit, state);
-    let r = parseReply(reply.text);
-    let newHtml = r.html;
-    let edited = false;
-    if (!newHtml && r.edits.length) {
+    // Team mode (team.mjs): a lead and helpers build it together. If the team can't, the
+    // classic way still answers.
+    let r = null;
+    if (team.enabled()) {
       try {
-        if (!page) throw new Error('edits on a blank page');
-        newHtml = applyEdits(page, r.edits);
-        edited = true;
+        r = await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
-        log(`edit failed (${err.message}), asking for the full page`);
-        reply = await ask(userPrompt({ page, history, text, alt, fix, fullOnly: true }), emit, state);
-        const again = parseReply(reply.text);
-        newHtml = again.html;
-        r = { ...again, say: r.say || again.say, done: again.done || r.done, title: r.title || again.title, emoji: r.emoji || again.emoji };
+        log(`FAIL claude team ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
+        emit({ type: 'progress', chars: 0, note: 'the team got stuck, building the classic way' });
       }
     }
+    r ||= await classic({ page, history, text, alt, fix }, emit, state);
+    const newHtml = r.html;
 
     // Changes to the same creation carry the kid's progress over (KB.keep). Edits always do; a
     // whole new page under a new name is a new thing and starts fresh.
-    const continues = Boolean(page) && (edited || !(r.title && r.title !== titleBefore));
+    const continues = Boolean(page) && (r.edited || !(r.title && r.title !== titleBefore));
 
     if (text) p = store.addHistory(p, 'kid', text);
-    if (newHtml) p = store.addVersion(p, newHtml, { request: text || `(fix) ${fix.slice(0, 200)}`, backend: reply.backend });
+    if (newHtml) p = store.addVersion(p, newHtml, { request: text || `(fix) ${fix.slice(0, 200)}`, backend: r.backend });
     if (r.title) p = store.setTitle(p, r.title, r.emoji);
     if (!fix) p = store.addHistory(p, 'buddy', [r.say, r.done].filter(Boolean).join(' '));
 
@@ -422,7 +456,7 @@ export async function build({ text, alt, fix }, emit) {
       emoji: p.emoji,
       version: p.current,
       continues,
-      backend: reply.backend,
+      backend: r.backend,
     });
   } finally {
     busy = false;
