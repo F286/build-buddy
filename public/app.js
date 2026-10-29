@@ -575,7 +575,12 @@ setInterval(() => checkCreation(), 15000);
 // its fixes slide in at a calm moment, keeping the kid's progress (see server/team.mjs check()).
 async function checkTeamBuild(projectId, version) {
   try {
-    const r = await api('/api/check', { projectId, version });
+    // Let it start up and draw for a moment, then send how it's running and a screenshot.
+    await sleep(1500);
+    if (state.project?.id !== projectId || state.project?.version !== version) return;
+    const { screenshot, ...report } = (await askPage('inspect?', 4000))?.report || {};
+    report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];
+    const r = await api('/api/check', { projectId, version, report, screenshot });
     if (r.fixed) await applyFix(projectId, version, r);
   } catch (err) {
     console.warn('team check failed', err);

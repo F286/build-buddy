@@ -133,6 +133,7 @@ MAIN:
   - MAIN owns the input: it keeps a shared input object up to date (like input.left, input.right, input.up and input.down for the arrow keys, input.x, input.y and input.pressed for the pointer, and input.tapped for a tap this frame), and the parts read it. A part that reacts to taps on its own things says so in its job, with the exact function MAIN calls, like hitTest(x, y) → true if tapped.
   - Anything one piece makes and another uses - an element's id or data- attribute, an object's fields, a mesh's userData - is named exactly in both jobs (or in the shared code).
   - In 3D, MAIN owns the camera unless a job says otherwise.
+- Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts.
 - <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(4, n)}-${n} small parts of about 30 short lines each (about 2,000 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene) into two parts.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.
@@ -196,7 +197,8 @@ Check:
 3. The start: the main character and the main action are on screen and clearly visible - not off-screen, clipped at an edge, behind something, too small, or out of the camera's view; things don't start on top of each other.
 4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame.
-6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made.
+6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made, and none of the errors the page reported while running.
+7. How it looks (if there's a screenshot, look at it first with the Read tool): nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
 
 The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the 'three' and 'phaser' imports: they exist.
 
@@ -219,13 +221,14 @@ FIND must be copied exactly from the page and match only once: include a couple 
 let warmPool = []; // { key, proc, timer }
 const WARM_MS = 120000;
 
-function claudeArgs(name, system) {
+function claudeArgs(name, system, tools = '') {
   const r = roleConfig(name);
   const args = [
-    '-p', '--safe-mode', '--tools', '', '--strict-mcp-config', '--no-session-persistence',
+    '-p', '--safe-mode', '--tools', tools, '--strict-mcp-config', '--no-session-persistence',
     '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
     '--system-prompt', system,
   ];
+  if (tools) args.push('--permission-prompts', 'none'); // read-only tools only, never ask
   if (r.model) args.push('--model', r.model);
   if (r.effort) args.push('--effort', r.effort);
   if (r.advisor) args.push('--advisor', r.advisor);
@@ -302,8 +305,8 @@ export function warm() {
 
 // Ask one member of the team. onText(chunk) gets the reply as it's written. Resolves with the
 // whole reply; the AbortSignal stops it.
-function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tally }) {
-  const args = claudeArgs(name, system);
+function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tally, tools = '' }) {
+  const args = claudeArgs(name, system, tools);
   const r = roleConfig(name);
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new Error('stopped'));
@@ -760,48 +763,76 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
 
 // ---------------------------------------------------------------------------------------------
 // A careful look at a team-built page right after it appears (the app asks: POST /api/check).
+
+// What the checker is told about the page as it runs (from the app's stage, like the overwatch).
+function running(report, shot) {
+  const r = report || {};
+  const lines = [
+    `Running at ${r.fps ?? '?'} frames per second${r.canvas ? ` on a ${r.canvas} canvas` : ''}.`,
+    `Errors while running: ${r.errors?.length ? r.errors.slice(-5).join(' | ') : 'none'}`,
+  ];
+  return `<how_it_is_running>\n${lines.join('\n')}\n</how_it_is_running>\n\n${
+    shot ? `A screenshot of it right now is in the file ${path.basename(shot)} - look at it first.` : 'There is no screenshot (it is not drawn on a canvas), so judge from the page.'
+  }`;
+}
+
+// Review a page; resolves with the fixed page (or null if nothing needs fixing) and why.
+export async function reviewPage({ page, asked, told, report, shot }) {
+  const reply = await ask('checker', {
+    system: checkerSystem(),
+    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}\n\n${running(report, shot)}`,
+    tools: shot ? 'Read' : '',
+  });
+  const edits = parseReply(reply.text).edits;
+  if (!edits.length) return { html: null, why: '' };
+  const why = field(reply.text, 'WHY') || 'fixed a few things';
+  const { html, failed } = applySome(page, edits);
+  if (failed.length === edits.length) return { html: null, why, skipped: "edits didn't fit" };
+  // Never make it worse: the page must parse at least as well as before.
+  if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length) return { html: null, why, skipped: "the fix didn't parse" };
+  return { html, why, edits: edits.length - failed.length };
+}
+
+function saveScreenshot(dataUrl) {
+  const m = /^data:image\/(jpeg|png);base64,(.+)$/.exec(dataUrl || '');
+  if (!m) return null;
+  const file = path.join(WORK_DIR, `check-${Date.now()}.${m[1] === 'png' ? 'png' : 'jpg'}`);
+  fs.writeFileSync(file, Buffer.from(m[2], 'base64'));
+  return file;
+}
 // Its fixes become a new version, which the app slides in at a calm moment, keeping the kid's
 // progress. Only for pages the team built, once each, and never over newer work.
 
-export async function check({ projectId, version }) {
+export async function check({ projectId, version, report, screenshot }) {
   if (!enabled() || config().team.check === false) return { skipped: 'off' };
   let p = store.currentProject();
   if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
   if (p.versions.find(v => v.n === version)?.backend !== 'claude team') return { skipped: 'not built by the team' };
   const page = store.html(p);
+  const shot = saveScreenshot(screenshot);
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   try {
     const asked = p.history.filter(h => h.role === 'kid').at(-1)?.text || '';
     const told = p.history.filter(h => h.role === 'buddy').at(-1)?.text || '';
-    const reply = await ask('checker', { system: checkerSystem(), prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}` });
-    const edits = parseReply(reply.text).edits;
-    if (!edits.length) {
-      log(`CHECK ok   ${took()}`);
-      return { ok: true };
-    }
-    const why = field(reply.text, 'WHY') || 'fixed a few things';
-    let { html, failed } = applySome(page, edits);
-    if (failed.length === edits.length) {
-      log(`CHECK skip ${took()} ${why} (edits didn't fit)`);
-      return { skipped: "edits didn't fit" };
-    }
-    // Never make it worse: the page must parse at least as well as before.
-    if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length) {
-      log(`CHECK skip ${took()} ${why} (the fix didn't parse)`);
-      return { skipped: "fix didn't parse" };
+    const r = await reviewPage({ page, asked, told, report, shot });
+    if (!r.html) {
+      log(r.skipped ? `CHECK skip ${took()} ${r.why} (${r.skipped})` : `CHECK ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
+      return r.skipped ? { skipped: r.skipped } : { ok: true };
     }
     // The kid may have moved on meanwhile: never overwrite newer work.
     p = store.currentProject();
     if (p.id !== projectId || p.current !== version || isBusy()) {
-      log(`CHECK stale ${took()} ${why}`);
+      log(`CHECK stale ${took()} ${r.why}`);
       return { skipped: 'stale' };
     }
-    p = store.addVersion(p, html, { request: `(team check) ${why}`, backend: 'claude team check' });
-    log(`CHECK fix  ${took()} ${why} (${edits.length - failed.length} edits) → v${p.current}`);
-    return { fixed: true, verdict: 'fix', why, html: store.html(p), version: p.current };
+    p = store.addVersion(p, r.html, { request: `(team check) ${r.why}`, backend: 'claude team check' });
+    log(`CHECK fix  ${took()} ${r.why} (${r.edits} edits${shot ? ', saw a screenshot' : ''}) → v${p.current}`);
+    return { fixed: true, verdict: 'fix', why: r.why, html: store.html(p), version: p.current };
   } catch (err) {
     log(`CHECK fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
     return { skipped: 'failed' };
+  } finally {
+    if (shot) fs.rmSync(shot, { force: true });
   }
 }
