@@ -262,15 +262,15 @@ Buddy changes.
   dragon without real wings). Their changes are tried out of sight first, so they can never break
   a creation that works, and slide in while the kid plays. On a test set of eight new creations
   and four changes (timed like at home), a first look was on screen after about 14 s, and the full
-  creation after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds, against 72 s);
-  Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s instead of 26 s.
-  In blind side-by-side judging against the classic way, the team's creations won 11 of 12; scored
-  one at a time against fixed anchors (10 = nothing noticeably wrong), they averaged 7.8 out of 10
-  against the classic way's 6.5 - as high as Opus at high effort with no time limit (7.9, taking 1.5
-  to 3 minutes per creation, with the same check and polish). In over a hundred judgments no
-  creation from any builder scored above 8 ("very good"): 19 of 24 of the team's got that top
-  score, against none of the classic way's; more polish passes didn't raise it. It writes about
-  twice as much, so it uses more of your plan.
+  creation after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds, against
+  72 s); Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s instead
+  of 26 s. In blind side-by-side judging against the classic way, the team's creations won 11 of
+  12; scored one at a time against fixed anchors (10 = nothing noticeably wrong), they averaged 7.8
+  out of 10 against the classic way's 6.5 - as high as Opus at high effort with no time limit (7.9,
+  taking 1.5 to 3 minutes per creation, with the same check and polish). In over a hundred
+  judgments no creation from any builder scored above 8 ("very good"): 19 of 24 of the team's got
+  that top score, against none of the classic way's; more polish passes didn't raise it. It writes
+  about twice as much, so it uses more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
