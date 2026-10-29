@@ -13,6 +13,7 @@ import * as store from './store.mjs';
 import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
 import * as watch from './watch.mjs';
+import * as team from './team.mjs';
 import { findBin } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
@@ -64,6 +65,9 @@ function publicConfig() {
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
     claudeFast: Boolean(c.claude.fast),
+    team: Boolean(c.team.enabled),
+    teamActive: team.enabled(),
+    polishPasses: team.polishPasses(),
     creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
@@ -160,6 +164,16 @@ const routes = {
     res.end();
   },
 
+  // The kid started talking (or typing): in team mode, start the team's programs now so they're
+  // ready when the request arrives.
+  'POST /api/warm': () => team.warm(),
+
+  // A team-built creation crashed when the app tried it before showing it: repair it first.
+  'POST /api/repair': async req => team.repair(await readJson(req)),
+
+  // A team-built creation just appeared: take a careful look and fix what would spoil it.
+  'POST /api/check': async req => team.check(await readJson(req)),
+
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
   'POST /api/watch': async req => watch.review(await readJson(req)),
 
@@ -188,6 +202,18 @@ const routes = {
     return p ? { project: projectInfo(p), html: store.html(p) } : { nothing: true };
   },
 
+  // A fix from the team's checker or polisher, or the overwatch, threw errors when the app tried
+  // it out of sight: take it back, so the creation stays as it was.
+  'POST /api/drop-fix': async req => {
+    const { projectId, version, error } = await readJson(req);
+    const p = store.currentProject();
+    const v = p.versions.find(x => x.n === version);
+    if (p.id !== projectId || p.current !== version || !/check|polish|overwatch/.test(v?.backend || '')) return { dropped: false };
+    store.dropVersion(p, version);
+    ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
+    return { dropped: true };
+  },
+
   'POST /api/new': () => {
     if (ai.isBusy()) return { error: 'busy' };
     const p = store.newProject();
@@ -210,6 +236,7 @@ const routes = {
     if (Array.isArray(b.backends)) patch.backends = b.backends.filter(n => ai.backendNames.includes(n));
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
+    if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
@@ -408,6 +435,8 @@ process.on('unhandledRejection', err => console.error('unexpected rejection:', e
 server.listen(port, '127.0.0.1', () => {
   const s = speech.status();
   console.log(`Build Buddy is running at http://127.0.0.1:${port}`);
+  const building = team.enabled() ? `a team (lead + up to ${team.maxHelpers()} helpers)` : config().team.enabled ? 'classic (team mode needs claude first in backends)' : 'classic';
+  console.log(`  building: ${building}`);
   console.log(`  brains: ${config().backends.join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();

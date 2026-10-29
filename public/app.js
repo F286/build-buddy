@@ -23,6 +23,7 @@ const state = {
   kept: null, // the latest KB.keep values the page reported: { projectId, keep }
   timeUp: false, // the time limit ran out: the creation is put away until a grown-up adds time
   resumeKeep: null, // ...and this is the kid's progress to hand back when it returns
+  sketch: null, // team mode's first look is on the stage: { html, kept } of what was there before
 };
 
 async function api(path, body) {
@@ -315,7 +316,7 @@ addEventListener('message', e => {
   if (e.source !== frame.contentWindow || !d?.kidbuild) return;
   if (d.type === 'key') handleKey(d);
   if (d.type === 'error') pageError(d.message);
-  if (d.type === 'keep' && d.keep) state.kept = { projectId: state.project?.id, keep: d.keep };
+  if (d.type === 'keep' && d.keep && !state.sketch) state.kept = { projectId: state.project?.id, keep: d.keep };
   if (d.id && answers.has(d.id)) {
     answers.get(d.id)(d);
     answers.delete(d.id);
@@ -330,6 +331,7 @@ addEventListener('message', e => {
 let fixTimer = null;
 function pageError(message) {
   if (/ResizeObserver|^Script error/i.test(message)) return;
+  if (state.sketch) return; // a first look, about to be replaced: nothing to fix
   // Crashed right after being handed the kid's progress? Maybe the old values don't suit the
   // new version: start this version fresh instead (no fix needed yet).
   if (state.restoredAt && Date.now() - state.restoredAt < 5000) {
@@ -365,6 +367,7 @@ function startBlocks(body) {
   $('#buildingLabel').textContent = body.fix ? `${name} is fixing` : `${name} is building`;
   $('#buildingWhat').textContent = body.fix ? 'A wobbly bit 🔧' : `“${body.text}”`;
   $('#buildingTime').textContent = '';
+  showHelpers(0);
   showNext();
   $('#building').hidden = false;
   clearInterval(progress.timer);
@@ -377,6 +380,17 @@ function startBlocks(body) {
     if (progress.shown < progress.target) addBlock();
     $('#buildingTime').textContent = `${Math.floor((Date.now() - progress.started) / 1000)}s`;
   }, 140);
+}
+
+// Team mode: a little robot for each helper building a piece of it (see server/team.mjs).
+function showHelpers(count, done = 0) {
+  const el = $('#buildingTeam');
+  const name = state.config.buddyName || 'Sparky';
+  if (!state.fixing) $('#buildingLabel').textContent = count ? `${name} + ${count} helper${count > 1 ? 's' : ''}` : `${name} is building`;
+  while (el.children.length > count) el.lastChild.remove();
+  while (el.children.length < count) el.append(Object.assign(document.createElement('span'), { textContent: '🤖' }));
+  [...el.children].forEach((robot, i) => robot.classList.toggle('done', i < done));
+  el.hidden = !count;
 }
 
 // What the kid asked for while this build was running (it's built next).
@@ -401,6 +415,16 @@ function addBlock() {
 function stopBlocks() {
   clearInterval(progress.timer);
   $('#building').hidden = true;
+}
+
+// Team mode's first look at something new: a quick sketch of it, on the stage within seconds and
+// playable until the team's version replaces it. It's never saved, and nothing in it gets fixed.
+function showSketch(html) {
+  if (state.timeUp || !html) return;
+  state.sketch ??= { html: state.html, kept: state.kept };
+  showPage(html);
+  state.kept = state.sketch.kept; // the kid's progress belongs to the real creation
+  sfx.pop();
 }
 
 async function build(body) {
@@ -433,9 +457,13 @@ async function build(body) {
         if (ev.type === 'progress') {
           progress.target = Math.max(progress.target, Math.floor(ev.chars / 110));
           progress.lastEvent = Date.now();
+          if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone);
+          else if (ev.note) showHelpers(0); // the team gave up: building the classic way
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);
+        } else if (ev.type === 'sketch') {
+          showSketch(ev.html);
         } else if (ev.type === 'done' || ev.type === 'error') {
           result = ev;
         } else if (ev.type === 'timer') {
@@ -446,6 +474,9 @@ async function build(body) {
   } catch (err) {
     result = { type: 'error', message: err.message };
   }
+  // The team's version of something new is about to replace the first look: try it out of sight
+  // first, and if it crashes, have it repaired while the kid keeps playing with the first look.
+  if (state.sketch && result?.html && result.backend === 'claude team') result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -453,6 +484,13 @@ async function build(body) {
   state.fixing = false;
 
   const quiet = state.timeUp; // time ran out while it was building: keep the result for later
+  const sketch = state.sketch;
+  state.sketch = null;
+  // The first look goes away: replaced by the real thing below, or by what was there before.
+  if (sketch && !result?.html) {
+    showPage(sketch.html, { restore: sketch.kept?.keep ? { keep: sketch.kept.keep } : null });
+    state.kept = sketch.kept;
+  }
   if (!result || result.type === 'error') {
     console.warn('build failed', result?.message);
     if (!quiet && !timer.overtime) {
@@ -467,6 +505,7 @@ async function build(body) {
         sfx.tada();
         cheer();
       }
+      if (result.backend === 'claude team') checkTeamBuild(state.project.id, result.version);
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -478,6 +517,18 @@ async function build(body) {
   if (state.queue.length && !askingClosed()) {
     const text = state.queue.splice(0).join(' ... and then: ');
     build({ text });
+  }
+}
+
+async function repairFirst(result) {
+  const errors = [...new Set(await tryPage(result.html, null, 1500))];
+  if (!errors.length) return result;
+  console.warn('the new creation crashed when tried, repairing it first:', errors[0]);
+  try {
+    const r = await api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n') });
+    return r.html ? { ...result, html: r.html, version: r.version } : result;
+  } catch {
+    return result;
   }
 }
 
@@ -543,9 +594,48 @@ async function checkCreation({ urgent = false } = {}) {
   }
 }
 
-// Put the overwatch's fix in at a calm moment, keeping the kid's progress. If the kid has moved
-// on to something newer meanwhile, the fix is for an old version: leave it.
+// Run a page out of sight for a moment (silent, behind the stage, with a few arrow-key presses)
+// and collect the errors it throws.
+function tryPage(html, keep, ms = 2500) {
+  return new Promise(resolve => {
+    const trial = document.createElement('iframe');
+    trial.setAttribute('sandbox', 'allow-scripts');
+    trial.setAttribute('aria-hidden', 'true');
+    trial.tabIndex = -1;
+    const r = frame.getBoundingClientRect();
+    Object.assign(trial.style, { position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, border: '0', opacity: '0.01', pointerEvents: 'none', zIndex: '-1' });
+    const errors = [];
+    const onMessage = e => {
+      if (e.source === trial.contentWindow && e.data?.kidbuild && e.data.type === 'error') errors.push(e.data.message);
+    };
+    addEventListener('message', onMessage);
+    document.body.append(trial);
+    trial.srcdoc = wrap(html, { keep, trial: true });
+    const press = (key, event) => trial.contentWindow?.postMessage({ kidbuild: true, type: 'key', event, key, code: key }, '*');
+    setTimeout(() => ['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown'].forEach(k => (press(k, 'keydown'), press(k, 'keyup'))), ms / 2);
+    setTimeout(() => {
+      removeEventListener('message', onMessage);
+      trial.remove();
+      resolve(errors.filter(m => !/ResizeObserver|^Script error/i.test(m)));
+    }, ms);
+  });
+}
+
+// Put a fix (the overwatch's, or the team's check and polish) in at a calm moment, keeping the
+// kid's progress. If the kid has moved on to something newer meanwhile, the fix is for an old
+// version: leave it.
 async function applyFix(projectId, version, r) {
+  while (state.busy || mic.recording || mic.transcribing || voice.current) await sleep(1000);
+  if (state.project?.id !== projectId || state.project?.version !== version) return;
+  // Try it out of sight first: a fix that throws errors the creation on stage doesn't have would
+  // break something that works, so it's taken back instead.
+  const known = new Set(state.pageErrors);
+  const fresh = (await tryPage(r.html, state.kept?.projectId === projectId ? state.kept.keep : null)).filter(m => !known.has(m));
+  if (fresh.length) {
+    console.warn('a fix crashed when tried, so it was taken back:', fresh[0]);
+    if (state.project?.id === projectId) api('/api/drop-fix', { projectId, version: r.version, error: fresh[0] }).catch(() => {});
+    return;
+  }
   while (state.busy || mic.recording || mic.transcribing || voice.current) await sleep(1000);
   if (state.project?.id !== projectId || state.project?.version !== version) return;
   state.project = { ...state.project, version: r.version };
@@ -555,6 +645,32 @@ async function applyFix(projectId, version, r) {
 }
 
 setInterval(() => checkCreation(), 15000);
+
+// Team mode: right after a creation appears, the checker takes a careful look at the whole page;
+// its fixes slide in at a calm moment, keeping the kid's progress (see server/team.mjs check()).
+// Then the finishing touches (team.polish), on whatever is on the stage after the check.
+// A crash fix meanwhile doesn't stop it: it waits, and the fixed page is checked. A newer build
+// does (that one gets its own check).
+let checkRun = 0;
+async function checkTeamBuild(projectId, version) {
+  const run = ++checkRun;
+  try {
+    for (const polish of [false, ...Array(state.config.polishPasses ?? 1).fill(true)]) {
+      // Let it start up and draw for a moment, then send how it's running and a screenshot.
+      await sleep(1500);
+      while (state.busy && state.fixing && run === checkRun) await sleep(1000);
+      if (run !== checkRun || state.busy || state.project?.id !== projectId) return;
+      if (!polish && !(state.project?.version >= version)) return;
+      const v = state.project.version;
+      const { screenshot, ...report } = (await askPage('inspect?', 4000))?.report || {};
+      report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];
+      const r = await api('/api/check', { projectId, version: v, report, screenshot, polish });
+      if (r.fixed) await applyFix(projectId, v, r);
+    }
+  } catch (err) {
+    console.warn('team check failed', err);
+  }
+}
 
 // ------------------------------------------------------------------------------------- time limit
 
@@ -788,6 +904,13 @@ function pressTalk() {
   micBtn.classList.add('listening');
   Object.assign(mic, { recording: true, tapMode: false, startedAt: performance.now(), speechMs: 0, silenceMs: 0, peak: 0, chunks: [...mic.preroll] });
   if (mic.recognizer) mic.recognizer.start();
+  warmTeam();
+}
+
+// Team mode: get the team's programs started while the kid is still talking, so they're ready
+// the moment the request arrives (see server/team.mjs).
+function warmTeam() {
+  if (state.config.teamActive && !state.busy) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {
@@ -1074,6 +1197,7 @@ for (const type of ['keydown', 'keyup']) {
 
 function openTypeBox() {
   hush();
+  warmTeam();
   $('#typeBox').hidden = false;
   $('#typeInput').value = '';
   $('#typeInput').focus();
@@ -1099,6 +1223,8 @@ async function openParent() {
   f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
+  f.building.value = c.team ? 'team' : '';
+  state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
   f.stt.value = c.stt;
@@ -1136,6 +1262,7 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
+    (c.team && !c.teamActive ? 'Team building needs Claude as the first AI brain, so it builds the classic way. ' : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
     (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
@@ -1149,6 +1276,7 @@ $('#parentForm').addEventListener('submit', async e => {
     backends: f.brains.value.split(','),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
+    ...(f.building.value !== state.buildingShown && { team: f.building.value === 'team' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     stt: f.stt.value,

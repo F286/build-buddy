@@ -68,7 +68,7 @@ export function html(p, n = p.current) {
 export function addVersion(p, pageHtml, meta) {
   const n = p.versions.reduce((m, v) => Math.max(m, v.n), 0) + 1;
   writeAtomic(path.join(dir(p.id), `v${n}.html`), pageHtml);
-  p.versions.push({ n, at: Date.now(), ...meta });
+  p.versions.push({ n, at: Date.now(), ...meta, from: p.current }); // from: what was showing before
   p.current = n;
   return save(p);
 }
@@ -90,6 +90,18 @@ export function undo() {
   const ns = p.versions.map(v => v.n).filter(n => n < p.current);
   if (!p.current) return null;
   p.current = ns.length ? Math.max(...ns) : 0;
+  return save(p);
+}
+
+// Take back a version that turned out broken (a fix that crashed when the app tried it): it's
+// forgotten, and the one it was made from is current again (after an undo, that isn't
+// necessarily the newest one left).
+export function dropVersion(p, n) {
+  if (p.current !== n) return p;
+  const from = p.versions.find(v => v.n === n)?.from;
+  p.versions = p.versions.filter(v => v.n !== n);
+  p.current = from === 0 || p.versions.some(v => v.n === from) ? from : p.versions.reduce((m, v) => (v.n < n ? Math.max(m, v.n) : m), 0);
+  fs.rmSync(path.join(dir(p.id), `v${n}.html`), { force: true });
   return save(p);
 }
 
