@@ -632,15 +632,20 @@ setInterval(() => checkCreation(), 15000);
 
 // Team mode: right after a creation appears, the checker takes a careful look at the whole page;
 // its fixes slide in at a calm moment, keeping the kid's progress (see server/team.mjs check()).
+// Then the finishing touches (team.polish), on whatever is on the stage after the check.
 async function checkTeamBuild(projectId, version) {
   try {
-    // Let it start up and draw for a moment, then send how it's running and a screenshot.
-    await sleep(1500);
-    if (state.project?.id !== projectId || state.project?.version !== version) return;
-    const { screenshot, ...report } = (await askPage('inspect?', 4000))?.report || {};
-    report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];
-    const r = await api('/api/check', { projectId, version, report, screenshot });
-    if (r.fixed) await applyFix(projectId, version, r);
+    for (const polish of [false, true]) {
+      // Let it start up and draw for a moment, then send how it's running and a screenshot.
+      await sleep(1500);
+      if (state.busy || state.project?.id !== projectId) return;
+      if (!polish && state.project?.version !== version) return;
+      const v = state.project.version;
+      const { screenshot, ...report } = (await askPage('inspect?', 4000))?.report || {};
+      report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];
+      const r = await api('/api/check', { projectId, version: v, report, screenshot, polish });
+      if (r.fixed) await applyFix(projectId, v, r);
+    }
   } catch (err) {
     console.warn('team check failed', err);
   }

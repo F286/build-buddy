@@ -38,7 +38,8 @@ export const DEFAULTS = {
   // warm: start the team's programs while the kid is still talking.
   // check: right after a creation appears, the checker takes a careful look (is everything they
   // asked for there, do the pieces fit, do the controls work, can it be played, is it smooth) and
-  // its fixes slide in at a calm moment.
+  // its fixes slide in at a calm moment. polish: then it gives it its finishing touches (the two
+  // or three things a demanding parent would want most), the same way.
   // leads: how many leads start on each request at once; the first to start a plan is used and
   // the others stop (how long a lead thinks first varies a lot, so this saves the slow starts).
   // firstLook: for something new, a quick sketch of it (by the sketch role, a fast model) is on
@@ -46,9 +47,10 @@ export const DEFAULTS = {
   team: {
     enabled: true,
     helpers: 6,
-    leads: 2,
+    leads: 3,
     warm: true,
     check: true,
+    polish: true,
     firstLook: true,
     voice: { model: 'haiku', effort: 'low' },
     sketch: { model: 'sonnet', effort: 'low' },

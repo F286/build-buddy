@@ -50,6 +50,8 @@ function roleConfig(name) {
   };
 }
 
+const HEDGE_MS = 7000;
+
 export const maxHelpers = () => Math.max(1, Math.min(8, Number(config().team?.helpers) || 6));
 
 // ---------------------------------------------------------------------------------------------
@@ -131,7 +133,7 @@ CHANGES:
 //@change <name>: <the job>
 Each helper sees the current page and the kid's words, and starts the moment its line is written. Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Give every helper a different area of the page: never two jobs that change the same lines. Use 2-${n} changes, one per separate thing the kid asked for.
 
-For anything new, or when most of the page has to change, write the plan - quickly, your helpers are waiting for it:
+For anything new, or when most of the page has to change, write the plan - start writing it straight away rather than thinking it all through first (each helper starts the moment its line appears, and the details are theirs):
 PLAN:
 \`\`\`js
 <the shared code>
@@ -144,7 +146,7 @@ MAIN:
 \`\`\`
 
 - The page is one module script: your shared code, then each part's code, then MAIN. Its body starts empty: every element is made by the code before anything uses it.
-- The shared code (at most about 25 lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
+- The shared code (at most about 15 short lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
 - Each helper starts the moment its line is written, seeing your shared code and the jobs before it - so write all the jobs before MAIN, biggest first.
 - Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under 25 words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
 - Parts only define things: nothing runs until MAIN calls it. MAIN (about 20-40 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop (in 3D it calls renderer.render(scene, camera) every frame) and handles input.
@@ -155,7 +157,7 @@ MAIN:
   - In 3D, MAIN owns the camera unless a job says otherwise.
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts.
-- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(4, n)}-${n} small parts of about 30 short lines each (about 2,000 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene) into two parts.
+- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about 25 short lines each (about 1,800 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene, a detailed star) into two parts.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.
 
 ${talkingRules()}
@@ -171,10 +173,10 @@ The page is one module script: the shared code, then each part's code, then the 
 
 Reply with only your code, in one \`\`\`js code block - no talk before or after it.
 - Define exactly what your job's first words say (the same names and parameters, returning the same things): the main code depends on it. Use the shared code's names, and use another part only as its job says.
-- Extra top-level names you need (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part. Whatever your piece needs before its first frame (its sizes, a background drawn once) happens in the function the main code calls first - not only when the window is resized.
+- What your job's first words define keeps exactly those names. Only the extra top-level names you add (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part. Whatever your piece needs before its first frame (its sizes, a background drawn once) happens in the function the main code calls first - not only when the window is resized.
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
-- About 30 short lines, about 2,000 characters (never more than 3,000): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
+- About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
 - If your piece is the star (the thing the kid asked for), make it big - at least a fifth of the screen's height - with a face and big eyes that the kid sees from where the camera looks.
 - If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far. Fill it the short way: a few kinds of things, each made in a loop many times over with varied sizes, colors and spots, not lots of separate code. Put what sets the look (clouds, the sun, hills) where the camera really sees it.
@@ -205,7 +207,7 @@ function helperPrompt({ page, text, alt, look, done, shared, jobs, job }) {
     done ? `How they'll play with it: ${done}` : '',
     `<shared_code>\n${shared}\n</shared_code>`,
     `<jobs>\n${jobs.map(j => `//@part ${j.name}: ${j.job}`).join('\n')}\n</jobs>`,
-    `Write the code for the ${job.name} part:\n//@part ${job.name}: ${job.job}`,
+    `Write the code for the ${job.name} part - about 25 short lines, never more than 2,500 characters (the kid is waiting for the slowest piece):\n//@part ${job.name}: ${job.job}`,
   ].filter(Boolean).join('\n\n');
 }
 
@@ -228,6 +230,27 @@ The app itself provides KB.keep(...) (it carries the kid's progress to the next 
 
 Don't restyle it and don't change what the kid chose; beyond fixing, only add the small answers and celebrations above. If nothing is really wrong, reply with just: OK
 Otherwise reply with WHY: <what you fixed, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits that fix the real problems, each as:
+${EDIT_FORMAT}
+FIND must be copied exactly from the page and match only once: include a couple of lines of context.`;
+}
+
+// The finishing touches, once the checker is done: what would make it clearly better for the kid.
+function polishSystem() {
+  const c = config();
+  return `You give a web page for a ${c.kidAge}-year-old who can't read its finishing touches. It already works: a team built it from what the kid asked for, and it has been checked. Look at it (the screenshot first, if there is one, with the Read tool) as a demanding parent who is also a game designer: what would make it clearly better for this kid?
+
+Make the 2 or 3 changes that matter most, for example:
+- What they asked for, or the look the page was given, isn't fully there or can't be seen (out of the camera's view, too faint, hidden).
+- The star of it is small, or its face can't be seen.
+- Something is cut off at an edge, overlapping, cluttered or muddy.
+- An arrow key, a tap or a drag gets a weak answer or none; doing the main thing has no satisfying reward, or nothing new ever happens as they keep playing.
+- A sound never stops, plays twice at once, or is harsh.
+- A bug you can see in the code (something that can never be reached, caught or eaten; a count that's wrong; a thing that jumps).
+
+Keep it the kid's creation: don't change what they chose, don't add big new things, don't restyle it, keep the controls and the KB.keep names (the app provides KB.keep and the 'three' and 'phaser' imports). Keep it smooth: no CSS or SVG filters, shadowBlur, or objects made every frame.
+
+If it's already as good as it can be, reply with just: OK
+Otherwise reply with WHY: <what you improved, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits, each as:
 ${EDIT_FORMAT}
 FIND must be copied exactly from the page and match only once: include a couple of lines of context.`;
 }
@@ -574,6 +597,33 @@ export function blankProblems(html) {
   return problems;
 }
 
+// Names the plan's pieces are made from (makeWorld, drawSky, new Frog...) that are called but never
+// defined: the pieces were written apart, and one may have named its function differently. Where a
+// piece wrote it under its own prefix (keys_makePiano for makePiano), the name is simply added;
+// what's left is for the fixer.
+const PIECE_NAME = /^(?:(?:make|draw|create|build|init|setup|spawn|add|update|play|start|show)[A-Z]\w*|[A-Z][a-z]\w*)$/;
+const BROWSER = new Set(['addEventListener', 'Image', 'Audio', 'Path2D', 'OffscreenCanvas', 'KeyboardEvent', 'PointerEvent', 'MouseEvent', 'TouchEvent', 'CustomEvent', 'Event', 'AudioContext', 'OfflineAudioContext', 'OscillatorNode', 'GainNode', 'AudioBuffer', 'DOMMatrix', 'DOMPoint', 'DOMRect', 'ResizeObserver', 'IntersectionObserver', 'MutationObserver', 'Option', 'FontFace', 'ImageData', 'ImageBitmap', 'Worker', 'Range', 'Text', 'Comment', 'Node', 'Element', 'HTMLElement', 'Headers', 'Request', 'Response', 'FormData', 'XMLSerializer', 'DOMParser', 'Notification', 'Animation', 'KeyframeEffect', 'SpeechSynthesisUtterance', 'VideoFrame']);
+export function repairNames(html) {
+  const code = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map(m => m[1])
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const called = new Set([...code.matchAll(/(?<![\w$.])(?:new\s+)?([A-Za-z_$][\w$]*)\s*\(/g)].map(m => m[1]).filter(n => PIECE_NAME.test(n) && !BROWSER.has(n) && !(n in globalThis) && !code.includes(`typeof ${n}`)));
+  const defined = n => new RegExp(`(?:function\\s*\\*?\\s*${n}\\b|class\\s+${n}\\b|(?:const|let|var)\\s+${n}\\b|(?<![\\w$.])${n}\\s*=(?!=)|[{,]\\s*${n}\\s*[,}=:]|[(,]\\s*${n}\\s*[,)=]|(?<![\\w$.])${n}\\s*\\([^()]*\\)\\s*\\{)`).test(code);
+  const missing = [...called].filter(n => !defined(n));
+  const aliases = [];
+  const left = [];
+  for (const n of missing) {
+    const other = new RegExp(`(?:function\\s*\\*?\\s*|class\\s+|(?:const|let|var)\\s+)([A-Za-z]\\w*_${n})\\b`).exec(code)?.[1];
+    if (other) aliases.push(`const ${n} = ${other};`);
+    else left.push(n);
+  }
+  if (aliases.length && html.includes('\n// ---- main\n')) html = html.replace('\n// ---- main\n', `\n${aliases.join('\n')}\n\n// ---- main\n`);
+  else left.push(...aliases.map(a => a.split(' ')[1]));
+  return { html, problems: left.length ? [`It calls ${left.join(', ')} but nothing on the page defines ${left.length > 1 ? 'them' : 'it'}: one piece named it differently (find it and use one name) or it's missing.`] : [] };
+}
+
 // Apply the edits that fit; return the ones that don't.
 function applySome(page, edits) {
   let html = page;
@@ -689,13 +739,41 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     const write = () =>
       withHelper(() => {
         startedAt = Date.now();
-        return ask('helper', {
-          system: helperSystem(),
-          prompt: helperPrompt({ page, text: text || '(fixing a crash)', alt, look, done: field(reader.text, 'DONE'), shared: reader.shared, jobs: seen, job }),
-          onText: chunk => progress(chunk.length),
-          signal,
-          tally: spent,
+        const prompt = helperPrompt({ page, text: text || '(fixing a crash)', alt, look, done: field(reader.text, 'DONE'), shared: reader.shared, jobs: seen, job });
+        // A helper that hasn't written a word after a few seconds is thinking hard, and the
+        // slowest piece holds up the whole page: a second helper starts on the same job, and
+        // whichever finishes first is used.
+        const stops = [new AbortController(), new AbortController()];
+        let wrote = false;
+        const one = i =>
+          ask('helper', {
+            system: helperSystem(),
+            prompt,
+            onText: chunk => {
+              if (i === 0) wrote = true;
+              progress(chunk.length);
+            },
+            signal: AbortSignal.any([signal, stops[i].signal]),
+            tally: spent,
+          }).then(reply => ({ reply, i }));
+        const first = one(0);
+        const second = new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            if (wrote || signal.aborted) return reject(new Error('not needed'));
+            log(`team: helper ${job.name} hasn't started writing after ${HEDGE_MS / 1000}s, starting a second one`);
+            one(1).then(resolve, reject);
+          }, HEDGE_MS);
+          first.then(() => (clearTimeout(timer), reject(new Error('not needed'))), () => {});
         });
+        return Promise.any([first, second]).then(
+          ({ reply, i }) => {
+            stops[1 - i].abort();
+            return reply;
+          },
+          err => {
+            throw err.errors?.find(e => e.message !== 'not needed') || err.errors?.[0] || err;
+          },
+        );
       });
     // One more try if a helper fails.
     const part = write()
@@ -849,11 +927,14 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
 
     // Every script should parse: one repair before it's shown.
     if (html) {
-      const problems = [...(await syntaxErrors(html)), ...blankProblems(html)];
+      const named = repairNames(html);
+      if (named.html !== html) log('team: a piece named its function differently, so the name the plan uses was added');
+      html = named.html;
+      const problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems];
       if (problems.length) {
         log(`team: page doesn't parse (${problems.join('; ').slice(0, 200)}), asking the fixer`);
         const repaired = await fix(html, `The page doesn't run: ${problems.join('\n')}\nFix just that.`, signal, spent);
-        const left = [...(await syntaxErrors(repaired)), ...blankProblems(repaired)];
+        const left = [...(await syntaxErrors(repaired)), ...blankProblems(repaired), ...repairNames(repaired).problems];
         log(`team: fixer ${left.length ? `didn't manage (${left[0].slice(0, 120)})` : 'fixed it'} at ${secs()}`);
         if (left.length < problems.length || !left.length) html = repaired;
       }
@@ -898,10 +979,14 @@ function running(report, shot) {
 }
 
 // Review a page; resolves with the fixed page (or null if nothing needs fixing) and why.
-export async function reviewPage({ page, asked, told, report, shot, change = false }) {
-  const changed = change ? '\nThis was a change to a creation the kid already had: check that the change is really there and that what they had still works, but don\'t resize, move or restyle what was already there.' : '';
+export async function reviewPage({ page, asked, told, report, shot, change = false, polish = false }) {
+  const changed = !change
+    ? ''
+    : polish
+      ? '\nThis was a change to a creation the kid already had: polish only what changed, and don\'t resize, move or restyle what was already there.'
+      : '\nThis was a change to a creation the kid already had: check that the change is really there and that what they had still works, but don\'t resize, move or restyle what was already there.';
   const reply = await ask('checker', {
-    system: checkerSystem(),
+    system: polish ? polishSystem() : checkerSystem(),
     prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${changed}\n\n${running(report, shot)}`,
     tools: shot ? 'Read' : '',
   });
@@ -923,13 +1008,16 @@ function saveScreenshot(dataUrl) {
   return file;
 }
 // Its fixes become a new version, which the app slides in at a calm moment, keeping the kid's
-// progress. Only for pages the team built, once each, and never over newer work.
+// progress. Only for pages the team built, once each, and never over newer work. Then (polish)
+// the finishing touches, on the page as it is after the check.
 
-export async function check({ projectId, version, report, screenshot }) {
-  if (!enabled() || config().team.check === false) return { skipped: 'off' };
+export async function check({ projectId, version, report, screenshot, polish = false }) {
+  if (!enabled() || config().team.check === false || (polish && config().team.polish === false)) return { skipped: 'off' };
   let p = store.currentProject();
   if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
-  if (p.versions.find(v => v.n === version)?.backend !== 'claude team') return { skipped: 'not built by the team' };
+  const v = p.versions.find(x => x.n === version);
+  if (v?.backend !== 'claude team' && !(polish && v?.backend === 'claude team check')) return { skipped: polish ? 'not checked by the team' : 'not built by the team' };
+  const what = polish ? 'POLISH' : 'CHECK';
   const page = store.html(p);
   const shot = saveScreenshot(screenshot);
   const t0 = Date.now();
@@ -937,23 +1025,23 @@ export async function check({ projectId, version, report, screenshot }) {
   try {
     const asked = p.history.filter(h => h.role === 'kid').at(-1)?.text || '';
     const told = p.history.filter(h => h.role === 'buddy').at(-1)?.text || '';
-    const change = Boolean(p.versions.find(v => v.n === version)?.continues);
-    const r = await reviewPage({ page, asked, told, report, shot, change });
+    const change = Boolean(v.continues);
+    const r = await reviewPage({ page, asked, told, report, shot, change, polish });
     if (!r.html) {
-      log(r.skipped ? `CHECK skip ${took()} ${r.why} (${r.skipped})` : `CHECK ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
+      log(r.skipped ? `${what} skip ${took()} ${r.why} (${r.skipped})` : `${what} ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
       return r.skipped ? { skipped: r.skipped } : { ok: true };
     }
     // The kid may have moved on meanwhile: never overwrite newer work.
     p = store.currentProject();
     if (p.id !== projectId || p.current !== version || isBusy()) {
-      log(`CHECK stale ${took()} ${r.why}`);
+      log(`${what} stale ${took()} ${r.why}`);
       return { skipped: 'stale' };
     }
-    p = store.addVersion(p, r.html, { request: `(team check) ${r.why}`, backend: 'claude team check' });
-    log(`CHECK fix  ${took()} ${r.why} (${r.edits} edits${shot ? ', saw a screenshot' : ''}) → v${p.current}`);
+    p = store.addVersion(p, r.html, { request: `(team ${polish ? 'polish' : 'check'}) ${r.why}`, backend: polish ? 'claude team polish' : 'claude team check', continues: change });
+    log(`${what} fix  ${took()} ${r.why} (${r.edits} edits${shot ? ', saw a screenshot' : ''}) → v${p.current}`);
     return { fixed: true, verdict: 'fix', why: r.why, html: store.html(p), version: p.current };
   } catch (err) {
-    log(`CHECK fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
+    log(`${what} fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
     return { skipped: 'failed' };
   } finally {
     if (shot) fs.rmSync(shot, { force: true });
