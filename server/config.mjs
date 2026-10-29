@@ -31,8 +31,10 @@ export const DEFAULTS = {
   // enabled: false builds the classic way (one AI writes it all).
   // Each role is its own Claude Code run: model, effort, fast (fast mode), advisor (a stronger
   // model it can ask, e.g. "opus" for a sonnet helper) and args (any other `claude` options).
-  // Left empty, the lead, helpers and fixer use the Claude settings above; the voice, which only
-  // answers out loud, is a quick small model.
+  // Left empty, a role uses the Claude settings above. By default the voice, which only answers
+  // out loud, is a quick small model; helpers (small pieces, from a detailed plan) and the first
+  // look use Sonnet, which writes about 40% faster; the checker, which works after the creation
+  // is already on screen, takes more care (medium effort).
   // warm: start the team's programs while the kid is still talking.
   // check: right after a creation appears, the checker takes a careful look (is everything they
   // asked for there, do the pieces fit, do the controls work, can it be played, is it smooth) and
@@ -51,9 +53,9 @@ export const DEFAULTS = {
     voice: { model: 'haiku', effort: 'low' },
     sketch: { model: 'sonnet', effort: 'low' },
     lead: { model: '', effort: '', advisor: '' },
-    helper: { model: '', effort: '', advisor: '' },
+    helper: { model: 'sonnet', effort: 'low', advisor: '' },
     fixer: { model: '', effort: '' },
-    checker: { model: '', effort: '' },
+    checker: { model: '', effort: 'medium' },
   },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
