@@ -177,7 +177,7 @@ team, and each member is its own `claude` run:
 | `lead` | your `claude.model` / `claude.effort` | Plans the page: the code every piece shares, one job per helper (each starting with exactly what it defines, like `makeWorld(scene) → { update(dt) }`), and the code that puts the pieces together. Small changes it makes itself, as edits. |
 | `helper` | your `claude.model` / `claude.effort` | Each writes one piece, all at the same time. A helper starts the moment its job is written, while the lead is still writing the rest. |
 | `fixer` | your `claude.model` / `claude.effort` | Before anything is shown, every script on the page is checked; if one doesn't parse, or if edits don't fit, the fixer gets one try to repair it (if it can't, the usual wobbly-bit fixing takes over). |
-| `checker` | your `claude.model` / `claude.effort` | Right after the creation appears, takes a careful look at the whole page and at a screenshot of it running (with its frame rate and any errors): do the pieces fit, do the controls work with both the keys and the pointer, is everything in view and nothing cut off or in the way, can the goal really be reached, is it smooth. Its fixes (10 to 20 s later) slide in at a calm moment, keeping the kid's progress, so the kid never waits for it. |
+| `checker` | your `claude.model` / `claude.effort` | Right after the creation appears, takes a careful look at the whole page and at a screenshot of it running (with its frame rate and any errors): do the pieces fit, do the controls work with both the keys and the pointer, is everything in view and nothing cut off or in the way, can the goal really be reached, is it smooth. Where an arrow key or a tap does nothing it adds a small answer (a wiggle, or sparkles where they tapped), and where reaching the goal has no celebration it adds one. Its fixes (10 to 20 s later) slide in at a calm moment, keeping the kid's progress, so the kid never waits for it. |
 
 A creation then takes about as long as its biggest piece, instead of the whole page, and each
 helper puts its full attention on one thing. If the team gets stuck, that request is built the
@@ -251,11 +251,12 @@ Buddy changes.
   fixer repairs any that don't parse; right after it appears, a checker looks over the whole page
   and at a screenshot of it running, and quietly fixes what would spoil it (in tests: a piano key
   that crashed, food the fish could never reach, a ladybug stuck flapping at the edge, emoji cut
-  off at the edges). On a test set of eight new creations the wait went from 41 s to 33 s on
-  average and from 67 s to 40 s at the longest, and Sparky's first words from 7.7 s to 4 s. In
-  blind side-by-side judging against the classic way, the team's creations won all 12 (8 new ones
-  and 4 changes), scoring 7.8 out of 10 against 5.7. It writes about twice as much, so it uses
-  more of your plan.
+  off at the edges, a frog that could never catch a fly while jumping). On a test set of eight new
+  creations the wait went from 41 s to 33 s on average and from 67 s to 42 s at the longest, and
+  Sparky's first words from 7.7 s to 3.4 s. In blind side-by-side judging against the classic way,
+  the team's creations won all 12 (8 new ones and 4 changes), every one scoring 8 out of 10
+  against the classic way's 5.6 on average. It writes about twice as much, so it uses more of
+  your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
