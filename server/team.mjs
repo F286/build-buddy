@@ -178,7 +178,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
 - About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
-- If your piece is the star (the thing the kid asked for), make it big - at least a fifth of the screen's height - with a face and big eyes that the kid sees from where the camera looks.
+- If your piece is the star (the thing the kid asked for), make it easy to recognize at a glance (a piano has its body and black keys, a dragon has wings) and big enough that its face and eyes are clear from where the camera looks - but in proportion with its world (a car fits on its road).
 - If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far. Fill it the short way: a few kinds of things, each made in a loop many times over with varied sizes, colors and spots, not lots of separate code. Put what sets the look (clouds, the sun, hills) where the camera really sees it.
 - The pieces only fit if you follow the team's rules: time is always in seconds - use dt and t exactly as passed to you (seconds since the last frame / since the start), and never divide them by 1000 again; read keys and the pointer from the shared input object (or the handler your job names) rather than adding your own listeners, unless your job says to; use exactly the names, ids, attributes and fields your job and the shared code give, and create everything your job says other pieces rely on.
 - In 3D: flat shapes you build yourself (roads, ribbons, custom planes) use side: THREE.DoubleSide so they can't vanish when seen from the other side; nothing that should be seen sits inside, under or behind another shape (a moat is wider than the castle's base); don't move the camera unless your job says to.
@@ -216,7 +216,7 @@ function checkerSystem() {
   return `You are the last check on a web page for a ${c.kidAge}-year-old who can't read. A team of AI helpers wrote it in pieces at the same time, and the kid has just started playing with it. Find and fix only real problems that would spoil it for them - quickly.
 
 Check:
-0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys), and so is the look the page was given. In something new, the star of it is big (at least a fifth of the screen's height) with a face the kid can see. New levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
+0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys), and so is the look the page was given. In something new, the star of it is easy to recognize and big enough that the kid sees its face - but in proportion with its world (a car fits on its road). New levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
 1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
 2. Controls: the main thing the kid asked for works with the arrow keys AND with the pointer (tap, hold or drag), as the kid was told. Every promised control is really wired to what moves. Never the space bar or Enter. Every arrow key and a tap anywhere gets some visible, audible answer - where one does nothing, add a small one (a wiggle, or sparkles and a pop where they tapped).
 2b. The goal: reaching it (the finish, the moon, catching one) gets a clear celebration, and play carries on after it.
@@ -240,8 +240,10 @@ function polishSystem() {
   return `You give a web page for a ${c.kidAge}-year-old who can't read its finishing touches. It already works: a team built it from what the kid asked for, and it has been checked. Look at it (the screenshot first, if there is one, with the Read tool) as a demanding parent who is also a game designer: what would make it clearly better for this kid?
 
 Make the 2 or 3 changes that matter most, for example:
-- What they asked for, or the look the page was given, isn't fully there or can't be seen (out of the camera's view, too faint, hidden).
-- The star of it is small, or its face can't be seen.
+- What they asked for, or the look the page was given, isn't fully there or can't be seen (out of the camera's view, too faint, hidden) - watercolor that's just flat shapes, neon without a glow, paper cut-outs without soft shadows: make the look show, on the star first.
+- The main thing to do plays itself, or needs no skill or choice from the kid (flies that get caught without the kid doing anything).
+- The star of it isn't recognizable at a glance (a piano with no body or black keys, a dragon without wings), is too small to see its face, or is out of proportion with its world (a car wider than its road).
+- A game has nothing to beat or reach: no goal, no challenge that grows, no 'you did it' moment.
 - Something is cut off at an edge, overlapping, cluttered or muddy.
 - An arrow key, a tap or a drag gets a weak answer or none; doing the main thing has no satisfying reward, or nothing new ever happens as they keep playing.
 - A sound never stops, plays twice at once, or is harsh.
@@ -985,7 +987,7 @@ export async function reviewPage({ page, asked, told, report, shot, change = fal
     : polish
       ? '\nThis was a change to a creation the kid already had: polish only what changed, and don\'t resize, move or restyle what was already there.'
       : '\nThis was a change to a creation the kid already had: check that the change is really there and that what they had still works, but don\'t resize, move or restyle what was already there.';
-  const reply = await ask('checker', {
+  const reply = await ask(polish ? 'polisher' : 'checker', {
     system: polish ? polishSystem() : checkerSystem(),
     prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${changed}\n\n${running(report, shot)}`,
     tools: shot ? 'Read' : '',
@@ -1011,12 +1013,23 @@ function saveScreenshot(dataUrl) {
 // progress. Only for pages the team built, once each, and never over newer work. Then (polish)
 // the finishing touches, on the page as it is after the check.
 
+// How many polish passes follow the check (team.polish: true is one, a number is that many).
+export function polishPasses() {
+  const v = config().team?.polish;
+  return v === false ? 0 : v === true || v == null ? 1 : Math.max(0, Math.min(3, Math.round(Number(v)) || 0));
+}
+
 export async function check({ projectId, version, report, screenshot, polish = false }) {
-  if (!enabled() || config().team.check === false || (polish && config().team.polish === false)) return { skipped: 'off' };
+  if (!enabled() || config().team.check === false || (polish && !polishPasses())) return { skipped: 'off' };
   let p = store.currentProject();
   if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
   const v = p.versions.find(x => x.n === version);
-  if (v?.backend !== 'claude team' && !(polish && v?.backend === 'claude team check')) return { skipped: polish ? 'not checked by the team' : 'not built by the team' };
+  if (polish) {
+    // Only on what the team built and checked, and only as many times as asked.
+    const since = p.versions.slice(p.versions.findLastIndex(x => x.backend === 'claude team') + 1);
+    if (!/^claude team( check| polish)?$/.test(v?.backend || '') || since.some(x => !/^claude team (check|polish)$/.test(x.backend || ''))) return { skipped: 'not checked by the team' };
+    if (since.filter(x => x.backend === 'claude team polish').length >= polishPasses()) return { skipped: 'polished enough' };
+  } else if (v?.backend !== 'claude team') return { skipped: 'not built by the team' };
   const what = polish ? 'POLISH' : 'CHECK';
   const page = store.html(p);
   const shot = saveScreenshot(screenshot);

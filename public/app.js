@@ -635,7 +635,7 @@ setInterval(() => checkCreation(), 15000);
 // Then the finishing touches (team.polish), on whatever is on the stage after the check.
 async function checkTeamBuild(projectId, version) {
   try {
-    for (const polish of [false, true]) {
+    for (const polish of [false, ...Array(state.config.polishPasses ?? 1).fill(true)]) {
       // Let it start up and draw for a moment, then send how it's running and a screenshot.
       await sleep(1500);
       if (state.busy || state.project?.id !== projectId) return;

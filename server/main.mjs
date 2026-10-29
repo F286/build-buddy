@@ -67,6 +67,7 @@ function publicConfig() {
     claudeFast: Boolean(c.claude.fast),
     team: Boolean(c.team.enabled),
     teamActive: team.enabled(),
+    polishPasses: team.polishPasses(),
     creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
