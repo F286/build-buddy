@@ -1021,7 +1021,7 @@ function running(report, shot) {
 }
 
 // Review a page; resolves with the fixed page (or null if nothing needs fixing) and why.
-export async function reviewPage({ page, asked, told, look, report, shot, change = false, polish = false }) {
+export async function reviewPage({ page, asked, told, look, report, shot, notes = '', change = false, polish = false }) {
   const changed = !change
     ? ''
     : polish
@@ -1029,7 +1029,9 @@ export async function reviewPage({ page, asked, told, look, report, shot, change
       : '\nThis was a change to a creation the kid already had: check that the change is really there and that what they had still works, but don\'t resize, move or restyle what was already there.';
   const reply = await ask(polish ? 'polisher' : 'checker', {
     system: polish ? polishSystem() : checkerSystem(),
-    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${changed}\n\n${running(report, shot)}`,
+    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${changed}\n\n${running(report, shot)}${
+      notes ? `\n\n<tester_notes>\nA careful tester played with it and noted, most important first:\n${notes}\n</tester_notes>\nFix as many of these as you can do well, most important first - not just 2 or 3.` : ''
+    }`,
     tools: shot ? 'Read' : '',
   });
   const edits = parseReply(reply.text).edits;
