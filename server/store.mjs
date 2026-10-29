@@ -93,6 +93,16 @@ export function undo() {
   return save(p);
 }
 
+// Take back a version that turned out broken (a fix that crashed when the app tried it): it's
+// forgotten, and the one before it is current again.
+export function dropVersion(p, n) {
+  if (p.current !== n) return p;
+  p.versions = p.versions.filter(v => v.n !== n);
+  p.current = p.versions.reduce((m, v) => (v.n < n ? Math.max(m, v.n) : m), 0);
+  fs.rmSync(path.join(dir(p.id), `v${n}.html`), { force: true });
+  return save(p);
+}
+
 export function newProject() {
   const p = currentProject();
   return p.versions.length ? create() : p; // reuse an untouched blank project

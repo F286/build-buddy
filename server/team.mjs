@@ -77,6 +77,26 @@ SAY: <one short, warm sentence said out loud right away, showing what you unders
 Tiny sentences, simple words, excited. Never say code, HTML, JavaScript, CSS, file, browser, bug or error. Never suggest ideas or offer choices, not even as a question. If they asked you a question or you can't tell what they want, answer or ask them to tell you more, in that one sentence. Keep it friendly: for scary or gory ideas, say back a silly, cartoony version. Creations can't close or lock the app or limit play time: if they ask for that, kindly say only a grown-up can set play time.`;
 }
 
+function sketchSystem() {
+  const c = config();
+  return `You make a quick first look at what a ${c.kidAge}-year-old just asked for, so they see it on screen within seconds. A team is building the full version at the same time; yours is shown until theirs is ready, so make it quickly.
+
+Reply with only one \`\`\`html code block: a complete page of at most about 30 short lines (about 1,500 characters) - small and quick beats detailed here.
+- The thing they asked for, big (about a third of the screen) and in the middle, in the look you're given, already moving (a wiggle, a bounce, driving or flying around), with a face if it's a character or vehicle.
+- A simple background that shows the place (sky and ground, water, space...).
+- The arrow keys and a tap or drag make it move, jump or sparkle right away.
+- No words on the page (they can't read). Canvas 2D, or Three.js for 3D (import * as THREE from 'three' in a module script). Keep it light: no shadowBlur, no CSS or SVG filters.
+If they're asking to change what's on the screen rather than for something new, reply with just: SKIP`;
+}
+
+function sketchPrompt({ text, alt, look, title }) {
+  return [
+    title ? `On the screen now: ${title}` : 'The screen is blank.',
+    `The kid just said: "${text}"${alt ? ` (the other listener heard: "${alt}")` : ''}`,
+    `The look: ${look}.`,
+  ].join('\n\n');
+}
+
 function voicePrompt({ history, text, alt, title }) {
   const c = config();
   const recent = history.slice(-4).map(h => `${h.role === 'kid' ? 'Kid' : c.buddyName}: ${h.text}`);
@@ -126,7 +146,7 @@ MAIN:
 - The page is one module script: your shared code, then each part's code, then MAIN. Its body starts empty: every element is made by the code before anything uses it.
 - The shared code (at most about 25 lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
 - Each helper starts the moment its line is written, seeing your shared code and the jobs before it - so write all the jobs before MAIN, biggest first.
-- Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under 40 words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
+- Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under 25 words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
 - Parts only define things: nothing runs until MAIN calls it. MAIN (about 20-40 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop (in 3D it calls renderer.render(scene, camera) every frame) and handles input.
 - The pieces are written apart, so they only fit if everyone follows the same rules - put them in the shared code and the jobs:
   - Time is always in seconds: MAIN's loop passes every update dt (seconds since the last frame, at most 0.05) and t (seconds since the start). Say so in the signatures, like update(dt, t).
@@ -304,7 +324,8 @@ function keepWarm(name, system, count) {
 export function warm() {
   if (!enabled()) return { warm: 0 };
   const leads = Math.max(1, Math.min(3, Number(config().team.leads) || 1));
-  return { warm: keepWarm('voice', voiceSystem(), 1) + keepWarm('lead', leadSystem(), leads) };
+  const sketch = config().team.firstLook === false ? 0 : keepWarm('sketch', sketchSystem(), 1);
+  return { warm: keepWarm('voice', voiceSystem(), 1) + keepWarm('lead', leadSystem(), leads) + sketch };
 }
 
 // Ask one member of the team. onText(chunk) gets the reply as it's written. Resolves with the
@@ -716,7 +737,10 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   };
   for (let i = 0; i < leads; i++) {
     const stop = new AbortController();
-    const reader = new PlanReader(job => startJob(job, reader), () => claim(i));
+    const reader = new PlanReader(
+      job => startJob(job, reader),
+      () => claim(i),
+    );
     const run = { stop, reader };
     run.done = ask('lead', {
       system: leadSystem(),
@@ -726,6 +750,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       onText: chunk => {
         if (winner != null && winner !== i) return;
         reader.push(chunk);
+        showSketch();
         if (!helpersWarm && (HEAD('PLAN').test(reader.text) || HEAD('CHANGES').test(reader.text))) warmHelpers();
         progress(chunk.length);
       },
@@ -735,6 +760,31 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     });
     run.done.catch(() => {});
     runs.push(run);
+  }
+
+  // A first look (team.firstLook): a quick sketch of something new, shown while the team builds
+  // the real thing - but only once a lead is writing a plan, never for changes to the page.
+  const stopSketch = new AbortController();
+  let sketch = null;
+  let sketchShown = false;
+  function showSketch() {
+    if (sketchShown || !sketch || over || !runs.some(run => HEAD('PLAN').test(run.reader.text) && !run.reader.changes)) return;
+    sketchShown = true;
+    stats.sketchMs = Date.now() - t0;
+    emit({ type: 'sketch', html: sketch });
+  }
+  if (!crash && config().team.firstLook !== false) {
+    ask('sketch', { system: sketchSystem(), prompt: sketchPrompt({ text, alt, look, title }), signal: AbortSignal.any([signal, stopSketch.signal]), timeoutSec: 60, tally: spent }).then(
+      async reply => {
+        const html = /^\s*SKIP\b/.test(reply.text) ? null : parseReply(reply.text).html;
+        if (!html || over) return;
+        const problems = [...(await syntaxErrors(html)), ...blankProblems(html)];
+        if (problems.length) return log(`team: first look not shown (${problems[0].slice(0, 120)})`);
+        sketch = html;
+        showSketch();
+      },
+      err => stopSketch.signal.aborted || signal.aborted || log(`team first look failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`),
+    );
   }
 
   try {
@@ -810,7 +860,8 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
 
     await Promise.race([voice, new Promise(resolve => setTimeout(resolve, 1500))]);
     over = true;
-    log(`ok   claude team ${secs()} ${how}, ${html?.length ?? 0} chars, ${spent.tokens} tokens written`);
+    stopSketch.abort();
+    log(`ok   claude team ${secs()} ${how}${stats.sketchMs ? `, first look at ${secs(t0 + stats.sketchMs)}` : ''}, ${html?.length ?? 0} chars, ${spent.tokens} tokens written`);
     // Only talking: the voice may have said something else first, so say the lead's answer too.
     const talkOnly = !html && r.say;
     return {

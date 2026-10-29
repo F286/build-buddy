@@ -39,13 +39,17 @@ export const DEFAULTS = {
   // its fixes slide in at a calm moment.
   // leads: how many leads start on each request at once; the first to start a plan is used and
   // the others stop (how long a lead thinks first varies a lot, so this saves the slow starts).
+  // firstLook: for something new, a quick sketch of it (by the sketch role, a fast model) is on
+  // screen within seconds and can be played with until the team's version replaces it.
   team: {
     enabled: true,
     helpers: 6,
     leads: 2,
     warm: true,
     check: true,
+    firstLook: true,
     voice: { model: 'haiku', effort: 'low' },
+    sketch: { model: 'sonnet', effort: 'low' },
     lead: { model: '', effort: '', advisor: '' },
     helper: { model: '', effort: '', advisor: '' },
     fixer: { model: '', effort: '' },

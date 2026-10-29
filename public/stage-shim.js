@@ -28,6 +28,8 @@
   // Saved values only come back where they still fit the new defaults (same kind of value),
   // so a changed page can't be pushed into a state it doesn't understand.
   const saved = window.__kbRestore?.keep;
+  // A trial run (the app trying a fix out of sight before showing it): silent.
+  const trial = Boolean(window.__kbRestore?.trial);
   delete window.__kbRestore;
   const plain = v => v && typeof v === 'object' && !Array.isArray(v);
   const fits = (def, val) =>
@@ -212,10 +214,16 @@
       constructor(...args) {
         super(...args);
         contexts.push(this);
+        if (trial) {
+          this.suspend();
+          this.resume = () => Promise.resolve();
+        }
       }
     }
     window.AudioContext = window.webkitAudioContext = TrackedAudioContext;
   }
+
+  if (trial && window.HTMLMediaElement) HTMLMediaElement.prototype.play = () => Promise.resolve();
 
   addEventListener('message', e => {
     const d = e.data;

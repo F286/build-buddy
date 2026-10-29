@@ -198,6 +198,18 @@ const routes = {
     return p ? { project: projectInfo(p), html: store.html(p) } : { nothing: true };
   },
 
+  // A fix from the team's checker or the overwatch threw errors when the app tried it out of
+  // sight: take it back, so the creation stays as it was.
+  'POST /api/drop-fix': async req => {
+    const { projectId, version, error } = await readJson(req);
+    const p = store.currentProject();
+    const v = p.versions.find(x => x.n === version);
+    if (p.id !== projectId || p.current !== version || !/check|overwatch/.test(v?.backend || '')) return { dropped: false };
+    store.dropVersion(p, version);
+    ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
+    return { dropped: true };
+  },
+
   'POST /api/new': () => {
     if (ai.isBusy()) return { error: 'busy' };
     const p = store.newProject();

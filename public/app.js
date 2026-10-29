@@ -23,6 +23,7 @@ const state = {
   kept: null, // the latest KB.keep values the page reported: { projectId, keep }
   timeUp: false, // the time limit ran out: the creation is put away until a grown-up adds time
   resumeKeep: null, // ...and this is the kid's progress to hand back when it returns
+  sketch: null, // team mode's first look is on the stage: { html, kept } of what was there before
 };
 
 async function api(path, body) {
@@ -315,7 +316,7 @@ addEventListener('message', e => {
   if (e.source !== frame.contentWindow || !d?.kidbuild) return;
   if (d.type === 'key') handleKey(d);
   if (d.type === 'error') pageError(d.message);
-  if (d.type === 'keep' && d.keep) state.kept = { projectId: state.project?.id, keep: d.keep };
+  if (d.type === 'keep' && d.keep && !state.sketch) state.kept = { projectId: state.project?.id, keep: d.keep };
   if (d.id && answers.has(d.id)) {
     answers.get(d.id)(d);
     answers.delete(d.id);
@@ -330,6 +331,7 @@ addEventListener('message', e => {
 let fixTimer = null;
 function pageError(message) {
   if (/ResizeObserver|^Script error/i.test(message)) return;
+  if (state.sketch) return; // a first look, about to be replaced: nothing to fix
   // Crashed right after being handed the kid's progress? Maybe the old values don't suit the
   // new version: start this version fresh instead (no fix needed yet).
   if (state.restoredAt && Date.now() - state.restoredAt < 5000) {
@@ -415,6 +417,16 @@ function stopBlocks() {
   $('#building').hidden = true;
 }
 
+// Team mode's first look at something new: a quick sketch of it, on the stage within seconds and
+// playable until the team's version replaces it. It's never saved, and nothing in it gets fixed.
+function showSketch(html) {
+  if (state.timeUp || !html) return;
+  state.sketch ??= { html: state.html, kept: state.kept };
+  showPage(html);
+  state.kept = state.sketch.kept; // the kid's progress belongs to the real creation
+  sfx.pop();
+}
+
 async function build(body) {
   state.busy = true;
   state.fixing = Boolean(body.fix); // fixing a wobbly bit doesn't use up play time
@@ -450,6 +462,8 @@ async function build(body) {
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);
+        } else if (ev.type === 'sketch') {
+          showSketch(ev.html);
         } else if (ev.type === 'done' || ev.type === 'error') {
           result = ev;
         } else if (ev.type === 'timer') {
@@ -467,6 +481,13 @@ async function build(body) {
   state.fixing = false;
 
   const quiet = state.timeUp; // time ran out while it was building: keep the result for later
+  const sketch = state.sketch;
+  state.sketch = null;
+  // The first look goes away: replaced by the real thing below, or by what was there before.
+  if (sketch && !result?.html) {
+    showPage(sketch.html);
+    state.kept = sketch.kept;
+  }
   if (!result || result.type === 'error') {
     console.warn('build failed', result?.message);
     if (!quiet && !timer.overtime) {
@@ -560,7 +581,45 @@ async function checkCreation({ urgent = false } = {}) {
 
 // Put the overwatch's fix in at a calm moment, keeping the kid's progress. If the kid has moved
 // on to something newer meanwhile, the fix is for an old version: leave it.
+// Run a page out of sight for a moment (silent, behind the stage, with a few arrow-key presses)
+// and collect the errors it throws.
+function tryPage(html, keep, ms = 2500) {
+  return new Promise(resolve => {
+    const trial = document.createElement('iframe');
+    trial.setAttribute('sandbox', 'allow-scripts');
+    trial.setAttribute('aria-hidden', 'true');
+    trial.tabIndex = -1;
+    const r = frame.getBoundingClientRect();
+    Object.assign(trial.style, { position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, border: '0', opacity: '0.01', pointerEvents: 'none', zIndex: '-1' });
+    const errors = [];
+    const onMessage = e => {
+      if (e.source === trial.contentWindow && e.data?.kidbuild && e.data.type === 'error') errors.push(e.data.message);
+    };
+    addEventListener('message', onMessage);
+    document.body.append(trial);
+    trial.srcdoc = wrap(html, { keep, trial: true });
+    const press = (key, event) => trial.contentWindow?.postMessage({ kidbuild: true, type: 'key', event, key, code: key }, '*');
+    setTimeout(() => ['ArrowRight', 'ArrowUp', 'ArrowLeft', 'ArrowDown'].forEach(k => (press(k, 'keydown'), press(k, 'keyup'))), ms / 2);
+    setTimeout(() => {
+      removeEventListener('message', onMessage);
+      trial.remove();
+      resolve(errors.filter(m => !/ResizeObserver|^Script error/i.test(m)));
+    }, ms);
+  });
+}
+
 async function applyFix(projectId, version, r) {
+  while (state.busy || mic.recording || mic.transcribing || voice.current) await sleep(1000);
+  if (state.project?.id !== projectId || state.project?.version !== version) return;
+  // Try it out of sight first: a fix that throws errors the creation on stage doesn't have would
+  // break something that works, so it's taken back instead.
+  const known = new Set(state.pageErrors);
+  const fresh = (await tryPage(r.html, state.kept?.projectId === projectId ? state.kept.keep : null)).filter(m => !known.has(m));
+  if (fresh.length) {
+    console.warn('a fix crashed when tried, so it was taken back:', fresh[0]);
+    if (state.project?.id === projectId) api('/api/drop-fix', { projectId, version: r.version, error: fresh[0] }).catch(() => {});
+    return;
+  }
   while (state.busy || mic.recording || mic.transcribing || voice.current) await sleep(1000);
   if (state.project?.id !== projectId || state.project?.version !== version) return;
   state.project = { ...state.project, version: r.version };
