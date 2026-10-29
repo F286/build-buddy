@@ -252,12 +252,13 @@ Buddy changes.
   fixer repairs any that don't parse; right after it appears, a checker looks over the whole page
   and at a screenshot of it running, and quietly fixes what would spoil it (in tests: a piano key
   that crashed, food the fish could never reach, a ladybug stuck flapping at the edge, emoji cut
-  off at the edges, a frog that could never catch a fly while jumping). On a test set of eight new
-  creations the wait went from 41 s to 33 s on average and from 67 s to 42 s at the longest, and
-  Sparky's first words from 7.7 s to 3.4 s. In blind side-by-side judging against the classic way,
-  the team's creations won all 12 (8 new ones and 4 changes), every one scoring 8 out of 10
-  against the classic way's 5.6 on average. It writes about twice as much, so it uses more of
-  your plan.
+  off at the edges, a frog that could never catch a fly while jumping, a page that crashed because
+  it never made the elements it drew on). On a test set of eight new creations (the team built each
+  three times), the wait went from 45 s to 33 s on average and from 72 s to 47 s at the longest, and
+  Sparky's first words from 9 s to about 2 s; changes went from 26 s to 24 s. In blind
+  side-by-side judging against the classic way, the team's creations won 11 of 12: all 8 new ones,
+  each scoring 8 out of 10 against the classic way's 4 to 6, and 3 of the 4 changes. It writes
+  about twice as much, so it uses more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
