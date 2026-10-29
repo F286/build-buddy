@@ -286,8 +286,8 @@ Buddy changes.
   anything, or touch the rest of the app. The only things they can load are the bundled Phaser and
   Three.js.
 - **What leaves your computer:** the text of each request and the current creation's code, sent to
-  Claude or ChatGPT. The overwatch also sends a small screenshot of the game itself (never the
-  camera or the rest of the screen). Listening and speaking happen on the computer itself.
+  Claude or ChatGPT. The overwatch (and in team mode the checker) also sends a small screenshot of
+  the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
 - **Kid-friendly by instruction.** Sparky is told to keep everything friendly and age-appropriate,

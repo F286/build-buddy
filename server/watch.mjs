@@ -44,12 +44,12 @@ function describe(report, shot) {
     `On screen for ${Math.round(r.shownSec || 0)} s; ${r.fps ?? '?'} frames per second; last key press or click ${r.idleSec == null ? 'unknown' : `${Math.round(r.idleSec)} s ago`}.`,
     `Errors: ${r.errors?.length ? r.errors.slice(-5).join(' | ') : 'none'}`,
     `Kept values (KB.keep): ${r.keep ? JSON.stringify(r.keep).slice(0, 600) : 'none'}`,
-    `Page: ${r.canvas ? `canvas ${r.canvas}` : 'no canvas'}${r.blank ? ', the canvas looks blank (all one color)' : ''}; ${r.elements ?? '?'} elements; text: ${JSON.stringify((r.text || '').slice(0, 200))}`,
+    `Page: ${r.canvas ? `canvas ${r.canvas}` : 'no canvas'}${r.blank ? ', the screen looks blank (all one color)' : ''}; ${r.elements ?? '?'} elements; text: ${JSON.stringify((r.text || '').slice(0, 200))}`,
   ];
   return `<how_it_is_running>\n${lines.join('\n')}\n</how_it_is_running>\n\n${
     shot
       ? `A screenshot of it right now is in the file ${path.basename(shot)} - look at it first.`
-      : 'There is no screenshot (it is not drawn on a canvas), so judge from the page and the numbers.'
+      : 'There is no screenshot, so judge from the page and the numbers.'
   }`;
 }
 

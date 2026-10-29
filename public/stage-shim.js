@@ -76,9 +76,79 @@
     return /rgba?\([^)]*\)|#[0-9a-f]{3,8}/i.exec(st.backgroundImage || '')?.[0] || '';
   }
 
-  // ---- A look at how the page is running, for the overwatch: frame rate, errors, kept values,
-  // and a small screenshot of the biggest canvas, taken right after a frame is drawn (that's
-  // when WebGL canvases still hold their picture).
+  // The page as the kid sees it, as a small JPEG (at most 640 wide), plus whether it's all one
+  // color. Called right after a frame is drawn: that's when WebGL canvases still hold their
+  // picture, so every canvas's picture and a copy of the page's elements are taken straight away.
+  // The elements are drawn from that copy as an SVG picture, which the browser paints without
+  // running anything in it. A canvas that covers what's behind it (a game's whole picture) goes
+  // under the elements; a see-through one (sparkles over a page) goes on top.
+  async function snapshot() {
+    const vw = innerWidth;
+    const vh = innerHeight;
+    if (!vw || !vh) return null;
+    const w = Math.round(Math.min(640, vw));
+    const h = Math.round((vh * w) / vw);
+    const k = w / vw;
+    const layers = [...document.querySelectorAll('canvas')]
+      .map(c => ({ c, r: c.getBoundingClientRect() }))
+      .filter(l => l.c.width && l.c.height && l.r.width > 0 && l.r.height > 0)
+      .map(l => ({ r: l.r, bitmap: createImageBitmap(l.c).catch(() => null) }));
+    const page = document.documentElement.cloneNode(true);
+    const biggest = [...document.querySelectorAll('canvas')].sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    const behind = backgroundOf(biggest) || backgroundOf(document.body) || backgroundOf(document.documentElement) || '#ffffff';
+
+    const shot = new OffscreenCanvas(w, h);
+    const g = shot.getContext('2d');
+    g.imageSmoothingQuality = 'medium';
+    // See-through parts show the page's background: paint that first, or they come out black
+    // and the overwatch thinks the screen is dark.
+    g.fillStyle = behind;
+    g.fillRect(0, 0, w, h);
+    const pictures = [];
+    for (const l of layers) {
+      const bitmap = await l.bitmap;
+      if (!bitmap) continue;
+      const tiny = new OffscreenCanvas(8, 8).getContext('2d');
+      tiny.drawImage(bitmap, 0, 0, 8, 8);
+      const px = tiny.getImageData(0, 0, 8, 8).data;
+      let alpha = 0;
+      for (let i = 3; i < px.length; i += 4) alpha += px[i];
+      pictures.push({ r: l.r, bitmap, under: alpha > 64 * 230 });
+    }
+    const put = p => {
+      g.drawImage(p.bitmap, p.r.left * k, p.r.top * k, p.r.width * k, p.r.height * k);
+      p.bitmap.close();
+    };
+    pictures.filter(p => p.under).forEach(put);
+    try {
+      page.querySelectorAll('script').forEach(el => el.remove());
+      page.querySelectorAll('canvas').forEach(el => (el.style.visibility = 'hidden'));
+      if (pictures.some(p => p.under)) for (const el of [page, page.querySelector('body')]) if (el) el.style.background = 'transparent';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${vw}" height="${vh}"><foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(page)}</foreignObject></svg>`;
+      const img = new Image();
+      // A data: URL: in the sandbox, a blob: picture would make the snapshot unreadable.
+      img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+      await img.decode();
+      g.drawImage(img, 0, 0, w, h);
+    } catch {
+      // The canvases alone, then.
+    }
+    pictures.filter(p => !p.under).forEach(put);
+    const tiny = new OffscreenCanvas(24, 16);
+    tiny.getContext('2d').drawImage(shot, 0, 0, 24, 16);
+    const px = tiny.getContext('2d').getImageData(0, 0, 24, 16).data;
+    const blob = await shot.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
+    const url = await new Promise(r => {
+      const reader = new FileReader();
+      reader.onload = () => r(reader.result);
+      reader.readAsDataURL(blob);
+    });
+    return { url, blank: px.every((v, i) => v === px[i % 4]) };
+  }
+
+  // ---- A look at how the page is running, for the checker and the overwatch: frame rate,
+  // errors, kept values, and a small screenshot. If the screenshot takes more than 2 s (a page
+  // that's very slow to paint), the report goes without it rather than not at all.
   function inspect() {
     let frames = 0;
     const t0 = performance.now();
@@ -96,32 +166,11 @@
           text: (document.body?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 300),
           canvas: canvas ? `${canvas.width}x${canvas.height}` : '',
         };
-        if (!canvas || !canvas.width || !canvas.height) return done(out);
-        // Snapshot the canvas now, while it holds the frame just drawn; shrinking, checking and
-        // compressing happen off the game's thread, so the game doesn't stutter.
-        const w = Math.round(Math.min(640, canvas.width));
-        const h = Math.round((canvas.height * w) / canvas.width);
-        const behind = backgroundOf(canvas) || backgroundOf(document.body) || backgroundOf(document.documentElement) || '#ffffff';
-        createImageBitmap(canvas, { resizeWidth: w, resizeHeight: h, resizeQuality: 'medium' })
-          .then(async bitmap => {
-            const shot = new OffscreenCanvas(w, h);
-            const g = shot.getContext('2d');
-            // See-through parts of a canvas show the page behind it: paint that first, or they
-            // come out black and the overwatch thinks the screen is dark.
-            g.fillStyle = behind;
-            g.fillRect(0, 0, w, h);
-            g.drawImage(bitmap, 0, 0);
-            bitmap.close();
-            const tiny = new OffscreenCanvas(24, 16);
-            tiny.getContext('2d').drawImage(shot, 0, 0, 24, 16);
-            const px = tiny.getContext('2d').getImageData(0, 0, 24, 16).data;
-            out.blank = px.every((v, i) => v === px[i % 4]);
-            const blob = await shot.convertToBlob({ type: 'image/jpeg', quality: 0.75 });
-            out.screenshot = await new Promise(r => {
-              const reader = new FileReader();
-              reader.onload = () => r(reader.result);
-              reader.readAsDataURL(blob);
-            });
+        Promise.race([snapshot(), new Promise(r => setTimeout(r, 2000))])
+          .then(shot => {
+            if (!shot) return;
+            out.screenshot = shot.url;
+            out.blank = shot.blank;
           })
           .catch(() => {})
           .then(() => done(out));
