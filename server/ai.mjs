@@ -70,6 +70,7 @@ ${libs.join('\n')}
 # Keep it smooth (60 frames per second on a laptop)
 - One animation loop (requestAnimationFrame, or Phaser's update); move things by elapsed time, not by frame count.
 - 2D canvas: no shadowBlur or filters, no getImageData in the loop; draw backgrounds that don't change once onto an offscreen canvas; keep particles under about 200.
+- HTML and SVG: no CSS or SVG filters (drop-shadow, blur, feDropShadow) or box-shadow - they slow down every frame; for a soft shadow, draw a darker, see-through copy of the shape a little below it. Animate with transform and opacity.
 - Phaser: create things in create(), not every frame; reuse particle emitters; destroy things that leave the screen.
 - 3D: renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); simple low-poly shapes; make geometries and materials once and reuse them; InstancedMesh for many copies (trees, coins, stars); one light that casts a small shadow at most (or no shadows); fog to hide what's far away; never create objects inside the animation loop.
 - If they say it's slow or choppy, simplify what's drawn rather than adding more.`;

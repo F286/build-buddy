@@ -123,7 +123,7 @@ MAIN:
 <the code that puts it together>
 \`\`\`
 
-- The page is one module script: your shared code, then each part's code, then MAIN.
+- The page is one module script: your shared code, then each part's code, then MAIN. Its body starts empty: every element is made by the code before anything uses it.
 - The shared code (at most about 25 lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
 - Each helper starts the moment its line is written, seeing your shared code and the jobs before it - so write all the jobs before MAIN, biggest first.
 - Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under 40 words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
@@ -151,7 +151,7 @@ The page is one module script: the shared code, then each part's code, then the 
 
 Reply with only your code, in one \`\`\`js code block - no talk before or after it.
 - Define exactly what your job's first words say (the same names and parameters, returning the same things): the main code depends on it. Use the shared code's names, and use another part only as its job says.
-- Extra top-level names you need (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part.
+- Extra top-level names you need (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part. Whatever your piece needs before its first frame (its sizes, a background drawn once) happens in the function the main code calls first - not only when the window is resized.
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
 - About 30 short lines, about 2,000 characters (never more than 3,000): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
@@ -193,12 +193,13 @@ function checkerSystem() {
   return `You are the last check on a web page for a ${c.kidAge}-year-old who can't read. A team of AI helpers wrote it in pieces at the same time, and the kid has just started playing with it. Find and fix only real problems that would spoil it for them - quickly.
 
 Check:
+0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys). New levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
 1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
 2. Controls: the main thing the kid asked for works with the arrow keys AND with the pointer (tap, hold or drag), as the kid was told. Every promised control is really wired to what moves. Never the space bar or Enter. Every arrow key and a tap anywhere gets some visible, audible answer - where one does nothing, add a small one (a wiggle, or sparkles and a pop where they tapped).
 2b. The goal: reaching it (the finish, the moon, catching one) gets a clear celebration, and play carries on after it.
 3. The start: the main character and the main action are on screen and clearly visible - not off-screen, clipped at an edge, behind something, too small, or out of the camera's view; things don't start on top of each other.
 4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
-5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame.
+5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame. If it runs below about 30 frames per second, find what makes each frame heavy and lighten it (fewer shadow-casting or moving things, drawing once instead of every frame).
 6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made, and none of the errors the page reported while running.
 7. How it looks (if there's a screenshot, look at it first with the Read tool). If it's blank or nearly empty, find out why nothing is drawn (in 3D: is renderer.render(scene, camera) called every frame?). nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
 
@@ -324,6 +325,10 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
     let result = null;
     let fastNote = '';
     let finished = false;
+    let stopReason = '';
+    let speed = '';
+    let tokens = 0;
+    let messageTokens = 0;
     const finish = err => {
       if (finished) return;
       finished = true;
@@ -353,14 +358,28 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
         streamed += '\n';
         onText('\n');
       }
-      const d = ev.type === 'stream_event' && ev.event?.type === 'content_block_delta' && !ev.parent_tool_use_id ? ev.event.delta : null;
+      const se = ev.type === 'stream_event' && !ev.parent_tool_use_id ? ev.event : null;
+      const d = se?.type === 'content_block_delta' ? se.delta : null;
       if (d?.type === 'text_delta') {
         streamed += d.text;
         onText(d.text);
+      } else if (se?.type === 'message_start') {
+        speed = se.message?.usage?.speed || speed;
+        messageTokens = 0;
+      } else if (se?.type === 'message_delta') {
+        stopReason = se.delta?.stop_reason || '';
+        messageTokens = se.usage?.output_tokens || messageTokens;
+      } else if (se?.type === 'message_stop') {
+        tokens += messageTokens;
+        // The reply is over (not a pause for a tool): use it now. The program may still spend a
+        // second or two on its own wrap-up (and exiting) before it reports the result.
+        if (stopReason === 'end_turn' || stopReason === 'stop_sequence') {
+          result = { result: streamed, usage: { output_tokens: tokens, speed } };
+          finish();
+        }
       } else if (ev.type === 'system' && ev.subtype === 'notification' && /fast/i.test(ev.key || '')) {
         fastNote = ev.text || ev.key;
       } else if (ev.type === 'result') {
-        // The answer is complete: don't wait the second or two the program takes to exit.
         result = ev;
         finish();
       }
@@ -519,11 +538,18 @@ export async function syntaxErrors(html) {
   return errs;
 }
 
-// Problems that certainly spoil the page without throwing an error: a 3D page that never draws.
+// Problems that certainly spoil the page but don't show until it runs: a 3D page that never draws,
+// or an element looked up by its id that nothing makes (the team's page starts with an empty body).
 export function blankProblems(html) {
   const code = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n');
-  if (/from\s*['"]three['"]/.test(code) && !/\.render\s*\(/.test(code)) return ['It never draws: nothing calls renderer.render(scene, camera), so the screen stays blank. Call it at the end of every frame of the main loop.'];
-  return [];
+  const problems = [];
+  if (/from\s*['"]three['"]/.test(code) && !/\.render\s*\(/.test(code)) problems.push('It never draws: nothing calls renderer.render(scene, camera), so the screen stays blank. Call it at the end of every frame of the main loop.');
+  const lookups = {};
+  for (const m of html.matchAll(/getElementById\(\s*(['"`])([\w-]+)\1\s*\)|querySelector\(\s*(['"`])#([\w-]+)\3\s*\)/g)) lookups[m[2] || m[4]] = (lookups[m[2] || m[4]] || 0) + 1;
+  // Made anywhere means the id shows up somewhere besides the lookups (id="x", el.id = 'x', #x in CSS...).
+  const missing = Object.keys(lookups).filter(id => (html.match(new RegExp(`['"\`#=]${id}(?![\\w-])`, 'g')) || []).length <= lookups[id]);
+  if (missing.length) problems.push(`It looks up ${missing.map(id => `#${id}`).join(', ')} by id, but nothing makes ${missing.length > 1 ? 'those elements' : 'that element'} - the page starts with an empty body. Create ${missing.length > 1 ? 'them' : 'it'} (and add ${missing.length > 1 ? 'them' : 'it'} to the page) before ${missing.length > 1 ? 'they are' : 'it is'} first used.`);
+  return problems;
 }
 
 // Apply the edits that fit; return the ones that don't.
@@ -570,7 +596,7 @@ async function fix(html, problem, signal, tally) {
 // One build by the team. Resolves like the classic way does: { say, done, title, emoji, html,
 // edited, backend }. Throws if the team couldn't do it (the classic way takes over).
 
-export async function build({ page, history, text, alt, fix: crash, title = '', look = pickLook(), planOnly = false }, emit, state) {
+export async function build({ page, history, text, alt, fix: crash, title = '', look = pickLook() }, emit, state) {
   const t0 = Date.now();
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
   const stats = { parts: [] };
@@ -593,7 +619,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     voiceSay = state.said = text;
     emit({ type: 'say', text });
   };
-  const voice = crash || planOnly
+  const voice = crash
     ? Promise.resolve()
     : ask('voice', {
         system: voiceSystem(),
@@ -618,7 +644,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       );
 
   // Helpers start as their jobs are written.
-  const prompt = userPrompt({ page, history, text, alt, fix: crash, look }) + (planOnly ? '\n\nIMPORTANT: this time write the PLAN - no FIND/REPLACE edits.' : '');
+  const prompt = userPrompt({ page, history, text, alt, fix: crash, look });
   const running = new Map();
   // At most `helpers` at work at once: any further jobs wait for one to finish.
   let free = maxHelpers();
@@ -728,15 +754,10 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     let edited = false;
     let how = `the lead only talked, ${secs(leadAt)}`;
 
-    // Edits (the lead's own, or its helpers' changes) that still don't fit after the fixer: plan
-    // it instead, unless this already was that.
-    const replan = async failed => {
-      if (planOnly || crash) throw new Error(`edits didn't fit: ${failed[0].find.trim().split('\n')[0].slice(0, 60)}`);
-      log('team: edits still don\'t fit, planning it instead');
-      const again = await build({ page, history, text, alt, title, look, planOnly: true }, emit, state);
-      over = true;
-      return { ...again, say: voiceSay || again.say };
-    };
+    // Edits (the lead's own, or its helpers' changes) that still don't fit after the fixer: the
+    // classic way takes over - one AI that sees the whole page keeps everything already on it
+    // (a fresh plan would rebuild it, and things the kid made could go missing).
+    const misfit = failed => new Error(`edits didn't fit: ${failed[0].find.trim().split('\n')[0].slice(0, 60)}`);
     const timing = jobs => {
       stats.parts = jobs.map(p => ({ name: p.name, ms: p.doneAt - p.startedAt, startedMs: p.startedAt - t0, chars: (p.code || p.reply).length }));
       const slowest = jobs.reduce((a, p) => (p.doneAt > (a?.doneAt || 0) ? p : a), null);
@@ -756,7 +777,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       const edits = changes.flatMap(c => parseReply(c.reply).edits);
       if (!edits.length) throw new Error('the helpers wrote no changes');
       const fitted = await applyEditsWithFixer(page, edits, signal, spent);
-      if (fitted.failed.length) return await replan(fitted.failed);
+      if (fitted.failed.length) throw misfit(fitted.failed);
       html = fitted.html;
       edited = true;
       how = `lead ${secs(leadAt)}, ${changes.length} helpers changing it with ${edits.length} edits${timing(changes)}`;
@@ -766,7 +787,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     } else if (r.edits.length) {
       if (!page) throw new Error('edits on a blank page');
       const fitted = await applyEditsWithFixer(page, r.edits, signal, spent);
-      if (fitted.failed.length) return await replan(fitted.failed);
+      if (fitted.failed.length) throw misfit(fitted.failed);
       html = fitted.html;
       edited = true;
       how = `lead's ${r.edits.length} edits, ${secs(leadAt)}`;
