@@ -176,7 +176,8 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
 - About 30 short lines, about 2,000 characters (never more than 3,000): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
-- If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far. Fill it the short way: a few kinds of things, each made in a loop many times over with varied sizes, colors and spots, not lots of separate code.
+- If your piece is the star (the thing the kid asked for), make it big - at least a fifth of the screen's height - with a face and big eyes that the kid sees from where the camera looks.
+- If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far. Fill it the short way: a few kinds of things, each made in a loop many times over with varied sizes, colors and spots, not lots of separate code. Put what sets the look (clouds, the sun, hills) where the camera really sees it.
 - The pieces only fit if you follow the team's rules: time is always in seconds - use dt and t exactly as passed to you (seconds since the last frame / since the start), and never divide them by 1000 again; read keys and the pointer from the shared input object (or the handler your job names) rather than adding your own listeners, unless your job says to; use exactly the names, ids, attributes and fields your job and the shared code give, and create everything your job says other pieces rely on.
 - In 3D: flat shapes you build yourself (roads, ribbons, custom planes) use side: THREE.DoubleSide so they can't vanish when seen from the other side; nothing that should be seen sits inside, under or behind another shape (a moat is wider than the castle's base); don't move the camera unless your job says to.
 - Your piece shares every frame with the other helpers' pieces, so keep it light: at most about 40 moving things or particles; no CSS or SVG filters (drop-shadow, feDropShadow, blur) or box-shadow on anything that moves, and no canvas shadowBlur - for a soft shadow, draw a darker, see-through copy of the shape a little below it instead; in 3D, no new lights or shadow-casting unless your job says so, make geometries and materials once and reuse them, and use InstancedMesh for many copies.
@@ -213,7 +214,7 @@ function checkerSystem() {
   return `You are the last check on a web page for a ${c.kidAge}-year-old who can't read. A team of AI helpers wrote it in pieces at the same time, and the kid has just started playing with it. Find and fix only real problems that would spoil it for them - quickly.
 
 Check:
-0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys). New levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
+0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys), and so is the look the page was given. In something new, the star of it is big (at least a fifth of the screen's height) with a face the kid can see. New levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
 1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
 2. Controls: the main thing the kid asked for works with the arrow keys AND with the pointer (tap, hold or drag), as the kid was told. Every promised control is really wired to what moves. Never the space bar or Enter. Every arrow key and a tap anywhere gets some visible, audible answer - where one does nothing, add a small one (a wiggle, or sparkles and a pop where they tapped).
 2b. The goal: reaching it (the finish, the moon, catching one) gets a clear celebration, and play carries on after it.
@@ -897,10 +898,11 @@ function running(report, shot) {
 }
 
 // Review a page; resolves with the fixed page (or null if nothing needs fixing) and why.
-export async function reviewPage({ page, asked, told, report, shot }) {
+export async function reviewPage({ page, asked, told, report, shot, change = false }) {
+  const changed = change ? '\nThis was a change to a creation the kid already had: check that the change is really there and that what they had still works, but don\'t resize, move or restyle what was already there.' : '';
   const reply = await ask('checker', {
     system: checkerSystem(),
-    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}\n\n${running(report, shot)}`,
+    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${changed}\n\n${running(report, shot)}`,
     tools: shot ? 'Read' : '',
   });
   const edits = parseReply(reply.text).edits;
@@ -935,7 +937,8 @@ export async function check({ projectId, version, report, screenshot }) {
   try {
     const asked = p.history.filter(h => h.role === 'kid').at(-1)?.text || '';
     const told = p.history.filter(h => h.role === 'buddy').at(-1)?.text || '';
-    const r = await reviewPage({ page, asked, told, report, shot });
+    const change = Boolean(p.versions.find(v => v.n === version)?.continues);
+    const r = await reviewPage({ page, asked, told, report, shot, change });
     if (!r.html) {
       log(r.skipped ? `CHECK skip ${took()} ${r.why} (${r.skipped})` : `CHECK ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
       return r.skipped ? { skipped: r.skipped } : { ok: true };

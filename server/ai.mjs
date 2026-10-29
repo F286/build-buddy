@@ -443,7 +443,7 @@ export async function build({ text, alt, fix }, emit) {
     const continues = Boolean(page) && (r.edited || !(r.title && r.title !== titleBefore));
 
     if (text) p = store.addHistory(p, 'kid', text);
-    if (newHtml) p = store.addVersion(p, newHtml, { request: text || `(fix) ${fix.slice(0, 200)}`, backend: r.backend });
+    if (newHtml) p = store.addVersion(p, newHtml, { request: text || `(fix) ${fix.slice(0, 200)}`, backend: r.backend, continues });
     if (r.title) p = store.setTitle(p, r.title, r.emoji);
     if (!fix) p = store.addHistory(p, 'buddy', [r.say, r.done].filter(Boolean).join(' '));
 

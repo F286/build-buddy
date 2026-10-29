@@ -249,18 +249,20 @@ Buddy changes.
   they can't invent sentences; and rude words that a mumble gets misheard as are masked. Listening
   starts half a second before the talk key goes down and keeps going a moment after it's let go.
 - **Built by a team.** In [team mode](#team-mode) (the default), a quick model answers out loud
-  while a lead plans the creation and up to six helpers write its pieces at the same time, each
-  starting the moment its job is written. Before anything is shown, every script is checked, and a
-  fixer repairs any that don't parse; right after it appears, a checker looks over the whole page
-  and at a screenshot of it running, and quietly fixes what would spoil it (in tests: a piano key
-  that crashed, food the fish could never reach, a ladybug stuck flapping at the edge, emoji cut
-  off at the edges, a frog that could never catch a fly while jumping, a page that crashed because
-  it never made the elements it drew on). On a test set of eight new creations (the team built each
-  three times), the wait went from 45 s to 33 s on average and from 72 s to 47 s at the longest, and
-  Sparky's first words from 9 s to about 2 s; changes went from 26 s to 24 s. In blind
-  side-by-side judging against the classic way, the team's creations won 11 of 12: all 8 new ones,
-  each scoring 8 out of 10 against the classic way's 4 to 6, and 3 of the 4 changes. It writes
-  about twice as much, so it uses more of your plan.
+  within about 2 seconds, and for anything new a quick first look at it is on screen within about
+  14 seconds, ready to play with, while a lead plans the creation and up to six helpers write its
+  pieces at the same time, each starting the moment its job is written. Before anything is shown,
+  every script is checked, and a fixer repairs any that don't parse; right after it appears, a
+  checker looks over the whole page and at a screenshot of it running, and quietly fixes what
+  would spoil it (in tests: a piano key that crashed, food the fish could never reach, a car too
+  small to see its face, a page that crashed because it never made the elements it drew on). Its
+  fixes are tried out of sight first, so they can never break a creation that works. On a test set
+  of eight new creations and four changes (the team built each three times, timed like at home),
+  the full creation arrived after 30 s on average instead of 45 s, and never later than 36 s
+  instead of 72 s; Sparky's first words came after about 2 s instead of 9 s, and changes took 22 s
+  instead of 26 s. In blind side-by-side judging against the classic way, the team's new creations
+  won all 16, scoring 7.75 out of 10 on average against 5.7 (none below 7), and its changes won 6
+  of 8. It writes more than twice as much, so it uses more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
