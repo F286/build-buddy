@@ -488,7 +488,7 @@ async function build(body) {
   state.sketch = null;
   // The first look goes away: replaced by the real thing below, or by what was there before.
   if (sketch && !result?.html) {
-    showPage(sketch.html);
+    showPage(sketch.html, { restore: sketch.kept?.keep ? { keep: sketch.kept.keep } : null });
     state.kept = sketch.kept;
   }
   if (!result || result.type === 'error') {
