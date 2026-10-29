@@ -385,11 +385,12 @@ function startBlocks(body) {
 }
 
 // Team mode: a little robot for each helper building a piece of it (see server/team.mjs). Before
-// there are helpers - or when the lead makes a small change itself - one robot: the team's lead.
-function showHelpers(count, done = 0, team = false) {
+// there are helpers - or when a lead makes a change itself - a robot for each lead at work.
+function showHelpers(count, done = 0, leads = 0) {
   const el = $('#buildingTeam');
   const name = state.config.buddyName || 'Sparky';
-  const robots = count || (team ? 1 : 0);
+  const robots = count || leads;
+  const team = leads > 0;
   if (!state.fixing) $('#buildingLabel').textContent = count ? `${name} + ${count} helper${count > 1 ? 's' : ''}` : team ? `${name}'s team` : `${name} is building`;
   while (el.children.length > robots) el.lastChild.remove();
   while (el.children.length < robots) el.append(Object.assign(document.createElement('span'), { textContent: '🤖' }));
@@ -463,7 +464,7 @@ async function build(body) {
           progress.lastEvent = Date.now();
           if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone);
           else if (ev.note) showHelpers(0); // the team gave up: building the classic way
-          else if (ev.team) showHelpers(0, 0, true); // the team is at work: the lead plans
+          else if (ev.team) showHelpers(0, 0, ev.leads || 1); // the team is at work: its leads plan
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);

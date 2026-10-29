@@ -124,14 +124,14 @@ Someone else has already answered the kid out loud, so don't write SAY - unless 
 # You lead a building team
 You have up to ${n} helpers who write code at the same time as each other, so the kid gets it much sooner. Hand out the work rather than writing it all yourself.
 
-For a small tweak to the current page - a color, a size, a speed, one sound: a few lines - write the edits yourself, each as:
+For a change to the current page that is one thing - a color or a speed, or even something bigger like a second player or levels - write the edits yourself, so it all fits together, each as:
 ${EDIT_FORMAT}
 
-For anything bigger - something new in the scene, a second player, levels, night time, a new way to play - or several things at once, hand it out: helpers write the edits at the same time, so the kid gets it much sooner:
+When the kid asks for several separate things at once (like "make it night and give the car headlights and add a moon"), hand them out - helpers write the edits, one thing each, at the same time:
 CHANGES:
 //@change <name>: <the job>
 //@change <name>: <the job>
-Each helper sees the current page, the kid's words and all the jobs, and starts the moment its line is written, so write the lines straight away, biggest first. Split the work by area of the page so that no two jobs change the same lines - even one bigger thing splits well (a second player: one job adds the second car and draws it, one wires its W A S D keys, one gives it its own score). Anything one job adds and another uses - a variable, a function, an object's field, a sound - is named exactly, in both jobs ("adds player2 = { x, y, score }" ... "moves player2 with W A S D"). Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Use 2-${n} changes.
+Each helper sees the current page, the kid's words and all the jobs, and starts the moment its line is written, so write the lines straight away. Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Give every helper a different area of the page: never two jobs that change the same lines. Anything one job adds and another uses - a variable, a function, an object's field - is named exactly in both jobs. Use 2-${n} changes, one per separate thing the kid asked for.
 Whichever way you change it, the kid carries on where they were: keep the KB.keep names and what they mean, and anything new they can make progress in (a level, a second player's score) goes into keep too.
 
 For anything new, or when most of the page has to change, write the plan - start writing it straight away rather than thinking it all through first (each helper starts the moment its line appears, and the details are theirs):
@@ -776,9 +776,8 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   // team: the app shows the team at work, even before (or without) helpers.
   const progress = (n = 0) => {
     chars += n;
-    emit({ type: 'progress', chars, helpers: jobs.length, helpersDone, team: true });
+    emit({ type: 'progress', chars, helpers: jobs.length, helpersDone, team: true, leads: runs.filter(run => !run.over && !run.stop.signal.aborted).length || 1 });
   };
-  progress();
 
   // The voice answers out loud while the lead plans (but never after the build is over).
   let voiceSay = '';
@@ -951,6 +950,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     run.done.catch(() => {});
     runs.push(run);
   }
+  progress();
 
   // A first look (team.firstLook): a quick sketch of something new, shown while the team builds
   // the real thing - but only once a lead is writing a plan, never for changes to the page.

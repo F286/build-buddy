@@ -177,10 +177,10 @@ team, and each member is its own `claude` run:
 | Role | Default | What it does |
 |---|---|---|
 | `voice` | `haiku`, low effort | Answers out loud straight away (in about 2 s), while the others build. |
-| `sketch` | `sonnet`, low effort | For something new, makes a quick first look at it (`team.firstLook`): the thing they asked for, big and moving, in a simple scene, answering the keys and taps. It's on screen as soon as a lead starts its plan, and the team's version replaces it. It's never saved, and never shown for a change to what's already there. |
+| `sketch` | `sonnet`, low effort | Off by default. For something new, makes a quick first look at it (`team.firstLook`): the thing they asked for, big and moving, in a simple scene, answering the keys and taps. It's on screen as soon as a lead starts its plan, and the team's version replaces it. It's never saved, and never shown for a change to what's already there. |
 | `lead` | your `claude.model` / `claude.effort` | Three race (`team.leads`); the first to start a plan is used. Plans the page: the code every piece shares, one job per helper (each starting with exactly what it defines, like `makeWorld(scene) → { update(dt) }`), and the code that puts the pieces together. Small changes it makes itself, as edits. |
 | `helper` | `sonnet`, low effort | Each writes one piece, all at the same time (Sonnet writes about 40% faster than Opus, and with the lead's detailed plan its pieces judged as well). A helper starts the moment its job is written, while the lead is still writing the rest. One that hasn't written a word after 7 s is thinking hard, so a second helper takes the same job and whichever finishes first is used. |
-| `fixer` | your `claude.model` / `claude.effort` | Before anything is shown, every script on the page is checked (two pieces that declared the same name are untangled automatically); if one doesn't parse, or if edits don't fit, the fixer gets one try to repair it. If edits still don't fit, the classic way builds that request instead (so nothing the kid made goes missing); if a script still doesn't parse, the usual wobbly-bit fixing takes over. A new creation that replaces a first look is also run out of sight for a moment first; if it crashes, the fixer repairs it while the kid keeps playing with the first look, so a crashing page is never shown. |
+| `fixer` | your `claude.model` / `claude.effort` | Before anything is shown, every script on the page is checked (two pieces that declared the same name are untangled automatically); if one doesn't parse, or if edits don't fit, the fixer gets one try to repair it. If edits still don't fit, the classic way builds that request instead (so nothing the kid made goes missing); if a script still doesn't parse, the usual wobbly-bit fixing takes over. Every page the team makes is also run out of sight for a moment first (with the kid's progress, for a change); if it crashes, the fixer's repair is tried out of sight too and only then shown, so a crashing page isn't shown. |
 | `checker` | your `claude.model`, medium effort | Right after the creation appears, takes a careful look at the whole page and at a screenshot of it running (with its frame rate and any errors): is everything the kid asked for really there, do new goals or levels come soon, do the pieces fit, do the controls work with both the keys and the pointer, is everything in view and nothing cut off or in the way, can the goal really be reached, is it smooth (below about 30 frames per second it finds what makes each frame heavy and lightens it). Where an arrow key or a tap does nothing it adds a small answer (a wiggle, or sparkles where they tapped), and where reaching the goal has no celebration it adds one. Its fixes (usually about half a minute later) are first tried out of sight for a moment (a fix that throws errors is taken back, so a creation that works is never broken by its polish), then slide in at a calm moment, keeping the kid's progress, so the kid never waits for it. |
 | `polisher` | your `claude.model`, high effort | After the check, looks at it again as a demanding parent who is also a game designer and makes the two or three changes that matter most: the look they were given really showing, the star recognizable, in proportion and with a visible face, a goal that needs the kid, every action answered, nothing cut off or harsh. Twice by default (`team.polish`); tried out of sight and slid in like the check's fixes. |
 
@@ -230,11 +230,13 @@ Buddy changes.
   particles, tweens, so things bounce and sparkle instead of sitting still) and
   [Three.js](https://threejs.org) for 3D. Both run on the GPU. Without a 3D engine, the AI hand-draws
   "3D" on a 2D canvas: a test kart game ran at 7 fps that way, and at 120 fps with Three.js.
-- **Changes don't restart the game.** Each creation keeps the kid's progress (score, level,
-  position, things collected) in a small `KB.keep({...})` object. When a new version arrives, those
+- **Changes don't restart the game.** Each creation keeps the kid's progress (score, level, where
+  the player is and which way it faces, things collected, placed or unlocked) in a small
+  `KB.keep({...})` object, and puts it back when it starts. When a new version arrives, those
   values are handed over, but only where they still fit (same kind of value), so a changed game
-  can't be pushed into a state it doesn't understand. If the new version still crashes with them,
-  it quietly starts fresh instead.
+  can't be pushed into a state it doesn't understand. In team mode a new version is tried out of
+  sight first: if it crashes only with the kid's progress, it's repaired to carry on from there;
+  if that doesn't work out, it quietly starts fresh instead.
 - **Your subscription is the brain.** Build Buddy runs the official `claude` or `codex` command-line
   tools in non-interactive mode on your computer, so each request counts against your plan's normal
   usage, just as if you'd typed it yourself. It doesn't extract or reuse login tokens.
@@ -251,18 +253,16 @@ Buddy changes.
   they can't invent sentences; and rude words that a mumble gets misheard as are masked. Listening
   starts half a second before the talk key goes down and keeps going a moment after it's let go.
 - **Built by a team.** In [team mode](#team-mode) (the default), a quick model answers out loud
-  within about 2 seconds, and for anything new a quick first look at it is on screen within about
-  14 seconds, ready to play with, while three leads race to plan the creation and up to six
-  helpers write its pieces at the same time, each starting the moment its job is written. Before
-  anything is shown, every script is checked, something new is run out of sight for a moment,
-  and a fixer repairs what doesn't run; right after it
+  within about 2 seconds, while three leads race to plan the creation and up to six helpers write
+  its pieces at the same time, each starting the moment its job is written (a robot on the
+  building screen for each). Before anything is shown, every script is checked, the page is run
+  out of sight for a moment, and a fixer repairs what doesn't run; right after it
   appears, a checker and then a polisher (twice) look over the whole page and at a screenshot of it
   running, and give it fixes and finishing touches (in tests: a piano key that crashed, food the
   fish could never reach, a frog that caught flies on its own, a car too big for its road, a
   dragon without real wings). Their changes are tried out of sight first, so they can never break
   a creation that works, and slide in while the kid plays. On a test set of eight new creations
-  and four changes (timed like at home), a first look was on screen after about 14 s, and the full
-  creation after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds, against
+  and four changes (timed like at home), the full creation arrived after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds, against
   72 s); Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s instead
   of 26 s. In blind side-by-side judging against the classic way, the team's creations won 11 of
   12; scored one at a time against fixed anchors (10 = nothing noticeably wrong), they averaged 7.8
