@@ -124,10 +124,10 @@ MAIN:
 \`\`\`
 
 - The page is one module script: your shared code, then each part's code, then MAIN.
-- The shared code (at most about 20 lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
+- The shared code (at most about 25 lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
 - Each helper starts the moment its line is written, seeing your shared code and the jobs before it - so write all the jobs before MAIN, biggest first.
 - Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under 40 words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
-- Parts only define things: nothing runs until MAIN calls it. MAIN (about 15-30 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop and handles input.
+- Parts only define things: nothing runs until MAIN calls it. MAIN (about 20-40 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop (in 3D it calls renderer.render(scene, camera) every frame) and handles input.
 - The pieces are written apart, so they only fit if everyone follows the same rules - put them in the shared code and the jobs:
   - Time is always in seconds: MAIN's loop passes every update dt (seconds since the last frame, at most 0.05) and t (seconds since the start). Say so in the signatures, like update(dt, t).
   - MAIN owns the input: it keeps a shared input object up to date (like input.left, input.right, input.up and input.down for the arrow keys, input.x, input.y and input.pressed for the pointer, and input.tapped for a tap this frame), and the parts read it. A part that reacts to taps on its own things says so in its job, with the exact function MAIN calls, like hitTest(x, y) → true if tapped.
@@ -135,7 +135,7 @@ MAIN:
   - In 3D, MAIN owns the camera unless a job says otherwise.
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts.
-- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about 25 short lines each (about 1,600 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene) into two parts.
+- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(4, n)}-${n} small parts of about 30 short lines each (about 2,000 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene) into two parts.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.
 
 ${talkingRules()}
@@ -154,7 +154,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - Extra top-level names you need (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part.
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - big emoji and pictures instead.
-- About 25 short lines, about 1,600 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
+- About 30 short lines, about 2,000 characters (never more than 3,000): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
 - If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far.
 - The pieces only fit if you follow the team's rules: time is always in seconds - use dt and t exactly as passed to you (seconds since the last frame / since the start), and never divide them by 1000 again; read keys and the pointer from the shared input object (or the handler your job names) rather than adding your own listeners, unless your job says to; use exactly the names, ids, attributes and fields your job and the shared code give, and create everything your job says other pieces rely on.
@@ -200,7 +200,7 @@ Check:
 4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame.
 6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made, and none of the errors the page reported while running.
-7. How it looks (if there's a screenshot, look at it first with the Read tool): nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
+7. How it looks (if there's a screenshot, look at it first with the Read tool). If it's blank or nearly empty, find out why nothing is drawn (in 3D: is renderer.render(scene, camera) called every frame?). nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
 
 The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the 'three' and 'phaser' imports: they exist.
 
@@ -519,6 +519,13 @@ export async function syntaxErrors(html) {
   return errs;
 }
 
+// Problems that certainly spoil the page without throwing an error: a 3D page that never draws.
+export function blankProblems(html) {
+  const code = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n');
+  if (/from\s*['"]three['"]/.test(code) && !/\.render\s*\(/.test(code)) return ['It never draws: nothing calls renderer.render(scene, camera), so the screen stays blank. Call it at the end of every frame of the main loop.'];
+  return [];
+}
+
 // Apply the edits that fit; return the ones that don't.
 function applySome(page, edits) {
   let html = page;
@@ -770,11 +777,11 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
 
     // Every script should parse: one repair before it's shown.
     if (html) {
-      const problems = await syntaxErrors(html);
+      const problems = [...(await syntaxErrors(html)), ...blankProblems(html)];
       if (problems.length) {
         log(`team: page doesn't parse (${problems.join('; ').slice(0, 200)}), asking the fixer`);
         const repaired = await fix(html, `The page doesn't run: ${problems.join('\n')}\nFix just that.`, signal, spent);
-        const left = await syntaxErrors(repaired);
+        const left = [...(await syntaxErrors(repaired)), ...blankProblems(repaired)];
         log(`team: fixer ${left.length ? `didn't manage (${left[0].slice(0, 120)})` : 'fixed it'} at ${secs()}`);
         if (left.length < problems.length || !left.length) html = repaired;
       }
