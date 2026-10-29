@@ -62,7 +62,7 @@
       return kept;
     },
     get restored() {
-      return saved !== undefined;
+      return saved != null;
     },
     get current() {
       return kept;

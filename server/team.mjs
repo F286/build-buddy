@@ -132,6 +132,7 @@ CHANGES:
 //@change <name>: <the job>
 //@change <name>: <the job>
 Each helper sees the current page, the kid's words and all the jobs, and starts the moment its line is written, so write the lines straight away, biggest first. Split the work by area of the page so that no two jobs change the same lines - even one bigger thing splits well (a second player: one job adds the second car and draws it, one wires its W A S D keys, one gives it its own score). Anything one job adds and another uses - a variable, a function, an object's field, a sound - is named exactly, in both jobs ("adds player2 = { x, y, score }" ... "moves player2 with W A S D"). Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Use 2-${n} changes.
+Whichever way you change it, the kid carries on where they were: keep the KB.keep names and what they mean, and anything new they can make progress in (a level, a second player's score) goes into keep too.
 
 For anything new, or when most of the page has to change, write the plan - start writing it straight away rather than thinking it all through first (each helper starts the moment its line appears, and the details are theirs):
 PLAN:
@@ -156,6 +157,7 @@ MAIN:
   - Anything one piece makes and another uses - an element's id or data- attribute, an object's fields, a mesh's userData - is named exactly in both jobs (or in the shared code).
   - In 3D, MAIN owns the camera unless a job says otherwise.
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
+- The kid changes the page often, and it starts again after every change: everything they'd be sad to lose then - where the player is and which way it faces, the level, the score, what they collected, placed, unlocked or chose, a view they turned - lives in the keep object in the shared code (const keep = KB.keep({ ... })), and each job says which keep fields its part puts back when it starts and updates as they change.
 - Give it everything a kid pictures when they ask for that kind of thing - what makes it what it is (a soccer game has a goalie to beat, a train has tracks and a station, a band has players who each make their own sound) - each in a job.
 - Everything is drawn in the look, so the whole scene looks like one picture: characters and things are shapes drawn in that style, not emoji (a big emoji clashes with a drawn look).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts. Controls a 5-year-old gets at once: the arrow keys move things the way they point on the screen (left goes left, up goes up: seen from above, never steering-wheel turns; behind a chase camera, left turns left), and a quick tap gets a clear answer right away (the star hops or zooms there, sparkles and a sound where they tapped), not only while the finger is held.
@@ -181,6 +183,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - Draw everything in your piece in the look you're given (its colors, shapes and outlines), so it looks like part of one picture - not emoji, which clash with a drawn look.
 - About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen (left goes left; seen from above, not steering-wheel turns). Reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
+- Anything in your piece the kid would be sad to lose when the page changes - where the player is, a level, things collected, placed or unlocked - lives in the shared keep object (the fields your job or the shared code name): put it back from there when your piece starts (on screen) and update it as it changes, not only in variables of your own.
 - If your piece is the star (the thing the kid asked for), make it easy to recognize at a glance (a piano has its body and black keys, a dragon has wings) and big enough that its face and eyes are clear from where the camera looks - but in proportion with its world (a car fits on its road).
 - If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far. Fill it the short way: a few kinds of things, each made in a loop many times over with varied sizes, colors and spots, not lots of separate code. Put what sets the look (clouds, the sun, hills) where the camera really sees it.
 - The pieces only fit if you follow the team's rules: time is always in seconds - use dt and t exactly as passed to you (seconds since the last frame / since the start), and never divide them by 1000 again; read keys and the pointer from the shared input object (or the handler your job names) rather than adding your own listeners, unless your job says to; use exactly the names, ids, attributes and fields your job and the shared code give, and create everything your job says other pieces rely on.
@@ -227,6 +230,7 @@ Check:
 4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame. If it runs below about 30 frames per second, find what makes each frame heavy and lighten it (fewer shadow-casting or moving things, drawing once instead of every frame).
 6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made, and none of the errors the page reported while running.
+6b. Carrying on: the page starts again after every change, so where the player is, the level, the score and what the kid collected, placed or unlocked are kept in KB.keep - updated as they change, and put back (on screen) when the page starts. Where one is missing, keep it with a small edit; never rename or remove a keep field.
 7. How it looks (if there's a screenshot, look at it first with the Read tool). If it's blank or nearly empty, find out why nothing is drawn (in 3D: is renderer.render(scene, camera) called every frame?). nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
 
 The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the 'three' and 'phaser' imports: they exist.
@@ -1053,26 +1057,39 @@ function saveScreenshot(dataUrl) {
 }
 
 // The team's new page crashed when the app tried it out of sight, before showing it: the fixer
-// repairs it first, and the repaired page takes the broken one's place (and version number).
-export async function repair({ version, errors }) {
+// proposes a repair, the app tries that out of sight too, and only then is it accepted (accept:
+// true), taking the broken page's place (and version number). With `keep`, the page only crashes
+// when it's handed the kid's progress: the repair makes it carry on from there instead.
+let proposed = null; // { projectId, version, html }
+
+export async function repair({ version, errors, keep, accept = false }) {
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
-  if (!enabled() || !errors || p.current !== version || v?.backend !== 'claude team') return { skipped: 'stale' };
+  if (!enabled() || p.current !== version || v?.backend !== 'claude team') return { skipped: 'stale' };
+  if (accept) {
+    if (proposed?.projectId !== p.id || proposed.version !== version || isBusy()) return { skipped: 'stale' };
+    const { n, at, ...meta } = v;
+    p = store.addVersion(store.dropVersion(p, version), proposed.html, meta);
+    proposed = null;
+    log(`REPAIR took → v${p.current}`);
+    return { version: p.current };
+  }
+  if (!errors) return { skipped: 'no errors' };
   const page = store.html(p);
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+  const problem = keep
+    ? `The page crashes when it starts with the kid's saved progress (KB.keep hands it back these values):\n${JSON.stringify(keep).slice(0, 1500)}\nThe error:\n${String(errors).slice(0, 1500)}\nMake it carry on from those values instead - accept them as they are, putting things back where they were (on screen) - and change nothing else.`
+    : `The page crashed when it ran:\n${String(errors).slice(0, 2000)}\nFix just that.`;
   try {
-    const html = await fix(page, `The page crashed when it ran:\n${String(errors).slice(0, 2000)}\nFix just that.`);
+    const html = await fix(page, problem);
     if (html === page || (await syntaxErrors(html)).length > (await syntaxErrors(page)).length) {
       log(`REPAIR skip ${took()} (no usable fix)`);
       return { skipped: 'no fix' };
     }
-    p = store.currentProject();
-    if (p.current !== version || isBusy()) return { skipped: 'stale' };
-    const { n, at, ...meta } = v;
-    p = store.addVersion(store.dropVersion(p, version), html, meta);
-    log(`REPAIR fix  ${took()} ${String(errors).split('\n')[0].slice(0, 120)} → v${p.current}`);
-    return { html, version: p.current };
+    proposed = { projectId: p.id, version, html };
+    log(`REPAIR fix  ${took()} ${keep ? '(with the kid\'s progress) ' : ''}${String(errors).split('\n')[0].slice(0, 120)}`);
+    return { html };
   } catch (err) {
     log(`REPAIR fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
     return { skipped: 'failed' };

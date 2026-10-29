@@ -520,17 +520,26 @@ async function build(body) {
   }
 }
 
+// The kid never sees a page that crashes: the repair is tried out of sight too, and only taken
+// if it runs. If the page only crashes with the kid's progress, the repair makes it carry on from
+// there; if that doesn't work out, it starts fresh when shown (see pageError).
 async function repairFirst(result) {
   const keep = result.continues && state.kept?.projectId === state.project?.id ? state.kept.keep : null;
   let errors = await tryPage(result.html, keep, 1500);
-  // Only with the kid's old progress? Then it's started fresh when shown (see pageError).
-  if (errors.length && keep) errors = await tryPage(result.html, null, 1500);
+  let withKeep = false;
+  if (errors.length && keep) {
+    const fresh = await tryPage(result.html, null, 1500);
+    if (fresh.length) errors = fresh;
+    else withKeep = true;
+  }
   errors = [...new Set(errors)];
   if (!errors.length) return result;
-  console.warn('the new version crashed when tried, repairing it first:', errors[0]);
+  console.warn(`the new version crashed when tried${withKeep ? ' with the kid\'s progress' : ''}, repairing it first:`, errors[0]);
   try {
-    const r = await api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n') });
-    return r.html ? { ...result, html: r.html, version: r.version } : result;
+    const r = await api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n'), keep: withKeep ? keep : undefined });
+    if (!r.html || (await tryPage(r.html, withKeep ? keep : null, 1500)).length) return result;
+    const took = await api('/api/repair', { version: result.version, accept: true });
+    return took.version ? { ...result, html: r.html, version: took.version } : result;
   } catch {
     return result;
   }
