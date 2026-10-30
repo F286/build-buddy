@@ -486,6 +486,7 @@ async function build(body) {
   }
   // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
   // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
+  state.fixing = false; // the server counted the fix's time back up to here; trying it is play time
   if (result?.html && result.backend === 'claude team') result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
@@ -607,16 +608,17 @@ async function checkCreation({ urgent = false } = {}) {
     if (!due || overlayOpen()) return;
   }
 
-  const answer = await askPage('inspect?', 4000);
-  const report = answer?.report;
-  if (!report) return;
-  // Nobody's played for a while since the last look: nothing new to learn, skip the check.
-  if (!urgent && last && report.idleSec > 90) return;
-  const { screenshot, ...rest } = report;
-  overwatch.lastCheck.set(key, Date.now());
-  if (urgent) overwatch.urgentDone.add(key);
+  // Running from here on, so errors repeating while it looks don't start another one.
   overwatch.running = true;
   try {
+    const answer = await askPage('inspect?', 4000);
+    const report = answer?.report;
+    if (!report) return;
+    // Nobody's played for a while since the last look: nothing new to learn, skip the check.
+    if (!urgent && last && report.idleSec > 90) return;
+    const { screenshot, ...rest } = report;
+    overwatch.lastCheck.set(key, Date.now());
+    if (urgent) overwatch.urgentDone.add(key);
     const r = await api('/api/watch', {
       projectId,
       version,

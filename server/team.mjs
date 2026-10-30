@@ -1175,17 +1175,18 @@ function saveScreenshot(dataUrl) {
 // proposes a repair, the app tries that out of sight too, and only then is it accepted (accept:
 // true), taking the broken page's place (and version number). With `keep`, the page only crashes
 // when it's handed the kid's progress: the repair makes it carry on from there instead.
-let proposed = null; // { projectId, version, html }
+const proposals = new Map(); // `${projectId}:${version}` → the repaired page, until accepted
 
 export async function repair({ version, errors, keep, accept = false }) {
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
   if (!enabled() || p.current !== version || v?.backend !== 'claude team') return { skipped: 'stale' };
   if (accept) {
-    if (proposed?.projectId !== p.id || proposed.version !== version || isBusy()) return { skipped: 'stale' };
+    const html = proposals.get(`${p.id}:${version}`);
+    if (!html || isBusy()) return { skipped: 'stale' };
+    proposals.delete(`${p.id}:${version}`);
     const { n, at, ...meta } = v;
-    p = store.addVersion(store.dropVersion(p, version), proposed.html, meta);
-    proposed = null;
+    p = store.addVersion(store.dropVersion(p, version), html, meta);
     log(`REPAIR took → v${p.current}`);
     return { version: p.current };
   }
@@ -1202,7 +1203,8 @@ export async function repair({ version, errors, keep, accept = false }) {
       log(`REPAIR skip ${took()} (no usable fix)`);
       return { skipped: 'no fix' };
     }
-    proposed = { projectId: p.id, version, html };
+    proposals.set(`${p.id}:${version}`, html);
+    while (proposals.size > 5) proposals.delete(proposals.keys().next().value);
     log(`REPAIR fix  ${took()} ${keep ? '(with the kid\'s progress) ' : ''}${String(errors).split('\n')[0].slice(0, 120)}`);
     return { html };
   } catch (err) {
@@ -1235,11 +1237,30 @@ export function polishPasses() {
   return v === false ? 0 : v === true || v == null ? 1 : Math.max(0, Math.min(3, Math.round(Number(v)) || 0));
 }
 
+// The versions the app has asked about: it does that only once one is on stage, tried (and
+// repaired, if it crashed) - so fixes may be carried over onto it.
+const onStage = new Set();
+
+// Are the versions after `version`, up to the current one, only fixes (a check, polish or
+// overwatch fix carried over onto it)?
+function onlyFixesSince(p, version) {
+  for (let n = p.current, steps = 0; n !== version && steps < 50; steps++) {
+    const v = p.versions.find(x => x.n === n);
+    if (!v || !/check|polish|overwatch/.test(v.backend || '')) return false;
+    n = v.from;
+  }
+  return true;
+}
+
 export async function check({ projectId, version, report, screenshot, polish = false }) {
   if (!enabled() || config().team.check === false || (polish && !polishPasses())) return { skipped: 'off' };
   let p = store.currentProject();
-  if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
+  if (!version || p.id !== projectId) return { skipped: 'stale' };
+  onStage.add(`${projectId}:${version}`);
+  // A fix carried over onto it meanwhile doesn't make it stale: the page as it is now is looked at.
+  if (p.current !== version && !onlyFixesSince(p, version)) return { skipped: 'stale' };
   const v = p.versions.find(x => x.n === version);
+  const at = p.current; // the version whose page is looked at
   if (polish) {
     // Only on what the team built and checked, and only as many times as asked.
     const since = p.versions.slice(p.versions.findLastIndex(x => x.backend === 'claude team') + 1);
@@ -1263,26 +1284,32 @@ export async function check({ projectId, version, report, screenshot, polish = f
       return r.skipped ? { skipped: r.skipped } : { ok: true };
     }
     // The kid may have moved on meanwhile: never overwrite newer work. If they're getting a change
-    // built, wait for it; then the fix is carried over onto their newer version of the same
-    // creation - but only if every edit of it still fits there exactly.
-    for (let waited = 0; isBusy() && waited < 120; waited++) await sleep(1000);
+    // built, wait for it - and for the app to have it on stage, tried (and repaired, if it
+    // crashed) - then the fix is carried over onto that newer version of the same creation, but
+    // only if every edit of it still fits there exactly.
+    const ready = () => {
+      const q = store.currentProject();
+      const cur = q.versions.find(x => x.n === q.current);
+      return !isBusy() && (q.current === at || cur?.backend !== 'claude team' || onStage.has(`${q.id}:${q.current}`));
+    };
+    for (let waited = 0; !ready() && waited < 150; waited++) await sleep(1000);
     p = store.currentProject();
     let html = r.html;
     const base = p.current;
-    if (p.id === projectId && base !== version && !isBusy() && continuesFrom(p, version)) {
+    if (p.id === projectId && base !== at && ready() && continuesFrom(p, at)) {
       try {
         html = applyEdits(store.html(p), r.applied);
         if ((await syntaxErrors(html)).length > (await syntaxErrors(store.html(p))).length) html = null;
       } catch {
         html = null;
       }
-      if (html) log(`${what} carried over from v${version} to v${base}`);
+      if (html) log(`${what} carried over from v${at} to v${base}`);
     }
-    if (!html || p.id !== projectId || isBusy() || (base !== version && html === r.html)) {
+    if (!html || p.id !== projectId || !ready() || (base !== at && html === r.html)) {
       log(`${what} stale ${took()} ${r.why}`);
       return { skipped: 'stale' };
     }
-    p = store.addVersion(p, html, { request: `(team ${polish ? 'polish' : 'check'}) ${r.why}`, backend: polish ? 'claude team polish' : 'claude team check', continues: change || base !== version });
+    p = store.addVersion(p, html, { request: `(team ${polish ? 'polish' : 'check'}) ${r.why}`, backend: polish ? 'claude team polish' : 'claude team check', continues: change || base !== at });
     log(`${what} fix  ${took()} ${r.why} (${r.edits} edits${shot ? ', saw a screenshot' : ''}) → v${p.current}`);
     return { fixed: true, verdict: 'fix', why: r.why, html: store.html(p), version: p.current, base };
   } catch (err) {
