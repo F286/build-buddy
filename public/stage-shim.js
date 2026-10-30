@@ -43,7 +43,11 @@
     if (Array.isArray(def)) {
       if (!Array.isArray(val) || val.length > 500) return def;
       const sample = def[0];
-      const ok = val.every(v => (sample === undefined ? ['number', 'string', 'boolean'].includes(typeof v) && fits(v, v) : fits(sample, v)));
+      // With an empty list to start from: simple values, or flat objects of them (like the things
+      // the kid placed, { x, y, kind }).
+      const simple = v => ['number', 'string', 'boolean'].includes(typeof v) && fits(v, v);
+      const flat = v => simple(v) || (plain(v) && Object.values(v).every(simple));
+      const ok = val.every(v => (sample === undefined ? flat(v) : fits(sample, v)));
       return ok ? val.slice() : def;
     }
     return val !== undefined && fits(def, val) ? val : def;
