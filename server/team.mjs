@@ -131,7 +131,8 @@ When the kid asks for several separate things at once (like "make it night and g
 CHANGES:
 //@change <name>: <the job>
 //@change <name>: <the job>
-Each helper sees the current page and the kid's words, and starts the moment its line is written. Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Give every helper a different area of the page: never two jobs that change the same lines. Use 2-${n} changes, one per separate thing the kid asked for.
+Each helper sees the current page, the kid's words, its own job and the jobs written before it, and starts the moment its line is written, so write the lines straight away. Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Give every helper a different area of the page: never two jobs that change the same lines. Anything one job adds and another uses - a variable, a function, an object's field - is named exactly in both jobs, and the job that adds it comes first. New progress to keep is added to the KB.keep({ ... }) line by one job only (it names all the new fields), never by two. Use 2-${n} changes, one per separate thing the kid asked for.
+Whichever way you change it, the kid carries on where they were: keep the KB.keep names and what they mean, and anything new they can make progress in (a level, a second player's score) goes into keep too.
 
 For anything new, or when most of the page has to change, write the plan - start writing it straight away rather than thinking it all through first (each helper starts the moment its line appears, and the details are theirs):
 PLAN:
@@ -156,6 +157,7 @@ MAIN:
   - Anything one piece makes and another uses - an element's id or data- attribute, an object's fields, a mesh's userData - is named exactly in both jobs (or in the shared code).
   - In 3D, MAIN owns the camera unless a job says otherwise.
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
+- The kid changes the page often, and it starts again after every change: everything they'd be sad to lose then - where the player is and which way it faces, the level, the score, what they collected, placed, unlocked or chose, a view they turned - lives in the keep object in the shared code (const keep = KB.keep({ ... })) - every field in its defaults there, since only those carry over - and each job says which keep fields its part puts back when it starts and updates as they change.
 - Give it everything a kid pictures when they ask for that kind of thing - what makes it what it is (a soccer game has a goalie to beat, a train has tracks and a station, a band has players who each make their own sound) - each in a job.
 - Everything is drawn in the look, so the whole scene looks like one picture: characters and things are shapes drawn in that style, not emoji (a big emoji clashes with a drawn look).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts. Controls a 5-year-old gets at once: the arrow keys move things the way they point on the screen (left goes left, up goes up: seen from above, never steering-wheel turns; behind a chase camera, left turns left), and a quick tap gets a clear answer right away (the star hops or zooms there, sparkles and a sound where they tapped), not only while the finger is held.
@@ -181,6 +183,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - Draw everything in your piece in the look you're given (its colors, shapes and outlines), so it looks like part of one picture - not emoji, which clash with a drawn look.
 - About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen (left goes left; seen from above, not steering-wheel turns). Reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
+- Anything in your piece the kid would be sad to lose when the page changes - where the player is, a level, things collected, placed or unlocked - lives in the shared keep object - in the fields of the shared code's KB.keep({ ... }) (only those carry over): put it back from there when your piece starts (on screen) and update it as it changes, not only in variables of your own.
 - If your piece is the star (the thing the kid asked for), make it easy to recognize at a glance (a piano has its body and black keys, a dragon has wings) and big enough that its face and eyes are clear from where the camera looks - but in proportion with its world (a car fits on its road).
 - If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far. Fill it the short way: a few kinds of things, each made in a loop many times over with varied sizes, colors and spots, not lots of separate code. Put what sets the look (clouds, the sun, hills) where the camera really sees it.
 - The pieces only fit if you follow the team's rules: time is always in seconds - use dt and t exactly as passed to you (seconds since the last frame / since the start), and never divide them by 1000 again; read keys and the pointer from the shared input object (or the handler your job names) rather than adding your own listeners, unless your job says to; use exactly the names, ids, attributes and fields your job and the shared code give, and create everything your job says other pieces rely on.
@@ -189,7 +192,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 
 Some jobs are a change to the current page instead ("//@change <name>: <the job>"). Then reply with only FIND/REPLACE edits to the current page, each as:
 ${EDIT_FORMAT}
-FIND must be copied exactly from the current page and match only once: include a couple of lines of context. Change only what your job needs - other helpers are changing other parts of the same page at the same time. Keep everything the kid already built, and the KB.keep names.
+FIND must be copied exactly from the current page and match only once: include a couple of lines of context. Change only what your job needs - other helpers are changing other parts of the same page at the same time. Something your job says another job adds (by the name your job gives) will be there: use it, but don't make it yourself. Keep everything the kid already built, and the KB.keep names.
 
 ${buildingRules()}`, 'ask it once before you write your code, if your job is tricky.');
 }
@@ -227,6 +230,7 @@ Check:
 4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame. If it runs below about 30 frames per second, find what makes each frame heavy and lighten it (fewer shadow-casting or moving things, drawing once instead of every frame).
 6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made, and none of the errors the page reported while running.
+6b. Carrying on: the page starts again after every change. If the score, the level or where the player is isn't kept in KB.keep (so a change would start the kid over), keep it with a small edit - its default in KB.keep({ ... }), updated as it changes, put back (on screen) when the page starts; never rename or remove a keep field.
 7. How it looks (if there's a screenshot, look at it first with the Read tool). If it's blank or nearly empty, find out why nothing is drawn (in 3D: is renderer.render(scene, camera) called every frame?). nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
 
 The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the 'three' and 'phaser' imports: they exist.
@@ -360,8 +364,9 @@ export function warm() {
 }
 
 // Ask one member of the team. onText(chunk) gets the reply as it's written. Resolves with the
-// whole reply; the AbortSignal stops it.
-function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tally, tools = '' }) {
+// whole reply; the AbortSignal stops it. stallSec: once it has started writing, a reply that goes
+// quiet that long has stalled (a dropped stream) - it's stopped, so it can be asked again.
+function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stallSec, tally, tools = '' }) {
   const args = claudeArgs(name, system, tools);
   const r = roleConfig(name);
   return new Promise((resolve, reject) => {
@@ -381,10 +386,12 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
     let speed = '';
     let tokens = 0;
     let messageTokens = 0;
+    let quietSince = Date.now();
     const finish = err => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      clearInterval(stallTimer);
       signal?.removeEventListener('abort', stop);
       if (err) {
         proc.child.kill('SIGKILL');
@@ -437,6 +444,7 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
       }
     };
     const onData = chunk => {
+      quietSince = Date.now();
       buf += chunk;
       const lines = buf.split('\n');
       buf = lines.pop();
@@ -444,6 +452,8 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, tall
     };
     const stop = () => finish(new Error('stopped'));
     const timer = setTimeout(() => finish(new Error(`claude ${name} took longer than ${timeoutSec || config().timeoutSec}s`)), (timeoutSec || config().timeoutSec) * 1000);
+    // (Not with an advisor: asking it pauses the reply.)
+    const stallTimer = stallSec && !r.advisor ? setInterval(() => streamed && Date.now() - quietSince > stallSec * 1000 && finish(new Error(`claude ${name} stalled`)), 1000) : null;
     signal?.addEventListener('abort', stop);
     proc.onData = onData;
     proc.early.splice(0).forEach(onData);
@@ -461,7 +471,10 @@ const JOB_LINE = /^[ \t>*_`-]*(?:\d+[.)][ \t]*)?\/\/[ \t]*@(part|change)[ \t]+([
 const HEAD = name => new RegExp(`^[ \\t>*_#]*${name}[*_]*:`, 'im');
 const SHARED_BLOCK = /^[ \t>*_#]*PLAN[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```[ \t]*\n/im;
 const CHANGES_HEAD = /^[ \t>*_#]*CHANGES[*_]*:[^\n]*\n/im;
-const MAIN_BLOCK = /^[ \t>*_#]*MAIN[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```/im;
+// MAIN may come with a few words in capitals, like "MAIN code:" - but "Main pieces:" isn't it.
+const MAIN_WORD = '(?:[Mm][Aa][Ii][Nn][*_]*|MAIN\\b[^\\n:]{0,30}):';
+const MAIN_HEAD = new RegExp(`^[ \\t>*_#]*${MAIN_WORD}`, 'm');
+const MAIN_BLOCK = new RegExp(`^[ \\t>*_#]*${MAIN_WORD}[^\\n]*\\n+[ \\t]*\`\`\`[a-z]*[ \\t]*\\n([\\s\\S]*?)\\n[ \\t]*\`\`\``, 'm');
 
 // Reads the lead's reply as it's written: a PLAN (shared code, then //@part jobs, then MAIN) or
 // CHANGES (//@change jobs). Each job is handed to onJob the moment its line is complete. When
@@ -507,7 +520,7 @@ class PlanReader {
 
   line(l) {
     if (this.lost) return;
-    if (HEAD('MAIN').test(l)) this.inMain = true;
+    if (MAIN_HEAD.test(l)) this.inMain = true;
     const m = !this.inMain && JOB_LINE.exec(l);
     if (!m || m[1] !== (this.changes ? 'change' : 'part')) return;
     let name = m[2].toLowerCase();
@@ -672,10 +685,62 @@ function applySome(page, edits) {
     try {
       html = applyEdits(html, [e]);
     } catch {
-      failed.push(e);
+      const core = applyCore(html, e);
+      if (core == null) failed.push(e);
+      else html = core;
     }
   }
   return { html, failed };
+}
+
+// Helpers changing the same page write their edits apart, so one edit's context lines may already
+// have been changed by another's, and its FIND no longer matches. Then it's applied with just the
+// lines it really changes - if those (or, for lines it only adds, the line just before or after
+// them) are on the page exactly once. Returns the new page, or null.
+export function applyCore(html, { find, replace }) {
+  const f = find.split('\n');
+  const r = replace.split('\n');
+  const same = (a, b) => a.trim() === b.trim();
+  let a = 0;
+  while (a < f.length && a < r.length && same(f[a], r[a])) a++;
+  let b = 0;
+  while (b < f.length - a && b < r.length - a && same(f[f.length - 1 - b], r[r.length - 1 - b])) b++;
+  const gone = f.slice(a, f.length - b).map(l => l.trim());
+  const added = r.slice(a, r.length - b);
+  const lines = html.split('\n');
+  const at = want => {
+    const hits = [];
+    for (let k = 0; k + want.length <= lines.length; k++) if (want.every((w, j) => lines[k + j].trim() === w)) hits.push(k);
+    return hits.length === 1 ? hits[0] : -1;
+  };
+  // The rest of the FIND (its context) must still be where it was relative to the change, so a twin
+  // block elsewhere is never the one edited.
+  const telling = l => /[\w$]{3}/.test(l); // a "}" or ");" line says nothing about where it is
+  // The context line nearest the change, on each side, must be exactly where it was: a twin block
+  // right next door would otherwise pass for it.
+  const placed = (from, to, skip = -1) => {
+    // from: where FIND line a (the first changed one) sits on the page; to: where line f.length - b does
+    const above = [...Array(a).keys()].filter(c => c !== skip && telling(f[c].trim())).at(-1);
+    const below = [...Array(b).keys()].map(c => f.length - b + c).find(c => c !== skip && telling(f[c].trim()));
+    const exact = (c, base, at0) => c === undefined || lines[at0 + c - base]?.trim() === f[c].trim();
+    return exact(above, a, from) && exact(below, f.length - b, to);
+  };
+  if (gone.some(Boolean)) {
+    const k = at(gone);
+    if (k < 0 || !placed(k, k + gone.length)) return null;
+    lines.splice(k, gone.length, ...added);
+    return lines.join('\n');
+  }
+  // Only adds lines: put them after the line before them, or before the line after them.
+  const ia = f.slice(0, a).map(l => l.trim()).findLastIndex(Boolean);
+  const ib = f.slice(f.length - b).map(l => l.trim()).findIndex(Boolean);
+  // Already there (the same edit twice, or two helpers adding the same line): it's done.
+  const has = from => from >= 0 && added.every((l, j) => lines[from + j]?.trim() === l.trim());
+  let k = ia >= 0 ? at([f[ia].trim()]) : -1;
+  if (k >= 0 && placed(k + 1, k + 1, ia)) has(k + 1) || lines.splice(k + 1, 0, ...added);
+  else if (ib >= 0 && (k = at([f[f.length - b + ib].trim()])) >= 0 && placed(k, k, f.length - b + ib)) has(k - added.length) || lines.splice(k, 0, ...added);
+  else return null;
+  return lines.join('\n');
 }
 
 const showEdits = edits => edits.map(e => `<<<<<<< FIND\n${e.find}\n=======\n${e.replace}\n>>>>>>> REPLACE`).join('\n\n');
@@ -688,17 +753,26 @@ async function applyEditsWithFixer(page, edits, signal, tally) {
   log(`team: ${first.failed.length} of ${edits.length} edits didn't fit, asking the fixer`);
   const reply = await ask('fixer', {
     system: fixerSystem(),
-    prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above):\n\n${showEdits(first.failed)}`,
+    prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above). If they are all already done on the page, reply with just: DONE\n\n${showEdits(first.failed)}`,
     signal,
     tally,
-  });
-  const again = parseReply(reply.text).edits;
-  const second = applySome(first.html, again);
-  return { html: second.html, failed: again.length ? second.failed : first.failed };
+    timeoutSec: 60,
+  }).catch(err => (signal?.aborted ? Promise.reject(err) : { text: '' }));
+  const r = parseReply(reply.text);
+  const scripts = h => (h.match(/<script\b/gi) || []).length;
+  // The whole page, written again with the changes in: used only if it is one, and parses.
+  if (r.html && /^\s*<(!doctype|html)/i.test(r.html) && /<\/html>\s*$/i.test(r.html) && !/^(<<<<<<<|>>>>>>>)/m.test(r.html) && scripts(r.html) === scripts(first.html) && !(await syntaxErrors(r.html)).length) {
+    return { html: r.html, failed: [] };
+  }
+  if (!r.edits.length) return { html: first.html, failed: /^\s*DONE\b/.test(reply.text) ? [] : first.failed };
+  // Written again, and every one fits: done. If any still doesn't, all of the first misfits count as
+  // missing (which rewritten edit stands for which original can't be told).
+  const second = applySome(first.html, r.edits);
+  return { html: second.html, failed: second.failed.length ? first.failed : [] };
 }
 
 async function fix(html, problem, signal, tally) {
-  const reply = await ask('fixer', { system: fixerSystem(), prompt: `<page>\n${html}\n</page>\n\n${problem}`, signal, tally });
+  const reply = await ask('fixer', { system: fixerSystem(), prompt: `<page>\n${html}\n</page>\n\n${problem}`, signal, tally, timeoutSec: 60 });
   const r = parseReply(reply.text);
   if (r.html) return r.html;
   return applySome(html, r.edits).html;
@@ -718,9 +792,10 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   let chars = 0;
   let helpersDone = 0;
   const jobs = [];
+  // team: the app shows the team at work, even before (or without) helpers.
   const progress = (n = 0) => {
     chars += n;
-    emit({ type: 'progress', chars, helpers: jobs.length, helpersDone });
+    emit({ type: 'progress', chars, helpers: jobs.length, helpersDone, team: true, leads: runs.filter(run => !run.over && !run.stop.signal.aborted).length || 1 });
   };
 
   // The voice answers out loud while the lead plans (but never after the build is over).
@@ -789,6 +864,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
           ask('helper', {
             system: helperSystem(),
             prompt,
+            stallSec: 20,
             onText: chunk => {
               if (i === 0) wrote = true;
               progress(chunk.length);
@@ -847,6 +923,21 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   const leads = Math.max(1, Math.min(3, Number(config().team.leads) || 1));
   const runs = [];
   let winner = null;
+  // A lead that only talks (it didn't understand, or there's nothing to build) doesn't stop the
+  // others: its answer is used only if none of them builds anything.
+  let talker = null;
+  const builds = t => HEAD('PLAN').test(t) || HEAD('CHANGES').test(t) || Boolean(parseReply(t).html) || parseReply(t).edits.length > 0;
+  // Once one has talked, the others get a few seconds to start building; then the answer is used.
+  let talkerTimer = null;
+  let settleTalker;
+  const talkerAnswer = new Promise((resolve, reject) => (settleTalker = { resolve, reject }));
+  talkerAnswer.catch(() => {});
+  const useTalker = () => {
+    clearTimeout(talkerTimer);
+    if (talker && claim(talker.i)) settleTalker.resolve(talker.reply);
+    else settleTalker.reject(new Error('no answer'));
+  };
+  const building = run => !run.over && (HEAD('PLAN').test(run.reader.text) || HEAD('CHANGES').test(run.reader.text) || /^<<<<<<< FIND/m.test(run.reader.text));
   const claim = i => {
     if (winner == null) {
       winner = i;
@@ -864,6 +955,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     run.done = ask('lead', {
       system: leadSystem(),
       prompt,
+      stallSec: 30,
       signal: AbortSignal.any([signal, stop.signal]),
       tally: spent,
       onText: chunk => {
@@ -874,12 +966,27 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
         progress(chunk.length);
       },
     }).then(reply => {
+      const others = runs.some((other, j) => j !== i && !other.over);
+      if (winner == null && !builds(reply.text)) {
+        if (field(reply.text, 'SAY') && others) {
+          talker ??= { i, reply };
+          talkerTimer ??= setTimeout(() => !runs.some(building) && useTalker(), 4000);
+          throw new Error('it only talked');
+        }
+        // A reply we can't read doesn't win over one that answered, or over the others.
+        if (talker || others) throw new Error("couldn't read the lead's reply");
+      }
       if (!claim(i)) throw new Error('another lead was quicker');
       return reply;
     });
+    run.done.then(
+      () => (run.over = true),
+      () => (run.over = true),
+    );
     run.done.catch(() => {});
     runs.push(run);
   }
+  progress();
 
   // A first look (team.firstLook): a quick sketch of something new, shown while the team builds
   // the real thing - but only once a lead is writing a plan, never for changes to the page.
@@ -908,10 +1015,14 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
 
   try {
     let lead;
+    // When every lead is done without building, the talker's answer (if any) is used at once.
+    Promise.allSettled(runs.map(run => run.done)).then(useTalker);
     try {
-      lead = await Promise.any(runs.map(run => run.done));
+      lead = await Promise.any([...runs.map(run => run.done), talkerAnswer]);
     } catch (err) {
-      throw err.errors?.find(e => !/^(stopped|another lead was quicker)$/.test(e.message)) || err.errors?.[0] || err;
+      throw err.errors?.find(e => !/^(stopped|another lead was quicker|it only talked|no answer)$/.test(e.message)) || err.errors?.[0] || err;
+    } finally {
+      clearTimeout(talkerTimer);
     }
     const reader = runs[winner].reader;
     reader.push('\n');
@@ -927,6 +1038,14 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
     // classic way takes over - one AI that sees the whole page keeps everything already on it
     // (a fresh plan would rebuild it, and things the kid made could go missing).
     const misfit = failed => new Error(`edits didn't fit: ${failed[0].find.trim().split('\n')[0].slice(0, 60)}`);
+    // A few that still don't fit (at most 2, and a third of them): what fits is shown if it parses
+    // - the app tries it first, and the checker makes sure the change is really there.
+    const fitOrThrow = async (fitted, all) => {
+      if (!fitted.failed.length) return fitted.html;
+      if (fitted.failed.length > 2 || fitted.failed.length * 3 > all.length || (await syntaxErrors(fitted.html)).length) throw misfit(fitted.failed);
+      log(`team: ${fitted.failed.length} of ${all.length} edits still didn't fit, shown without ${fitted.failed.length > 1 ? 'them' : 'it'}`);
+      return fitted.html;
+    };
     const timing = jobs => {
       stats.parts = jobs.map(p => ({ name: p.name, ms: p.doneAt - p.startedAt, startedMs: p.startedAt - t0, chars: (p.code || p.reply).length }));
       const slowest = jobs.reduce((a, p) => (p.doneAt > (a?.doneAt || 0) ? p : a), null);
@@ -945,9 +1064,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       const changes = await Promise.all(reader.jobs.map(j => running.get(j.name)));
       const edits = changes.flatMap(c => parseReply(c.reply).edits);
       if (!edits.length) throw new Error('the helpers wrote no changes');
-      const fitted = await applyEditsWithFixer(page, edits, signal, spent);
-      if (fitted.failed.length) throw misfit(fitted.failed);
-      html = fitted.html;
+      html = await fitOrThrow(await applyEditsWithFixer(page, edits, signal, spent), edits);
       edited = true;
       how = `lead ${secs(leadAt)}, ${changes.length} helpers changing it with ${edits.length} edits${timing(changes)}`;
     } else if (r.html) {
@@ -955,11 +1072,12 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       how = `lead wrote it all, ${secs(leadAt)}`;
     } else if (r.edits.length) {
       if (!page) throw new Error('edits on a blank page');
-      const fitted = await applyEditsWithFixer(page, r.edits, signal, spent);
-      if (fitted.failed.length) throw misfit(fitted.failed);
-      html = fitted.html;
+      html = await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent), r.edits);
       edited = true;
       how = `lead's ${r.edits.length} edits, ${secs(leadAt)}`;
+    } else if (crash) {
+      // A crash fix that changes nothing doesn't fix the crash: the classic way tries instead.
+      throw new Error('the fix changed nothing');
     } else if (!field(lead.text, 'SAY')) {
       // Not a page, not edits, and not just talking: a reply we couldn't read.
       throw new Error("couldn't read the lead's reply");
@@ -974,7 +1092,13 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       const problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems];
       if (problems.length) {
         log(`team: page doesn't parse (${problems.join('; ').slice(0, 200)}), asking the fixer`);
-        const repaired = await fix(html, `The page doesn't run: ${problems.join('\n')}\nFix just that.`, signal, spent);
+        // If the fixer itself fails, the page is shown as it is (the app tries it first, and fixes
+        // what crashes): it's never thrown away for that.
+        const repaired = await fix(html, `The page doesn't run: ${problems.join('\n')}\nFix just that.`, signal, spent).catch(err => {
+          if (signal.aborted) throw err;
+          log(`team: the fixer failed (${err.message.replace(/\s+/g, ' ').slice(0, 120)})`);
+          return html;
+        });
         const left = [...(await syntaxErrors(repaired)), ...blankProblems(repaired), ...repairNames(repaired).problems];
         log(`team: fixer ${left.length ? `didn't manage (${left[0].slice(0, 120)})` : 'fixed it'} at ${secs()}`);
         if (left.length < problems.length || !left.length) html = repaired;
@@ -1041,7 +1165,7 @@ export async function reviewPage({ page, asked, told, look, report, shot, notes 
   if (failed.length === edits.length) return { html: null, why, skipped: "edits didn't fit" };
   // Never make it worse: the page must parse at least as well as before.
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length) return { html: null, why, skipped: "the fix didn't parse" };
-  return { html, why, edits: edits.length - failed.length };
+  return { html, why, edits: edits.length - failed.length, applied: edits.filter(e => !failed.includes(e)) };
 }
 
 function saveScreenshot(dataUrl) {
@@ -1052,28 +1176,42 @@ function saveScreenshot(dataUrl) {
   return file;
 }
 
-// The team's new creation crashed when the app tried it out of sight, while the first look was
-// still on the stage: the fixer repairs it before it's shown, and the repaired page takes the
-// broken one's place (and version number).
-export async function repair({ version, errors }) {
+// The team's new page crashed when the app tried it out of sight, before showing it: the fixer
+// proposes a repair, the app tries that out of sight too, and only then is it accepted (accept:
+// true), taking the broken page's place (and version number). With `keep`, the page only crashes
+// when it's handed the kid's progress: the repair makes it carry on from there instead.
+const proposals = new Map(); // `${projectId}:${version}` → the repaired page, until accepted
+
+export async function repair({ version, errors, keep, accept = false }) {
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
-  if (!enabled() || !errors || p.current !== version || v?.backend !== 'claude team') return { skipped: 'stale' };
+  if (!enabled() || p.current !== version || v?.backend !== 'claude team') return { skipped: 'stale' };
+  if (accept) {
+    const html = proposals.get(`${p.id}:${version}`);
+    if (!html || isBusy()) return { skipped: 'stale' };
+    proposals.delete(`${p.id}:${version}`);
+    const { n, at, ...meta } = v;
+    p = store.addVersion(store.dropVersion(p, version), html, meta);
+    log(`REPAIR took → v${p.current}`);
+    return { version: p.current };
+  }
+  if (!errors) return { skipped: 'no errors' };
   const page = store.html(p);
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+  const problem = keep
+    ? `The page crashes when it starts with the kid's saved progress (KB.keep hands it back these values):\n${JSON.stringify(keep).slice(0, 1500)}\nThe error:\n${String(errors).slice(0, 1500)}\nMake it carry on from those values instead - accept them as they are, putting things back where they were (on screen) - and change nothing else.`
+    : `The page crashed when it ran:\n${String(errors).slice(0, 2000)}\nFix just that.`;
   try {
-    const html = await fix(page, `The page crashed when it ran:\n${String(errors).slice(0, 2000)}\nFix just that.`);
+    const html = await fix(page, problem);
     if (html === page || (await syntaxErrors(html)).length > (await syntaxErrors(page)).length) {
       log(`REPAIR skip ${took()} (no usable fix)`);
       return { skipped: 'no fix' };
     }
-    p = store.currentProject();
-    if (p.current !== version || isBusy()) return { skipped: 'stale' };
-    const { n, at, ...meta } = v;
-    p = store.addVersion(store.dropVersion(p, version), html, meta);
-    log(`REPAIR fix  ${took()} ${String(errors).split('\n')[0].slice(0, 120)} → v${p.current}`);
-    return { html, version: p.current };
+    proposals.set(`${p.id}:${version}`, html);
+    while (proposals.size > 5) proposals.delete(proposals.keys().next().value);
+    log(`REPAIR fix  ${took()} ${keep ? '(with the kid\'s progress) ' : ''}${String(errors).split('\n')[0].slice(0, 120)}`);
+    return { html };
   } catch (err) {
     log(`REPAIR fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
     return { skipped: 'failed' };
@@ -1084,17 +1222,50 @@ export async function repair({ version, errors }) {
 // progress. Only for pages the team built, once each, and never over newer work. Then (polish)
 // the finishing touches, on the page as it is after the check.
 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Is the current version a change (or fix) of `version` - the same creation, not something new and
+// not reached by going back?
+function continuesFrom(p, version) {
+  for (let n = p.current, steps = 0; n && steps < 50; steps++) {
+    if (n === version) return true;
+    const v = p.versions.find(x => x.n === n);
+    if (!v || v.from == null || !(v.continues || /check|polish|overwatch/.test(v.backend || ''))) return false;
+    n = v.from;
+  }
+  return false;
+}
+
 // How many polish passes follow the check (team.polish: true is one, a number is that many).
 export function polishPasses() {
   const v = config().team?.polish;
   return v === false ? 0 : v === true || v == null ? 1 : Math.max(0, Math.min(3, Math.round(Number(v)) || 0));
 }
 
+// The versions the app has asked about: it does that only once one is on stage, tried (and
+// repaired, if it crashed) - so fixes may be carried over onto it.
+const onStage = new Set();
+
+// Are the versions after `version`, up to the current one, only fixes (a check, polish or
+// overwatch fix carried over onto it)?
+function onlyFixesSince(p, version) {
+  for (let n = p.current, steps = 0; n !== version && steps < 50; steps++) {
+    const v = p.versions.find(x => x.n === n);
+    if (!v || !/check|polish|overwatch/.test(v.backend || '')) return false;
+    n = v.from;
+  }
+  return true;
+}
+
 export async function check({ projectId, version, report, screenshot, polish = false }) {
   if (!enabled() || config().team.check === false || (polish && !polishPasses())) return { skipped: 'off' };
   let p = store.currentProject();
-  if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
+  if (!version || p.id !== projectId) return { skipped: 'stale' };
+  onStage.add(`${projectId}:${version}`);
+  // A fix carried over onto it meanwhile doesn't make it stale: the page as it is now is looked at.
+  if (p.current !== version && !onlyFixesSince(p, version)) return { skipped: 'stale' };
   const v = p.versions.find(x => x.n === version);
+  const at = p.current; // the version whose page is looked at
   if (polish) {
     // Only on what the team built and checked, and only as many times as asked.
     const since = p.versions.slice(p.versions.findLastIndex(x => x.backend === 'claude team') + 1);
@@ -1117,15 +1288,35 @@ export async function check({ projectId, version, report, screenshot, polish = f
       log(r.skipped ? `${what} skip ${took()} ${r.why} (${r.skipped})` : `${what} ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
       return r.skipped ? { skipped: r.skipped } : { ok: true };
     }
-    // The kid may have moved on meanwhile: never overwrite newer work.
+    // The kid may have moved on meanwhile: never overwrite newer work. If they're getting a change
+    // built, wait for it - and for the app to have it on stage, tried (and repaired, if it
+    // crashed) - then the fix is carried over onto that newer version of the same creation, but
+    // only if every edit of it still fits there exactly.
+    const ready = () => {
+      const q = store.currentProject();
+      const cur = q.versions.find(x => x.n === q.current);
+      return !isBusy() && (q.current === at || cur?.backend !== 'claude team' || onStage.has(`${q.id}:${q.current}`));
+    };
+    for (let waited = 0; !ready() && waited < 150; waited++) await sleep(1000);
     p = store.currentProject();
-    if (p.id !== projectId || p.current !== version || isBusy()) {
+    let html = r.html;
+    const base = p.current;
+    if (p.id === projectId && base !== at && ready() && continuesFrom(p, at)) {
+      try {
+        html = applyEdits(store.html(p), r.applied);
+        if ((await syntaxErrors(html)).length > (await syntaxErrors(store.html(p))).length) html = null;
+      } catch {
+        html = null;
+      }
+      if (html) log(`${what} carried over from v${at} to v${base}`);
+    }
+    if (!html || p.id !== projectId || !ready() || (base !== at && html === r.html)) {
       log(`${what} stale ${took()} ${r.why}`);
       return { skipped: 'stale' };
     }
-    p = store.addVersion(p, r.html, { request: `(team ${polish ? 'polish' : 'check'}) ${r.why}`, backend: polish ? 'claude team polish' : 'claude team check', continues: change });
+    p = store.addVersion(p, html, { request: `(team ${polish ? 'polish' : 'check'}) ${r.why}`, backend: polish ? 'claude team polish' : 'claude team check', continues: change || base !== at });
     log(`${what} fix  ${took()} ${r.why} (${r.edits} edits${shot ? ', saw a screenshot' : ''}) → v${p.current}`);
-    return { fixed: true, verdict: 'fix', why: r.why, html: store.html(p), version: p.current };
+    return { fixed: true, verdict: 'fix', why: r.why, html: store.html(p), version: p.current, base };
   } catch (err) {
     log(`${what} fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`);
     return { skipped: 'failed' };

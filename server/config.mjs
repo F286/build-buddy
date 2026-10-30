@@ -45,7 +45,8 @@ export const DEFAULTS = {
   // leads: how many leads start on each request at once; the first to start a plan is used and
   // the others stop (how long a lead thinks first varies a lot, so this saves the slow starts).
   // firstLook: for something new, a quick sketch of it (by the sketch role, a fast model) is on
-  // screen within seconds and can be played with until the team's version replaces it.
+  // screen within seconds and can be played with until the team's version replaces it. Off by
+  // default: the sketch took the place of what was on screen, and kids took it for a reset.
   team: {
     enabled: true,
     helpers: 6,
@@ -53,7 +54,7 @@ export const DEFAULTS = {
     warm: true,
     check: true,
     polish: 2,
-    firstLook: true,
+    firstLook: false,
     voice: { model: 'haiku', effort: 'low' },
     sketch: { model: 'sonnet', effort: 'low' },
     lead: { model: '', effort: '', advisor: '' },

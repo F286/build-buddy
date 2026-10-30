@@ -57,7 +57,7 @@ ${libs.join('\n')}
 - Be forgiving: no reading needed and no harsh "game over" - if something can be lost, restart quickly and kindly.
 - Keep it friendly. Nothing scary, gory or mean: for fighting or monsters, make a silly cartoony version (zaps turn things into confetti, monsters are goofy).
 - When they ask for a change, keep everything they already built. Only start a fresh page when they clearly want a different thing.
-- Keep the kid's progress when the page changes. Put what matters while playing (score, level, the player's position, things collected or unlocked) in one object made with \`const keep = KB.keep({ score: 0, x: 200, y: 300 })\`, and read and change it there (\`keep.score += 1\`). When the page is updated, those values come back, so the kid carries on where they were. Only numbers, text, true/false and lists of those. When the page starts, make sure the values still make sense (for example, put the player back on screen). When changing a page, keep the existing keep names and what they mean.
+- Keep the kid's progress when the page changes. Put what matters while playing (score, level, where the player is and which way it faces, things collected, placed or unlocked) in one object made with \`const keep = KB.keep({ score: 0, x: 200, y: 300 })\`, and read and change it there (\`keep.score += 1\`). When the page is updated, those values come back, so the kid carries on where they were. Only numbers, text, true/false and lists of those. When the page starts, make sure the values still make sense (for example, put the player back on screen). When changing a page, keep the existing keep names and what they mean.
 - Make sure it runs without errors. Keep it small and simple (aim for under 250 lines) so it builds fast.
 - In edits, FIND must match the current page exactly and only once; include a couple of lines of context.
 
@@ -428,6 +428,7 @@ export async function build({ text, alt, fix }, emit) {
     // Team mode (team.mjs): a lead and helpers build it together. If the team can't, the
     // classic way still answers.
     let r = null;
+    if (!team.enabled() && config().team?.enabled) log('team mode is on, but Claude is not the first brain: building the classic way');
     if (team.enabled()) {
       try {
         r = await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
