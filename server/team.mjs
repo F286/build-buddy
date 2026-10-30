@@ -713,15 +713,17 @@ export function applyCore(html, { find, replace }) {
     for (let k = 0; k + want.length <= lines.length; k++) if (want.every((w, j) => lines[k + j].trim() === w)) hits.push(k);
     return hits.length === 1 ? hits[0] : -1;
   };
-  // The rest of the FIND (its context) must still be where it was relative to the change - give or
-  // take a few lines other edits added - so a twin block elsewhere is never the one edited.
+  // The rest of the FIND (its context) must still be where it was relative to the change, so a twin
+  // block elsewhere is never the one edited.
   const telling = l => /[\w$]{3}/.test(l); // a "}" or ");" line says nothing about where it is
+  // The context line nearest the change, on each side, must be exactly where it was: a twin block
+  // right next door would otherwise pass for it.
   const placed = (from, to, skip = -1) => {
     // from: where FIND line a (the first changed one) sits on the page; to: where line f.length - b does
-    const ok = (idxs, base, at0) => !idxs.length || idxs.some(c => [-3, -2, -1, 0, 1, 2, 3].some(d => lines[at0 + c - base + d]?.trim() === f[c].trim()));
-    const above = [...Array(a).keys()].filter(c => c !== skip && telling(f[c].trim()));
-    const below = [...Array(b).keys()].map(c => f.length - b + c).filter(c => c !== skip && telling(f[c].trim()));
-    return ok(above, a, from) && ok(below, f.length - b, to);
+    const above = [...Array(a).keys()].filter(c => c !== skip && telling(f[c].trim())).at(-1);
+    const below = [...Array(b).keys()].map(c => f.length - b + c).find(c => c !== skip && telling(f[c].trim()));
+    const exact = (c, base, at0) => c === undefined || lines[at0 + c - base]?.trim() === f[c].trim();
+    return exact(above, a, from) && exact(below, f.length - b, to);
   };
   if (gone.some(Boolean)) {
     const k = at(gone);

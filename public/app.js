@@ -561,12 +561,17 @@ async function repairFirst(result) {
 
 // What a kid says while waiting: "is it done yet?", "hurry up!"...
 const STILL_BUILDING = /\b(done|ready|finished) yet\b|\bhurry\b|\bhow long\b|\b(are you|is it) (done|ready|finished)\b/i;
-// A repeat of what's being built (or already waiting): every word that matters in it is in there.
+// A repeat of what's being built (or already waiting): every word that matters in it is in there,
+// in the same order ("the cat chases the dog" isn't "the dog chases the cat").
 const FILLER = new Set(['a', 'an', 'the', 'please', 'sparky', 'um', 'uh', 'oh', 'and', 'i', 'want', 'it', 'to', 'me', 'my', 'can', 'you', 'make', 'do', 'that', 'this']);
 const words = t => (t || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(' ').filter(w => w && !FILLER.has(w));
 function repeats(text, others) {
   const said = words(text);
-  return others.some(o => o && said.every(w => words(o).includes(w)));
+  return others.some(o => {
+    const there = words(o);
+    let i = 0;
+    return o && said.every(w => (i = there.indexOf(w, i) + 1) > 0);
+  });
 }
 
 // `alt` is how the second speech listener heard it, when it heard something different.
