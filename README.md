@@ -255,23 +255,26 @@ Buddy changes.
   starts half a second before the talk key goes down and keeps going a moment after it's let go.
 - **Built by a team.** In [team mode](#team-mode) (the default), a quick model answers out loud
   within about 2 seconds, while three leads race to plan the creation and up to six helpers write
-  its pieces at the same time, each starting the moment its job is written (a robot on the
-  building screen for each). Before anything is shown, every script is checked, the page is run
-  out of sight for a moment, and a fixer repairs what doesn't run; right after it
-  appears, a checker and then a polisher (twice) look over the whole page and at a screenshot of it
-  running, and give it fixes and finishing touches (in tests: a piano key that crashed, food the
-  fish could never reach, a frog that caught flies on its own, a car too big for its road, a
-  dragon without real wings). Their changes are tried out of sight first, so they can never break
-  a creation that works, and slide in while the kid plays. On a test set of eight new creations
-  and four changes (timed like at home), the full creation arrived after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds, against
-  72 s); Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s instead
-  of 26 s. In blind side-by-side judging against the classic way, the team's creations won 11 of
-  12; scored one at a time against fixed anchors (10 = nothing noticeably wrong), they averaged 7.8
-  out of 10 against the classic way's 6.5 - as high as Opus at high effort with no time limit (7.9,
-  taking 1.5 to 3 minutes per creation, with the same check and polish). In over a hundred
-  judgments no creation from any builder scored above 8 ("very good"): 19 of 24 of the team's got
-  that top score, against none of the classic way's; more polish passes didn't raise it. It writes
-  about twice as much, so it uses more of your plan.
+  its pieces at the same time, each starting the moment its job is written (a robot on the building
+  screen for each). Before anything is shown, every script is checked, the page is run out of sight
+  for a moment, and a fixer repairs what doesn't run; right after it appears, a checker and then a
+  polisher (twice, each time working through a tester's list of what a demanding parent would mark
+  down) look over the whole page and at a screenshot of it running, and give it fixes and finishing
+  touches (in tests: a piano key that crashed, food the fish could never reach, a frog that caught
+  flies on its own, a car too big for its road, a dragon without real wings). Their changes are
+  tried out of sight first, so they can never break a creation that works, and slide in while the
+  kid plays. On a test set of eight new creations and four changes (timed like at home), the full
+  creation arrived after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds,
+  against 72 s); Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s
+  instead of 26 s. In blind side-by-side judging against the classic way, the team's creations won
+  11 of 12; scored one at a time against fixed anchors (10 = nothing noticeably wrong), they
+  averaged 7.8 out of 10 against the classic way's 6.5 - as high as Opus at high effort with no time
+  limit (7.9, taking 1.5 to 3 minutes per creation, with the same check and polish). In over a
+  hundred judgments no creation from any builder scored above 8 ("very good"): 19 of 24 of the
+  team's got that top score, against none of the classic way's; more polish passes didn't raise it,
+  but a tester's list did: on eight fresh creations, polish passes guided by the tester brought
+  every one to 8 (8.0 on average against 7.75 without it, with every part of the score up). It
+  writes about twice as much, so it uses more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and

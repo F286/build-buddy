@@ -1187,6 +1187,8 @@ export async function reviewPage({ page, asked, told, look, report, shot, notes 
       notes ? `\n\n<tester_notes>\nA careful tester played with it and noted, most important first:\n${notes}\n</tester_notes>\nFix as many of these as you can do well, most important first - not just 2 or 3.` : ''
     }`,
     tools: shot ? 'Read' : '',
+    // Fixing a tester's whole list takes a while (2-5 minutes); it happens while the kid plays.
+    timeoutSec: notes ? 420 : undefined,
   });
   const edits = parseReply(reply.text).edits;
   if (!edits.length) return { html: null, why: '' };
