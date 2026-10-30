@@ -712,18 +712,28 @@ export function applyCore(html, { find, replace }) {
     for (let k = 0; k + want.length <= lines.length; k++) if (want.every((w, j) => lines[k + j].trim() === w)) hits.push(k);
     return hits.length === 1 ? hits[0] : -1;
   };
+  // The rest of the FIND (its context) must still be where it was relative to the change - give or
+  // take a few lines other edits added - so a twin block elsewhere is never the one edited.
+  const telling = l => /[\w$]{3}/.test(l); // a "}" or ");" line says nothing about where it is
+  const placed = (from, to, skip = -1) => {
+    // from: where FIND line a (the first changed one) sits on the page; to: where line f.length - b does
+    const ok = (idxs, base, at0) => !idxs.length || idxs.some(c => [-3, -2, -1, 0, 1, 2, 3].some(d => lines[at0 + c - base + d]?.trim() === f[c].trim()));
+    const above = [...Array(a).keys()].filter(c => c !== skip && telling(f[c].trim()));
+    const below = [...Array(b).keys()].map(c => f.length - b + c).filter(c => c !== skip && telling(f[c].trim()));
+    return ok(above, a, from) && ok(below, f.length - b, to);
+  };
   if (gone.some(Boolean)) {
     const k = at(gone);
-    if (k < 0) return null;
+    if (k < 0 || !placed(k, k + gone.length)) return null;
     lines.splice(k, gone.length, ...added);
     return lines.join('\n');
   }
   // Only adds lines: put them after the line before them, or before the line after them.
-  const before = f.slice(0, a).map(l => l.trim()).filter(Boolean).at(-1);
-  const after = f.slice(f.length - b).map(l => l.trim()).find(Boolean);
-  let k = before ? at([before]) : -1;
-  if (k >= 0) lines.splice(k + 1, 0, ...added);
-  else if (after && (k = at([after])) >= 0) lines.splice(k, 0, ...added);
+  const ia = f.slice(0, a).map(l => l.trim()).findLastIndex(Boolean);
+  const ib = f.slice(f.length - b).map(l => l.trim()).findIndex(Boolean);
+  let k = ia >= 0 ? at([f[ia].trim()]) : -1;
+  if (k >= 0 && placed(k + 1, k + 1, ia)) lines.splice(k + 1, 0, ...added);
+  else if (ib >= 0 && (k = at([f[f.length - b + ib].trim()])) >= 0 && placed(k, k, f.length - b + ib)) lines.splice(k, 0, ...added);
   else return null;
   return lines.join('\n');
 }
@@ -738,18 +748,22 @@ async function applyEditsWithFixer(page, edits, signal, tally) {
   log(`team: ${first.failed.length} of ${edits.length} edits didn't fit, asking the fixer`);
   const reply = await ask('fixer', {
     system: fixerSystem(),
-    prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above). If one is already done on the page, leave it out:\n\n${showEdits(first.failed)}`,
+    prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above). If they are all already done on the page, reply with just: DONE\n\n${showEdits(first.failed)}`,
     signal,
     tally,
     timeoutSec: 60,
   }).catch(err => (signal?.aborted ? Promise.reject(err) : { text: '' }));
   const r = parseReply(reply.text);
-  // The whole page, written again with the changes in: use it if it parses.
-  if (r.html && !(await syntaxErrors(r.html)).length) return { html: r.html, failed: [] };
-  // Nothing written again: the fixer found them already done (or couldn't say) - what fits stays.
-  if (!r.edits.length) return { html: first.html, failed: reply.text.trim() ? [] : first.failed };
+  const scripts = h => (h.match(/<script\b/gi) || []).length;
+  // The whole page, written again with the changes in: used only if it is one, and parses.
+  if (r.html && /^\s*<(!doctype|html)/i.test(r.html) && /<\/html>\s*$/i.test(r.html) && !/^(<<<<<<<|>>>>>>>)/m.test(r.html) && scripts(r.html) === scripts(first.html) && !(await syntaxErrors(r.html)).length) {
+    return { html: r.html, failed: [] };
+  }
+  if (!r.edits.length) return { html: first.html, failed: /^\s*DONE\b/.test(reply.text) ? [] : first.failed };
+  // Written again, and every one fits: done. If any still doesn't, all of the first misfits count as
+  // missing (which rewritten edit stands for which original can't be told).
   const second = applySome(first.html, r.edits);
-  return { html: second.html, failed: second.failed };
+  return { html: second.html, failed: second.failed.length ? first.failed : [] };
 }
 
 async function fix(html, problem, signal, tally) {
@@ -908,6 +922,17 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   // others: its answer is used only if none of them builds anything.
   let talker = null;
   const builds = t => HEAD('PLAN').test(t) || HEAD('CHANGES').test(t) || Boolean(parseReply(t).html) || parseReply(t).edits.length > 0;
+  // Once one has talked, the others get a few seconds to start building; then the answer is used.
+  let talkerTimer = null;
+  let settleTalker;
+  const talkerAnswer = new Promise((resolve, reject) => (settleTalker = { resolve, reject }));
+  talkerAnswer.catch(() => {});
+  const useTalker = () => {
+    clearTimeout(talkerTimer);
+    if (talker && claim(talker.i)) settleTalker.resolve(talker.reply);
+    else settleTalker.reject(new Error('no answer'));
+  };
+  const building = run => !run.over && (HEAD('PLAN').test(run.reader.text) || HEAD('CHANGES').test(run.reader.text) || /^<<<<<<< FIND/m.test(run.reader.text));
   const claim = i => {
     if (winner == null) {
       winner = i;
@@ -936,9 +961,15 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
         progress(chunk.length);
       },
     }).then(reply => {
-      if (winner == null && !builds(reply.text) && runs.some((other, j) => j !== i && !other.over)) {
-        talker ??= { i, reply };
-        throw new Error('it only talked');
+      const others = runs.some((other, j) => j !== i && !other.over);
+      if (winner == null && !builds(reply.text)) {
+        if (field(reply.text, 'SAY') && others) {
+          talker ??= { i, reply };
+          talkerTimer ??= setTimeout(() => !runs.some(building) && useTalker(), 4000);
+          throw new Error('it only talked');
+        }
+        // A reply we can't read doesn't win over one that answered, or over the others.
+        if (talker || others) throw new Error("couldn't read the lead's reply");
       }
       if (!claim(i)) throw new Error('another lead was quicker');
       return reply;
@@ -979,11 +1010,14 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
 
   try {
     let lead;
+    // When every lead is done without building, the talker's answer (if any) is used at once.
+    Promise.allSettled(runs.map(run => run.done)).then(useTalker);
     try {
-      lead = await Promise.any(runs.map(run => run.done));
+      lead = await Promise.any([...runs.map(run => run.done), talkerAnswer]);
     } catch (err) {
-      if (!talker || !claim(talker.i)) throw err.errors?.find(e => !/^(stopped|another lead was quicker|it only talked)$/.test(e.message)) || err.errors?.[0] || err;
-      lead = talker.reply;
+      throw err.errors?.find(e => !/^(stopped|another lead was quicker|it only talked|no answer)$/.test(e.message)) || err.errors?.[0] || err;
+    } finally {
+      clearTimeout(talkerTimer);
     }
     const reader = runs[winner].reader;
     reader.push('\n');
