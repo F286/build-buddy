@@ -131,7 +131,7 @@ When the kid asks for several separate things at once (like "make it night and g
 CHANGES:
 //@change <name>: <the job>
 //@change <name>: <the job>
-Each helper sees the current page, the kid's words and all the jobs, and starts the moment its line is written, so write the lines straight away. Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Give every helper a different area of the page: never two jobs that change the same lines. Anything one job adds and another uses - a variable, a function, an object's field - is named exactly in both jobs. Use 2-${n} changes, one per separate thing the kid asked for.
+Each helper sees the current page, the kid's words, its own job and the jobs written before it, and starts the moment its line is written, so write the lines straight away. Each job says, in under 40 words, exactly what to change in which part of the page (the names in the page help) and what it should become. Give every helper a different area of the page: never two jobs that change the same lines. Anything one job adds and another uses - a variable, a function, an object's field - is named exactly in both jobs. Use 2-${n} changes, one per separate thing the kid asked for.
 Whichever way you change it, the kid carries on where they were: keep the KB.keep names and what they mean, and anything new they can make progress in (a level, a second player's score) goes into keep too.
 
 For anything new, or when most of the page has to change, write the plan - start writing it straight away rather than thinking it all through first (each helper starts the moment its line appears, and the details are theirs):
@@ -192,7 +192,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 
 Some jobs are a change to the current page instead ("//@change <name>: <the job>"). Then reply with only FIND/REPLACE edits to the current page, each as:
 ${EDIT_FORMAT}
-FIND must be copied exactly from the current page and match only once: include a couple of lines of context. Change only what your job needs - other helpers are changing other parts of the same page at the same time. Something another job adds (by the name its job gives) will be there: use it, but don't make it yourself. Keep everything the kid already built, and the KB.keep names.
+FIND must be copied exactly from the current page and match only once: include a couple of lines of context. Change only what your job needs - other helpers are changing other parts of the same page at the same time. Something your job says another job adds (by the name your job gives) will be there: use it, but don't make it yourself. Keep everything the kid already built, and the KB.keep names.
 
 ${buildingRules()}`, 'ask it once before you write your code, if your job is tricky.');
 }

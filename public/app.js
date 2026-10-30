@@ -13,6 +13,7 @@ const state = {
   project: null,
   html: '',
   busy: false,
+  building: '', // what the kid asked for in the build that's running
   queue: [], // things said while a build was running
   fixStreak: 0,
   fixedVersions: new Set(),
@@ -342,7 +343,9 @@ function pageError(message) {
   if (!state.pageErrors.includes(message) && state.pageErrors.length < 20) state.pageErrors.push(message);
   // The wait starts at the first error: one that repeats every frame would otherwise put it off forever.
   if (fixTimer) return;
-  fixTimer = setTimeout(() => {
+  fixTimer = setTimeout(function tryFix() {
+    // Not while the kid is talking or being heard: what they say comes first.
+    if (mic.recording || mic.transcribing || mic.tail) return void (fixTimer = setTimeout(tryFix, 1000));
     fixTimer = null;
     const v = `${state.project?.id}:${state.project?.version}`;
     // The quick fixes didn't stick: ask the overwatch to take a careful look.
@@ -434,6 +437,7 @@ function showSketch(html) {
 
 async function build(body) {
   state.busy = true;
+  state.building = body.text || '';
   state.fixing = Boolean(body.fix); // fixing a wobbly bit doesn't use up play time
   state.fixStreak = body.fix ? state.fixStreak + 1 : 0;
   micBtn.classList.add('thinking');
@@ -522,6 +526,7 @@ async function build(body) {
 
   if (state.queue.length && !askingClosed()) {
     const text = state.queue.splice(0).join(' ... and then: ');
+    warmTeam();
     build({ text });
   }
 }
@@ -541,6 +546,7 @@ async function repairFirst(result) {
   errors = [...new Set(errors)];
   if (!errors.length) return result;
   console.warn(`the new version crashed when tried${withKeep ? ' with the kid\'s progress' : ''}, repairing it first:`, errors[0]);
+  $('#buildingLabel').textContent = `${state.config.buddyName || 'Sparky'} is fixing a wobbly bit`;
   try {
     // Not for long: after 30 s it's shown as it is, and the usual crash fixing takes over.
     const r = await Promise.race([api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n'), keep: withKeep ? keep : undefined }), sleep(30000).then(() => ({}))]);
@@ -552,15 +558,28 @@ async function repairFirst(result) {
   }
 }
 
+// What a kid says while waiting: "is it done yet?", "hurry up!"...
+const STILL_BUILDING = /\b(done|ready|finished) yet\b|\bhurry\b|\bhow long\b|\b(are you|is it) (done|ready|finished)\b/i;
+// A repeat of what's being built (or already waiting): every word that matters in it is in there.
+const FILLER = new Set(['a', 'an', 'the', 'please', 'sparky', 'um', 'uh', 'oh', 'and', 'i', 'want', 'it', 'to', 'me', 'my', 'can', 'you', 'make', 'do', 'that', 'this']);
+const words = t => (t || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ').split(' ').filter(w => w && !FILLER.has(w));
+function repeats(text, others) {
+  const said = words(text);
+  return others.some(o => o && said.every(w => words(o).includes(w)));
+}
+
 // `alt` is how the second speech listener heard it, when it heard something different.
 function heard(text, alt = '') {
   if (state.timeUp) return;
   if (timer.overtime) return graceBuild(text, alt);
   state.lastActivity = Date.now();
   if (state.busy) {
+    // Saying it again, or asking if it's ready, isn't something new to build after this one.
+    if (STILL_BUILDING.test(text) || repeats(text, [state.building, ...state.queue])) return say(line('wait'));
     state.queue.push(text);
     showNext();
     say(line('queued'));
+    warmTeam();
   } else {
     build({ text, alt });
   }
@@ -669,8 +688,8 @@ setInterval(() => checkCreation(), 15000);
 // Team mode: right after a creation appears, the checker takes a careful look at the whole page;
 // its fixes slide in at a calm moment, keeping the kid's progress (see server/team.mjs check()).
 // Then the finishing touches (team.polish), on whatever is on the stage after the check.
-// A crash fix meanwhile doesn't stop it: it waits, and the fixed page is checked. A newer build
-// does (that one gets its own check).
+// Something built meanwhile doesn't stop it: it waits. A newer team build does (that one gets its
+// own check).
 let checkRun = 0;
 async function checkTeamBuild(projectId, version) {
   const run = ++checkRun;
@@ -678,8 +697,10 @@ async function checkTeamBuild(projectId, version) {
     for (const polish of [false, ...Array(state.config.polishPasses ?? 1).fill(true)]) {
       // Let it start up and draw for a moment, then send how it's running and a screenshot.
       await sleep(1500);
-      while (state.busy && state.fixing && run === checkRun) await sleep(1000);
-      if (run !== checkRun || state.busy || state.project?.id !== projectId) return;
+      // Something being built meanwhile (a crash fix, or what the kid said next): wait for it. If it
+      // makes a new version, that one gets its own check (and this one stops).
+      while (state.busy && run === checkRun) await sleep(1000);
+      if (run !== checkRun || state.project?.id !== projectId) return;
       if (!polish && !(state.project?.version >= version)) return;
       const v = state.project.version;
       const { screenshot, ...report } = (await askPage('inspect?', 4000))?.report || {};
