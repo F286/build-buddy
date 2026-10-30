@@ -148,7 +148,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` (or `--team`). Needs `claude` first in `backends`. |
 | `team.helpers` | `6` | The most helpers working on one creation at a time (1 to 8). |
 | `team.leads` | `3` | How many leads start on each request at once (1 to 3). How long a lead takes before it starts writing varies a lot, so the first one to start a plan is used and the others stop: it saves the slow starts, for a little more of your plan. |
-| `team.lead` / `team.helper` / `team.fixer` / `team.checker` / `team.polisher` / `team.voice` / `team.sketch` | see [Team mode](#team-mode) | How each member of the team runs Claude Code: `model`, `effort`, `fast`, `advisor` and `args`. |
+| `team.lead` / `team.helper` / `team.fixer` / `team.checker` / `team.polisher` / `team.tester` / `team.voice` / `team.sketch` | see [Team mode](#team-mode) | How each member of the team runs Claude Code: `model`, `effort`, `fast`, `advisor` and `args`. |
 | `team.firstLook` | `false` | For something new, a quick sketch of it is on screen within seconds, and the kid can play with it until the team's version replaces it. Off by default: the sketch takes the place of what was on screen, which can feel like a reset. |
 | `team.check` | `true` | Right after a creation appears, the checker takes a careful look and its fixes slide in at a calm moment. |
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
@@ -183,6 +183,7 @@ team, and each member is its own `claude` run:
 | `fixer` | your `claude.model` / `claude.effort` | Before anything is shown, every script on the page is checked (two pieces that declared the same name are untangled automatically); if one doesn't parse, or if edits don't fit, the fixer gets one try to repair it. Edits written apart by helpers are applied by the lines they really change when their context has moved; one or two that still don't fit (out of many) are left out, and the checker makes sure the change is there - if more don't fit, the classic way builds that request instead (so nothing the kid made goes missing); if a script still doesn't parse, the usual wobbly-bit fixing takes over. Every page the team makes is also run out of sight for a moment first (with the kid's progress, for a change); if it crashes, the fixer's repair is tried out of sight too and only then shown - if the repair doesn't work (or takes over 30 s), the page is shown and the usual crash fixing takes over. |
 | `checker` | your `claude.model`, medium effort | Right after the creation appears, takes a careful look at the whole page and at a screenshot of it running (with its frame rate and any errors): is everything the kid asked for really there, do new goals or levels come soon, do the pieces fit, do the controls work with both the keys and the pointer, is everything in view and nothing cut off or in the way, can the goal really be reached, is it smooth (below about 30 frames per second it finds what makes each frame heavy and lightens it). Where an arrow key or a tap does nothing it adds a small answer (a wiggle, or sparkles where they tapped), and where reaching the goal has no celebration it adds one. Its fixes (usually about half a minute later) are first tried out of sight for a moment (a fix that throws errors is taken back, so a creation that works is never broken by its polish), then slide in at a calm moment, keeping the kid's progress, so the kid never waits for it. |
 | `polisher` | your `claude.model`, high effort | After the check, looks at it again as a demanding parent who is also a game designer and makes the two or three changes that matter most: the look they were given really showing, the star recognizable, in proportion and with a visible face, a goal that needs the kid, every action answered, nothing cut off or harsh. Twice by default (`team.polish`); tried out of sight and slid in like the check's fixes. |
+| `tester` | your `claude.model`, medium effort | Starts each polish pass: looks at the creation (and a screenshot of it running) the way a demanding parent would, and lists what it would mark down, most important first; the polisher then fixes as many of those as it can do well. `team.tester: false` leaves it out. |
 
 A creation then takes about as long as its biggest piece, instead of the whole page, and each
 helper puts its full attention on one thing. If the team gets stuck, that request is built the
@@ -254,23 +255,26 @@ Buddy changes.
   starts half a second before the talk key goes down and keeps going a moment after it's let go.
 - **Built by a team.** In [team mode](#team-mode) (the default), a quick model answers out loud
   within about 2 seconds, while three leads race to plan the creation and up to six helpers write
-  its pieces at the same time, each starting the moment its job is written (a robot on the
-  building screen for each). Before anything is shown, every script is checked, the page is run
-  out of sight for a moment, and a fixer repairs what doesn't run; right after it
-  appears, a checker and then a polisher (twice) look over the whole page and at a screenshot of it
-  running, and give it fixes and finishing touches (in tests: a piano key that crashed, food the
-  fish could never reach, a frog that caught flies on its own, a car too big for its road, a
-  dragon without real wings). Their changes are tried out of sight first, so they can never break
-  a creation that works, and slide in while the kid plays. On a test set of eight new creations
-  and four changes (timed like at home), the full creation arrived after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds, against
-  72 s); Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s instead
-  of 26 s. In blind side-by-side judging against the classic way, the team's creations won 11 of
-  12; scored one at a time against fixed anchors (10 = nothing noticeably wrong), they averaged 7.8
-  out of 10 against the classic way's 6.5 - as high as Opus at high effort with no time limit (7.9,
-  taking 1.5 to 3 minutes per creation, with the same check and polish). In over a hundred
-  judgments no creation from any builder scored above 8 ("very good"): 19 of 24 of the team's got
-  that top score, against none of the classic way's; more polish passes didn't raise it. It writes
-  about twice as much, so it uses more of your plan.
+  its pieces at the same time, each starting the moment its job is written (a robot on the building
+  screen for each). Before anything is shown, every script is checked, the page is run out of sight
+  for a moment, and a fixer repairs what doesn't run; right after it appears, a checker and then a
+  polisher (twice, each time working through a tester's list of what a demanding parent would mark
+  down) look over the whole page and at a screenshot of it running, and give it fixes and finishing
+  touches (in tests: a piano key that crashed, food the fish could never reach, a frog that caught
+  flies on its own, a car too big for its road, a dragon without real wings). Their changes are
+  tried out of sight first, so they can never break a creation that works, and slide in while the
+  kid plays. On a test set of eight new creations and four changes (timed like at home), the full
+  creation arrived after about 27 s on average instead of 45 s (at most 34 s in quiet test rounds,
+  against 72 s); Sparky's first words came after about 2 s instead of 9 s, and changes took 20 s
+  instead of 26 s. In blind side-by-side judging against the classic way, the team's creations won
+  11 of 12; scored one at a time against fixed anchors (10 = nothing noticeably wrong), they
+  averaged 7.8 out of 10 against the classic way's 6.5 - as high as Opus at high effort with no time
+  limit (7.9, taking 1.5 to 3 minutes per creation, with the same check and polish). In over a
+  hundred judgments no creation from any builder scored above 8 ("very good"): 19 of 24 of the
+  team's got that top score, against none of the classic way's; more polish passes didn't raise it,
+  but a tester's list did: on eight fresh creations, polish passes guided by the tester brought
+  every one to 8 (8.0 on average against 7.75 without it, with every part of the score up). It
+  writes about twice as much, so it uses more of your plan.
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
