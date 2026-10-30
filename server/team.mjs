@@ -266,6 +266,23 @@ ${EDIT_FORMAT}
 FIND must be copied exactly from the page and match only once: include a couple of lines of context.`;
 }
 
+// Before each polish pass, a tester looks at it the way a demanding parent would and lists what it
+// would mark down; the polisher then fixes as many of those as it can do well (team.tester).
+function testerSystem() {
+  const c = config();
+  return `You test a web page made for a ${c.kidAge}-year-old who can't read, built by AI from what the kid asked for out loud. Look at it as a demanding parent who is also a game designer: the screenshot first (with the Read tool, if there is one), then the code. Find what keeps it from being excellent.
+
+Fix nothing and score nothing: list the most important flaws, most important first - at most 8, each in one or two sentences saying exactly what's wrong and where (the names in the code help). Look for:
+- what the kid asked for, or the look the page was given, not fully there or not visible
+- glitches you can see in the screenshot: something cut off, overlapping, muddy, floating, facing the wrong way, hidden
+- the star not recognizable at a glance, too small, without personality, or out of proportion with its world
+- controls that do nothing, answer weakly, or confuse a small kid (left that doesn't go left, a quick tap that barely does anything, a drag that does nothing special)
+- a game with nothing to reach or beat, a goal that can't be reached, a thin reward, nothing new as they keep playing
+- a thin or empty scene where the place should be full
+- bugs you can see in the code (a count that's wrong, something that can never happen, work done twice)
+Only list what a few small edits can fix, and nothing big the kid didn't ask for.`;
+}
+
 function fixerSystem() {
   return `You fix web pages made for a young kid (by a team of AI helpers). You get a page and what's wrong with it. Reply with only FIND/REPLACE edits that fix it, changing nothing else, each as:
 ${EDIT_FORMAT}
@@ -1144,6 +1161,19 @@ function running(report, shot) {
   }`;
 }
 
+// The tester's notes for a page (what it would mark down, most important first).
+export async function testPage({ page, asked, told, look, report, shot, change = false }) {
+  const reply = await ask('tester', {
+    system: testerSystem(),
+    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${
+      change ? '\nThis was a change to a creation the kid already had: look at the change first, and at what it might have spoiled.' : ''
+    }\n\n${running(report, shot)}`,
+    tools: shot ? 'Read' : '',
+    timeoutSec: 150,
+  });
+  return reply.text.trim().slice(0, 3000);
+}
+
 // Review a page; resolves with the fixed page (or null if nothing needs fixing) and why.
 export async function reviewPage({ page, asked, told, look, report, shot, notes = '', change = false, polish = false }) {
   const changed = !change
@@ -1283,7 +1313,16 @@ export async function check({ projectId, version, report, screenshot, polish = f
     const change = Boolean(v.continues);
     // The look the creation was started with (a change keeps it).
     const look = p.versions.filter(x => x.n <= version && x.look).at(-1)?.look;
-    const r = await reviewPage({ page, asked, told, look, report, shot, change, polish });
+    // A polish pass starts with the tester's notes (team.tester: false skips it).
+    let notes = '';
+    if (polish && config().team.tester !== false) {
+      notes = await testPage({ page, asked, told, look, report, shot, change }).catch(err => {
+        log(`TEST fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
+        return '';
+      });
+      if (notes) log(`TEST ${took()} ${notes.split('\n').filter(Boolean).length} notes`);
+    }
+    const r = await reviewPage({ page, asked, told, look, report, shot, notes, change, polish });
     if (!r.html) {
       log(r.skipped ? `${what} skip ${took()} ${r.why} (${r.skipped})` : `${what} ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
       return r.skipped ? { skipped: r.skipped } : { ok: true };
