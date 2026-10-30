@@ -732,9 +732,11 @@ export function applyCore(html, { find, replace }) {
   // Only adds lines: put them after the line before them, or before the line after them.
   const ia = f.slice(0, a).map(l => l.trim()).findLastIndex(Boolean);
   const ib = f.slice(f.length - b).map(l => l.trim()).findIndex(Boolean);
+  // Already there (the same edit twice, or two helpers adding the same line): it's done.
+  const has = from => from >= 0 && added.every((l, j) => lines[from + j]?.trim() === l.trim());
   let k = ia >= 0 ? at([f[ia].trim()]) : -1;
-  if (k >= 0 && placed(k + 1, k + 1, ia)) lines.splice(k + 1, 0, ...added);
-  else if (ib >= 0 && (k = at([f[f.length - b + ib].trim()])) >= 0 && placed(k, k, f.length - b + ib)) lines.splice(k, 0, ...added);
+  if (k >= 0 && placed(k + 1, k + 1, ia)) has(k + 1) || lines.splice(k + 1, 0, ...added);
+  else if (ib >= 0 && (k = at([f[f.length - b + ib].trim()])) >= 0 && placed(k, k, f.length - b + ib)) has(k - added.length) || lines.splice(k, 0, ...added);
   else return null;
   return lines.join('\n');
 }
