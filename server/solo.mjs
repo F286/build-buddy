@@ -385,7 +385,7 @@ const LOOK = `Test it the way a demanding parent who is also a game designer wou
 3. The star: is it what they asked for, easy to recognize, big enough, facing and moving the way it goes, with a face?
 4. What they asked for: everything a kid pictures for this kind of thing (a race has someone to race), and the look really showing - nothing muddy, cut off, hidden or out of the camera's view.
 5. Anything thin, or that plays itself, or a bug you can see.
-First write, under NOTES:, what you found - most important first, at most 6. Then fix them with FIND/REPLACE edits. Only if you really found nothing, reply with just: OK`;
+First write, under NOTES:, what you found - most important first, at most 6. Then WHY: <what you fixed, in one short sentence for the grown-ups' log>, and the FIND/REPLACE edits that fix them. Only if you really found nothing, reply with just: OK`;
 
 // How long it may think: little while the kid waits, a lot when it looks its creation over.
 function thinkingFor(what) {
