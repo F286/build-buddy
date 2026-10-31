@@ -157,6 +157,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
 | `solo.polish` | `3` | How many times it goes back to a creation while the kid plays (`false` for none): after something new, it grows it, makes it beautiful, then looks again; after a change, it looks again. |
 | `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
+| `solo.firstModel` | `"sonnet"` | The quicker model that writes something new while the kid waits; the same session then switches to the main model (`solo.model`, or `claude.model`) for its passes, the kid's changes and repairs. `""` uses the main model for everything. |
 | `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
@@ -229,9 +230,10 @@ classic way and team mode stay exactly as they are.
 - **One Claude per creation, remembering it.** A single `claude` program is started while the kid is
   still talking and keeps running between requests, so it knows every line it wrote and what it
   meant each piece to do.
-- **The heart of it first.** Its first reply is the heart of the creation: the star, its place, the
-  main thing to do with its reward, and the controls, all working and in the look. Sparky's first
-  words come after about 3 s; the creation is on screen after about 32 s.
+- **The heart of it first, quickly.** Its first reply is the heart of the creation: the star, its
+  place, the main thing to do with its reward, and the controls, all working and in the look. A
+  quicker model (Sonnet) writes it while the kid waits; then the same session switches to the main
+  model (Opus) for everything else, still remembering every line.
 - **Then it keeps working on it while the kid plays.** In the same session, it looks at a screenshot
   of it running (with its frame rate and any errors) three times (`solo.polish`):
   1. it grows it into its full version: about twice as much, with everything a kid pictures for
@@ -240,13 +242,15 @@ classic way and team mode stay exactly as they are.
   2. it makes it beautiful: the star readable at a glance, with a face whose expression changes,
      every word of the look really on screen, and no bare corners;
   3. it tests it like a demanding parent: it follows every arrow key, tap and drag to what moves,
-     plays the goal through more than once, and fixes what it finds.
+     traces every collision, timer and counter to check it really fires, scores it the way that
+     parent would (what was asked for, delight, alive, easy for a 5-year-old, solid, its own), and
+     fixes what keeps each score down.
 
   Each pass is tried out of sight first and slides in at a calm moment, keeping the kid's progress,
   like team mode's polish. One that would crash is taken back, and Claude is told why (a lost grow
   or beautifying pass happens again).
 - **Changes from memory.** It already knows the page, so a change is a few edits written straight
-  away (5 to 30 s in tests), and the kid's progress carries over.
+  away (7 to 19 s in tests), and the kid's progress carries over.
 - **The kid comes first.** If they ask for something while a pass is still working, that pass stops,
   their request is answered next, and the pass happens later.
 - **Thinks a little while the kid waits, a lot while they play:** `solo.thinking` gives the budgets.
@@ -256,13 +260,15 @@ minutes without one, the session is replaced by a fresh one, handed the page as 
 kid asked for lately; what it still had to do (growing it, making it beautiful) carries over.
 
 On the same eight test creations as team mode, judged blind one at a time against the same fixed
-anchors (10 = nothing noticeably wrong), solo mode's creations averaged about 7.4 out of 10 after
-its three passes, against 7.6 for team mode in the same rounds, and were judged the most original of
-the three ways of building (6.8 against team mode's 6.4). The heart of each creation was on screen
-after 32 s on average (at most 40 s), Sparky's first words came after about 3 s (at most 6 s), and
-each pass took about 40 s (20 s to a little over a minute) while the kid played. In a session in the
-real app, changes took 7 to 15 s and the kid's progress carried over each one. Solo mode runs one
-`claude` program at a time, where team mode runs up to eight.
+anchors (10 = nothing noticeably wrong), solo mode's creations averaged 7.5 out of 10 after its
+three passes, against 7.6 to 7.9 for team mode in the same rounds, and were judged the most original
+of the three ways of building (6.8 to 7.0, against team mode's 6.4 to 6.6). Its heart was on screen
+after 22 s on average (at most 30 s), sooner than team mode's creations (27 s), and Sparky's first
+words came after about 1.3 s (at most 2 s); the grown, beautiful and tested versions followed while
+the kid played, each pass taking about 45 s (20 s to 90 s). Opus writing the heart instead scored
+the same, but took 32 s. In sessions in the real app, changes took 7 to 19 s and the kid's progress
+carried over each one. Solo mode runs one `claude` program at a time, where team mode runs up to
+eight.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
