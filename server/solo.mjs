@@ -389,8 +389,14 @@ export async function check({ projectId, version, report, screenshot, polish = f
     try {
       html = applyEdits(page, edits);
     } catch (err) {
-      log(`SOLO skip ${took()} ${why} (an edit didn't fit)`);
-      return { skipped: "edits didn't fit" };
+      // Its own edits that don't fit: once more, copied exactly.
+      try {
+        const again = await s.ask(`Those edits didn't fit, so none of them are in: each FIND has to be copied exactly from the page and match only once (${err.message}). Write them all again so they fit.`, { timeoutSec: 180, kind: 'polish' });
+        html = applyEdits(page, parseReply(again.text).edits);
+      } catch {
+        log(`SOLO skip ${took()} ${why} (an edit didn't fit)`);
+        return { skipped: "edits didn't fit" };
+      }
     }
     if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length) return { skipped: "the change didn't parse" };
     p = store.currentProject();
