@@ -65,6 +65,12 @@ export const DEFAULTS = {
     polisher: { model: '', effort: 'high' },
     tester: { model: '', effort: 'medium' },
   },
+  // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
+  // in mind - no team. It writes the page in one go, then looks at screenshots of it running and
+  // makes it better (polish: how many times), and makes the kid's changes from memory. model,
+  // effort and args as for a team role; left empty, it uses the Claude settings above.
+  // enabled: true builds this way (it comes before team mode).
+  solo: { enabled: false, polish: 2, model: '', effort: '' },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 
@@ -127,10 +133,18 @@ function readUserConfig() {
   }
 }
 
-// Team mode for this run only, without changing config.json: `./start.sh --team` (or
-// `--classic`), or KIDBUILD_TEAM=1 (or 0). Picking a way of building in the panel replaces it.
-let runTeam = process.argv.includes('--team') || process.env.KIDBUILD_TEAM === '1' ? true : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0' ? false : null;
-const withRunTeam = c => (runTeam === null ? c : { ...c, team: { ...c.team, enabled: runTeam } });
+// The way of building for this run only, without changing config.json: `./start.sh --solo`,
+// `--team` or `--classic` (or KIDBUILD_SOLO=1, KIDBUILD_TEAM=1 or 0). Picking a way of building in
+// the panel replaces it.
+let runMode =
+  process.argv.includes('--solo') || process.env.KIDBUILD_SOLO === '1'
+    ? 'solo'
+    : process.argv.includes('--team') || process.env.KIDBUILD_TEAM === '1'
+      ? 'team'
+      : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
+        ? 'classic'
+        : null;
+const withRunTeam = c => (runMode === null ? c : { ...c, team: { ...c.team, enabled: runMode === 'team' }, solo: { ...c.solo, enabled: runMode === 'solo' } });
 
 let current = withRunTeam(merge(DEFAULTS, readUserConfig()));
 if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());
@@ -144,7 +158,7 @@ export function config() {
 export function saveConfig(patch) {
   const user = merge(readUserConfig(), patch);
   fs.writeFileSync(FILE, JSON.stringify(user, null, 2) + '\n');
-  if (patch.team && 'enabled' in patch.team) runTeam = null;
+  if ((patch.team && 'enabled' in patch.team) || (patch.solo && 'enabled' in patch.solo)) runMode = null;
   current = withRunTeam(merge(DEFAULTS, user));
   return current;
 }

@@ -14,6 +14,7 @@ import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
 import * as watch from './watch.mjs';
 import * as team from './team.mjs';
+import * as solo from './solo.mjs';
 import { findBin } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
@@ -66,8 +67,11 @@ function publicConfig() {
     claudeModel: c.claude.model,
     claudeFast: Boolean(c.claude.fast),
     team: Boolean(c.team.enabled),
-    teamActive: team.enabled(),
-    polishPasses: team.polishPasses(),
+    solo: Boolean(c.solo?.enabled),
+    teamActive: team.enabled() && !solo.enabled(),
+    soloActive: solo.enabled(),
+    // How many polish passes the app asks for after the first check (in solo mode every look counts).
+    polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : team.polishPasses(),
     creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
@@ -124,6 +128,12 @@ function speechContext() {
   return [p.title, ...said].filter(Boolean).join('. ').replace(/\.\./g, '.');
 }
 
+// Was this version built (or polished) by solo mode? Its checks and repairs go back to it.
+function builtSolo(version) {
+  const p = store.currentProject();
+  return /^claude solo/.test(p.versions.find(v => v.n === version)?.backend || '');
+}
+
 const routes = {
   'GET /api/state': () => {
     const p = store.currentProject();
@@ -166,13 +176,19 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => team.warm(),
+  'POST /api/warm': () => (solo.enabled() ? solo.warm() : team.warm()),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
-  'POST /api/repair': async req => team.repair(await readJson(req)),
+  'POST /api/repair': async req => {
+    const b = await readJson(req);
+    return builtSolo(b.version) ? solo.repair(b) : team.repair(b);
+  },
 
   // A team-built creation just appeared: take a careful look and fix what would spoil it.
-  'POST /api/check': async req => team.check(await readJson(req)),
+  'POST /api/check': async req => {
+    const b = await readJson(req);
+    return builtSolo(b.version) ? solo.check(b) : team.check(b);
+  },
 
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
   'POST /api/watch': async req => watch.review(await readJson(req)),
@@ -237,6 +253,7 @@ const routes = {
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
     if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
+    if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
@@ -435,7 +452,13 @@ process.on('unhandledRejection', err => console.error('unexpected rejection:', e
 server.listen(port, '127.0.0.1', () => {
   const s = speech.status();
   console.log(`Build Buddy is running at http://127.0.0.1:${port}`);
-  const building = team.enabled() ? `a team (lead + up to ${team.maxHelpers()} helpers)` : config().team.enabled ? 'classic (team mode needs claude first in backends)' : 'classic';
+  const building = solo.enabled()
+    ? 'solo (one Claude that remembers the creation)'
+    : team.enabled()
+      ? `a team (lead + up to ${team.maxHelpers()} helpers)`
+      : config().team.enabled || config().solo?.enabled
+        ? 'classic (solo and team mode need claude first in backends)'
+        : 'classic';
   console.log(`  building: ${building}`);
   console.log(`  brains: ${config().backends.join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');

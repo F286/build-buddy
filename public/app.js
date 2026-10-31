@@ -487,7 +487,7 @@ async function build(body) {
   // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
   // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
   state.fixing = false; // the server counted the fix's time back up to here; trying it is play time
-  if (result?.html && result.backend === 'claude team') result = await repairFirst(result);
+  if (result?.html && /^claude (team|solo)$/.test(result.backend)) result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -516,7 +516,7 @@ async function build(body) {
         sfx.tada();
         cheer();
       }
-      if (result.backend === 'claude team') checkTeamBuild(state.project.id, result.version);
+      if (/^claude (team|solo)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version);
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -959,7 +959,7 @@ function pressTalk() {
 // the moment the request arrives (see server/team.mjs).
 // Also while something is building: what the kid says now is built next, by a team that's ready.
 function warmTeam() {
-  if (state.config.teamActive) api('/api/warm', {}).catch(() => {});
+  if (state.config.teamActive || state.config.soloActive) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {
@@ -1272,7 +1272,7 @@ async function openParent() {
   f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
-  f.building.value = c.team ? 'team' : '';
+  f.building.value = c.solo ? 'solo' : c.team ? 'team' : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
@@ -1311,7 +1311,7 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
-    (c.team && !c.teamActive ? 'Team building needs Claude as the first AI brain, so it builds the classic way. ' : '') +
+    ((c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude as the first AI brain, so it builds the classic way. ` : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
     (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
@@ -1325,7 +1325,7 @@ $('#parentForm').addEventListener('submit', async e => {
     backends: f.brains.value.split(','),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
-    ...(f.building.value !== state.buildingShown && { team: f.building.value === 'team' }),
+    ...(f.building.value !== state.buildingShown && { team: f.building.value === 'team', solo: f.building.value === 'solo' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     stt: f.stt.value,
