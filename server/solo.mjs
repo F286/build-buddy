@@ -52,7 +52,8 @@ You build it alone, and you keep working on it: your first reply is the heart of
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects. Give it everything a kid pictures when they ask for that kind of thing (a soccer game has a goalie to beat, a train has tracks and a station).
 - The star of it - the thing they asked for - is big, near the middle of the action, easy to recognize at a glance, with a face and personality, and in proportion with its world.
 - Everything is drawn in the look, so the whole scene looks like one picture: shapes drawn in that style, not big emoji.
-- Controls a 5-year-old gets at once: the arrow keys move things the way they point on the screen (seen from above, never steering-wheel turns), a quick tap gets a clear answer right away, and a drag does what a finger would expect.
+- Controls a 5-year-old gets at once: the arrow keys move things the way they point on the screen (seen from above, never steering-wheel turns), a quick tap gets a clear answer right away, and a drag does what a finger would expect. Every input answers, even where there's nothing to steer: each arrow key, a tap anywhere (empty sky too) and a drag each get something to see and hear (the star hops or looks that way, sparkles and a pop where they tapped, a trail where they drag).
+- The look really shows - every part of its description, in the first screenshot. A look effect that's costly is drawn the cheap way, never left out: a glow is drawn once with shadowBlur onto a small offscreen canvas at the start and stamped with drawImage; 3D shadows come from one sun with a small shadow map; clouds and sky go where the camera sees them.
 - Make it this kid's own creation, not a generic version: little surprises and details that come from exactly what they said, a place with character, a look that fits. Never a copy of the last thing.
 - Something new, first reply: start writing straight away - SAY first, then TITLE, then the page - rather than thinking it all through first. Write the heart of it: the star, its place, the main thing to do with its reward, and the controls, all working and in the look - about 120 to 180 short lines, so it's there in seconds. You grow it right after.
 
@@ -63,11 +64,11 @@ If it's already as good as it can be, reply with just: OK`;
 }
 
 // The request, as the session needs it: the page only when it hasn't seen this one.
-function requestPrompt({ page, known, history, text, alt, fix, look }) {
+function requestPrompt({ page, known, dropped, history, text, alt, fix, look }) {
   const c = config();
   const parts = [];
   if (!page) parts.push('The screen is blank - nothing has been built yet.');
-  else if (known) parts.push('The page is as you last saw it.');
+  else if (known) parts.push(dropped ? `The page is as you last saw it, without the edits you wrote last (they weren't put in: ${dropped}).` : 'The page is as you last saw it.');
   else parts.push(`<current_page>\n${page}\n</current_page>\n(This is the page as it is now.)`);
   if (!fix) parts.push(`${page ? 'If this turns into a fresh new page, try' : 'For this new creation, try'} this look, unless the kid asked for something else: ${look}.`);
   if (!known && history.length) {
@@ -110,6 +111,7 @@ class Session {
     this.projectId = projectId;
     this.page = null; // the page it last saw or wrote
     this.grow = false; // something new it wrote hasn't been grown into its full version yet
+    this.dropped = ''; // why the edits it wrote last weren't put in (it's told on its next turn)
     this.turns = 0;
     this.current = null; // the turn being answered
     this.queue = [];
@@ -308,7 +310,10 @@ export async function build({ page, history, text, alt, fix, look = pickLook() }
   let chars = 0;
   let said = '';
   let got = '';
-  const reply = await s.ask(requestPrompt({ page, known: Boolean(page) && s.page === page, history, text, alt, fix, look }), {
+  const known = Boolean(page) && s.page === page;
+  const dropped = s.dropped;
+  s.dropped = '';
+  const reply = await s.ask(requestPrompt({ page, known, dropped, history, text, alt, fix, look }), {
     priority: true,
     onText: chunk => {
       chars += chunk.length;
@@ -372,18 +377,19 @@ function saveScreenshot(dataUrl) {
 }
 
 // After something new appears: grow it into its full version (FIND/REPLACE edits, adding to it).
-const GROW = `Now grow it into its full, excellent version, adding to what's there with FIND/REPLACE edits:
+const GROW = `Now grow it into its full, excellent version - about twice as much as there is now - adding to what's there with FIND/REPLACE edits (big REPLACE blocks are fine: whole new functions and scenery, next to the code they belong with):
 - First fix anything you can see isn't working or showing yet.
-- Then add what it still lacks to be a delight: everything a kid pictures for this kind of thing, more of its place (near and far, made in loops), characters with faces and personality that react, a reward that feels great and a goal that grows, and one or two surprises that come from exactly what the kid said.
-- Keep it smooth (no filters or shadowBlur, nothing made every frame) and everything in the look.`;
+- Then add what it still lacks to be a delight: everything a kid pictures for this kind of thing (a race has rivals to beat), more of its place near and far (made in loops), characters with faces and personality who react to the kid, a reward that feels great and a goal that grows (after a few, something new appears), and two or three surprises that come from exactly what the kid said.
+- Every arrow key, a tap anywhere and a drag each get an answer the kid sees.
+- Keep it smooth (nothing made every frame, a costly look drawn the cheap way) and everything in the look.`;
 
 // Then (and after each change): look again, as the tester in team mode would - testing it in its
 // head, since things that look fine in the code are often what a demanding judge marks down.
 const LOOK = `Test it the way a demanding parent who is also a game designer would, before they play it with their kid. Go through it step by step, in the code and in the screenshot:
-1. Every control: follow each arrow key, a tap anywhere and a drag from its handler to what moves on screen. Does each one do something the kid sees right away, and does left go left? (A camera control that never listens to keys answers nothing.)
+1. Every control: follow each arrow key, a tap anywhere and a drag from its handler to what moves on screen. Does each one do something the kid sees right away, and does left go left? (A camera control that never listens to keys answers nothing.) Where one does nothing, give it an answer.
 2. Play it through, more than once: can the goal be reached, and reached again - do counters, cooldowns and flags reset? Does the reward really fire?
 3. The star: is it what they asked for, easy to recognize, big enough, facing and moving the way it goes, with a face?
-4. What they asked for: everything a kid pictures for this kind of thing (a race has someone to race), and the look really showing - nothing muddy, cut off, hidden or out of the camera's view.
+4. What they asked for: everything a kid pictures for this kind of thing (a race has someone to race), and every part of the look really showing - nothing muddy, flat, cut off, hidden or out of the camera's view, no look effect left out to save time (draw it the cheap way instead).
 5. Anything thin, or that plays itself, or a bug you can see.
 First write, under NOTES:, what you found - most important first, at most 6. Then WHY: <what you fixed, in one short sentence for the grown-ups' log>, and the FIND/REPLACE edits that fix them. Only if you really found nothing, reply with just: OK`;
 
@@ -409,14 +415,21 @@ export async function check({ projectId, version, report, screenshot, polish = f
   try {
     // Growing it comes first - even after a change, if the kid's change interrupted it.
     const grow = s.grow;
+    const dropped = s.dropped;
+    s.dropped = '';
     const prompt = [
-      s.page === page ? 'Here it is, running - the kid has been playing with it.' : `<current_page>\n${page}\n</current_page>\nHere it is, running (this is the page as it is now).`,
+      s.page === page
+        ? `Here it is, running - the kid has been playing with it.${dropped ? ` (The edits you wrote last weren't put in: ${dropped}. So it's as it was before them.)` : ''}`
+        : `<current_page>\n${page}\n</current_page>\nHere it is, running (this is the page as it is now).`,
       running(report, shot),
       grow ? GROW : LOOK,
       "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].join('\n\n');
     await s.think(thinkingFor('look'));
     const reply = await s.ask(prompt, { timeoutSec: 420, kind: 'polish' });
+    // Its edits not put in: it's told on its next turn (unless the kid's turn already came).
+    let mine = s.turns;
+    const drop = reason => s.turns === mine && (s.dropped = reason);
     const edits = parseReply(reply.text).edits;
     const why = field(reply.text, 'WHY') || 'made it better';
     if (!edits.length) {
@@ -431,16 +444,39 @@ export async function check({ projectId, version, report, screenshot, polish = f
       // Its own edits that don't fit: once more, copied exactly.
       try {
         const again = await s.ask(`Those edits didn't fit, so none of them are in: each FIND has to be copied exactly from the page and match only once (${err.message}). Write them all again so they fit.`, { timeoutSec: 180, kind: 'polish' });
+        mine = s.turns;
         html = applyEdits(page, parseReply(again.text).edits);
       } catch {
         log(`SOLO skip ${took()} ${why} (an edit didn't fit)`);
+        drop("they didn't fit");
         return { skipped: "edits didn't fit" };
       }
     }
-    if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length) return { skipped: "the change didn't parse" };
+    const before = (await syntaxErrors(page)).length;
+    const unparsed = async h => {
+      const errs = await syntaxErrors(h);
+      return errs.length > before ? errs : null;
+    };
+    const errs = await unparsed(html);
+    if (errs) {
+      // With its edits in, a script doesn't parse: once, it fixes that on top of them.
+      let fixed = null;
+      try {
+        const again = await s.ask(`With those edits in, the page doesn't parse: ${errs.slice(0, 3).join(' | ')}\nReply with FIND/REPLACE edits on the page with your edits in that fix just that.`, { timeoutSec: 180, kind: 'polish' });
+        mine = s.turns;
+        fixed = applyEdits(html, parseReply(again.text).edits);
+      } catch {}
+      if (!fixed || (await unparsed(fixed))) {
+        log(`SOLO skip ${took()} ${why} (it didn't parse)`);
+        drop("with them in, a script didn't parse");
+        return { skipped: "the change didn't parse" };
+      }
+      html = fixed;
+    }
     p = store.currentProject();
     if (p.id !== projectId || p.current !== version || isBusy()) {
       log(`SOLO stale ${took()} ${why}`);
+      drop('the kid asked for something first');
       return { skipped: 'stale' };
     }
     p = store.addVersion(p, html, { request: `(solo polish) ${why}`, backend: 'claude solo polish', continues: true });
