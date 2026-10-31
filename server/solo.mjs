@@ -109,6 +109,7 @@ class Session {
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
     this.projectId = projectId;
     this.page = null; // the page it last saw or wrote
+    this.grow = false; // something new it wrote hasn't been grown into its full version yet
     this.turns = 0;
     this.current = null; // the turn being answered
     this.queue = [];
@@ -313,6 +314,8 @@ export async function build({ page, history, text, alt, fix, look = pickLook() }
       } catch {}
     }
     s.page = html;
+    // Something new (a whole page): it's grown into its full version in the next pass.
+    if (r.html && !fix) s.grow = true;
   }
   log(`ok   claude solo ${secs()} ${edited ? `${r.edits.length} edits` : html ? 'a whole page' : 'only talked'}, ${html?.length ?? 0} chars, turn ${s.turns}`);
   return { say: said || r.say, done: r.done, title: r.title, emoji: r.emoji, html, edited, look, backend: 'claude solo' };
@@ -371,7 +374,8 @@ export async function check({ projectId, version, report, screenshot, polish = f
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   try {
-    const grow = !since.length && v.backend === 'claude solo' && !v.continues;
+    // Growing it comes first - even after a change, if the kid's change interrupted it.
+    const grow = s.grow;
     const prompt = [
       s.page === page ? 'Here it is, running - the kid has been playing with it.' : `<current_page>\n${page}\n</current_page>\nHere it is, running (this is the page as it is now).`,
       running(report, shot),
@@ -382,6 +386,7 @@ export async function check({ projectId, version, report, screenshot, polish = f
     const edits = parseReply(reply.text).edits;
     const why = field(reply.text, 'WHY') || 'made it better';
     if (!edits.length) {
+      if (grow) s.grow = false;
       log(`SOLO ok   ${took()} (pass ${since.length + 1})`);
       return { ok: true };
     }
@@ -406,11 +411,12 @@ export async function check({ projectId, version, report, screenshot, polish = f
     }
     p = store.addVersion(p, html, { request: `(solo polish) ${why}`, backend: 'claude solo polish', continues: true });
     s.page = html;
+    if (grow) s.grow = false;
     log(`SOLO fix  ${took()} ${why} (${edits.length} edits, pass ${since.length + 1}) → v${p.current}`);
     return { fixed: true, verdict: 'fix', why, html: store.html(p), version: p.current };
   } catch (err) {
-    log(`SOLO fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
-    return { skipped: 'failed' };
+    log(err.message === 'interrupted' ? `SOLO stop ${took()} (the kid asked for something)` : `SOLO fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
+    return { skipped: err.message === 'interrupted' ? 'stale' : 'failed' };
   } finally {
     if (shot) fs.rmSync(shot, { force: true });
   }
