@@ -227,6 +227,7 @@ const routes = {
     if (p.id !== projectId || p.current !== version || !/check|polish|overwatch/.test(v?.backend || '')) return { dropped: false };
     store.dropVersion(p, version);
     ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
+    if (/^claude solo/.test(v.backend)) solo.takenBack({ projectId, version, error });
     return { dropped: true };
   },
 

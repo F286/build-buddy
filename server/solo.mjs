@@ -4,8 +4,9 @@
 //   - Its first reply is the heart of it - the star, its place, the main thing to do - on screen in
 //     seconds (the session is started while the kid is still talking).
 //   - Then, while the kid plays, it looks at a screenshot of it running and grows it into its full
-//     version, then looks again as a demanding parent would and polishes it (solo.polish passes in
-//     all) - in the same session, so it knows what it meant every piece to do.
+//     version, makes it beautiful (the star and the look), then looks again as a demanding parent
+//     would and polishes it (solo.polish passes in all) - in the same session, so it knows what it
+//     meant every piece to do.
 //   - The kid's changes go to the same session: it knows every line it wrote, so it changes the
 //     page with small edits instead of reading it again.
 //   - Something the kid asks for comes first: a pass that's still running is interrupted (the
@@ -58,7 +59,7 @@ You build it alone, and you keep working on it: your first reply is the heart of
 - Something new, first reply: start writing straight away - SAY first, then TITLE, then the page - rather than thinking it all through first. Write the heart of it: the star, its place, the main thing to do with its reward, and the controls, all working and in the look - about 120 to 180 short lines, so it's there in seconds. You grow it right after.
 
 # After it appears
-You'll get a screenshot of it running and how it runs (frame rate, errors), and be asked to grow it or to look again. Reply then with WHY: <what you improved, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits, each as:
+You'll get a screenshot of it running and how it runs (frame rate, errors), and be asked to grow it, to make it beautiful, or to look again. Reply then with WHY: <what you improved, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits, each as:
 ${EDITS}
 If it's already as good as it can be, reply with just: OK`;
 }
@@ -111,6 +112,7 @@ class Session {
     this.projectId = projectId;
     this.page = null; // the page it last saw or wrote
     this.grow = false; // something new it wrote hasn't been grown into its full version yet
+    this.shine = false; // ... or made beautiful yet (after it's grown)
     this.dropped = ''; // why the edits it wrote last weren't put in (it's told on its next turn)
     this.turns = 0;
     this.current = null; // the turn being answered
@@ -346,8 +348,9 @@ export async function build({ page, history, text, alt, fix, look = pickLook() }
       } catch {}
     }
     s.page = html;
-    // Something new (a whole page): it's grown into its full version in the next pass.
-    if (r.html && !fix) s.grow = true;
+    // Something new (a whole page): it's grown into its full version in the next pass, then
+    // made beautiful.
+    if (r.html && !fix) [s.grow, s.shine] = [true, false];
   }
   log(`ok   claude solo ${secs()} ${edited ? `${r.edits.length} edits` : html ? 'a whole page' : 'only talked'}, ${html?.length ?? 0} chars, turn ${s.turns}`);
   return { say: said || r.say, done: r.done, title: r.title, emoji: r.emoji, html, edited, look, backend: 'claude solo' };
@@ -383,6 +386,14 @@ const GROW = `Now grow it into its full, excellent version - about twice as much
 - Every arrow key, a tap anywhere and a drag each get an answer the kid sees.
 - Keep it smooth (nothing made every frame, a costly look drawn the cheap way) and everything in the look.`;
 
+// Then make it beautiful: the star and the look, which judges mark down most once it plays well.
+const SHINE = `Now make it look wonderful - a picture a kid would want to frame - with FIND/REPLACE edits:
+1. The star: does it read at a glance as what they asked for, from where the camera sees it? Give it the parts a kid would draw (legs, wings, wheels, a tail...), a big friendly face whose expression changes (happy when it gets something, surprised when bumped), and squash and stretch when it moves. Other characters get faces and personality too.
+2. The look: go through every word of its description and make each one show on screen - soft shadows soft, glow glowing, outlines thick, textures there - drawn the cheap way where it's costly, never left out.
+3. The place: fill bare areas with things that belong there, near and far, so the whole screen is a full, layered picture.
+4. Anything that looks wrong in the screenshot: cut off, overlapping, floating, upside down, the wrong size.
+Then WHY: <what you improved, in one short sentence for the grown-ups' log>, and the edits. Keep everything working as it does.`;
+
 // Then (and after each change): look again, as the tester in team mode would - testing it in its
 // head, since things that look fine in the code are often what a demanding judge marks down.
 const LOOK = `Test it the way a demanding parent who is also a game designer would, before they play it with their kid. Go through it step by step, in the code and in the screenshot:
@@ -413,8 +424,10 @@ export async function check({ projectId, version, report, screenshot, polish = f
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   try {
-    // Growing it comes first - even after a change, if the kid's change interrupted it.
+    // Growing it comes first - even after a change, if the kid's change interrupted it - then
+    // making it beautiful, then looking again.
     const grow = s.grow;
+    const shine = !grow && s.shine;
     const dropped = s.dropped;
     s.dropped = '';
     const prompt = [
@@ -422,7 +435,7 @@ export async function check({ projectId, version, report, screenshot, polish = f
         ? `Here it is, running - the kid has been playing with it.${dropped ? ` (The edits you wrote last weren't put in: ${dropped}. So it's as it was before them.)` : ''}`
         : `<current_page>\n${page}\n</current_page>\nHere it is, running (this is the page as it is now).`,
       running(report, shot),
-      grow ? GROW : LOOK,
+      grow ? GROW : shine ? SHINE : LOOK,
       "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].join('\n\n');
     await s.think(thinkingFor('look'));
@@ -433,7 +446,8 @@ export async function check({ projectId, version, report, screenshot, polish = f
     const edits = parseReply(reply.text).edits;
     const why = field(reply.text, 'WHY') || 'made it better';
     if (!edits.length) {
-      if (grow) s.grow = false;
+      if (grow) [s.grow, s.shine] = [false, true];
+      if (shine) s.shine = false;
       log(`SOLO ok   ${took()} (pass ${since.length + 1})`);
       return { ok: true };
     }
@@ -481,7 +495,9 @@ export async function check({ projectId, version, report, screenshot, polish = f
     }
     p = store.addVersion(p, html, { request: `(solo polish) ${why}`, backend: 'claude solo polish', continues: true });
     s.page = html;
-    if (grow) s.grow = false;
+    s.lastPass = { version: p.current, kind: grow ? 'grow' : shine ? 'shine' : 'look' };
+    if (grow) [s.grow, s.shine] = [false, true];
+    if (shine) s.shine = false;
     log(`SOLO fix  ${took()} ${why} (${edits.length} edits, pass ${since.length + 1}) → v${p.current}`);
     return { fixed: true, verdict: 'fix', why, html: store.html(p), version: p.current };
   } catch (err) {
@@ -490,6 +506,18 @@ export async function check({ projectId, version, report, screenshot, polish = f
   } finally {
     if (shot) fs.rmSync(shot, { force: true });
   }
+}
+
+// One of its passes crashed when the app tried it out of sight, so it was taken back (POST
+// /api/drop-fix): it's told on its next turn, and a grow or a beautifying that was lost happens again.
+export function takenBack({ projectId, version, error }) {
+  const s = session;
+  if (!s?.alive || s.projectId !== projectId || s.lastPass?.version !== version) return;
+  s.page = store.html(store.currentProject());
+  s.dropped = `with them in, it crashed when it was tried (${String(error || '').slice(0, 200)}), so they were taken back`;
+  if (s.lastPass.kind === 'grow') [s.grow, s.shine] = [true, false];
+  if (s.lastPass.kind === 'shine') s.shine = true;
+  s.lastPass = null;
 }
 
 // ---------------------------------------------------------------------------------------------
