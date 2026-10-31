@@ -466,7 +466,7 @@ First write, under NOTES:, what you found - most important first, at most 6. The
 // How long it may think: little while the kid waits, a lot when it looks its creation over.
 function thinkingFor(what) {
   const t = config().solo?.thinking || {};
-  return what === 'build' ? (t.build ?? 1024) : (t.look ?? 12000);
+  return what === 'build' ? (t.build ?? 2000) : (t.look ?? 12000);
 }
 
 export async function check({ projectId, version, report, screenshot }) {

@@ -89,6 +89,7 @@ cd build-buddy
 ./start.sh --no-browser     # just the server; open http://127.0.0.1:4321 yourself
 ./start.sh --window --debug # also lets Chrome DevTools tools attach on port 9222
 ./start.sh --classic        # one AI writes each creation by itself, instead of a team (see Team mode)
+./start.sh --solo           # one Claude that remembers the creation and keeps improving it (see Solo mode)
 ```
 
 **Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, how Claude builds, voice, names), the
@@ -153,6 +154,10 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.check` | `true` | Right after a creation appears, the checker takes a careful look and its fixes slide in at a calm moment. |
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
+| `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
+| `solo.polish` | `3` | How many times it goes back to a creation while the kid plays (`false` for none): after something new, it grows it, makes it beautiful, then looks again; after a change, it looks again. |
+| `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
+| `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
@@ -213,6 +218,51 @@ Every role takes the same options, so you can tune how Claude Code runs:
 
 A team build uses more of your plan than a classic one (several AIs read the request, and the pages
 come out bigger and more detailed), and runs up to `helpers` + 2 `claude` programs at once.
+
+### Solo mode
+
+Solo mode is a third way of building, for Claude: one Claude builds the whole creation and keeps it
+in mind, with no team and no helpers. Pick it in the Ctrl+Shift+P panel (*How Claude builds*), set
+`"solo": { "enabled": true }` in `config.json`, or try it for one run with `./start.sh --solo`. The
+classic way and team mode stay exactly as they are.
+
+- **One Claude per creation, remembering it.** A single `claude` program is started while the kid is
+  still talking and keeps running between requests, so it knows every line it wrote and what it
+  meant each piece to do.
+- **The heart of it first.** Its first reply is the heart of the creation: the star, its place, the
+  main thing to do with its reward, and the controls, all working and in the look. Sparky's first
+  words come after about 3 s; the creation is on screen after about 32 s.
+- **Then it keeps working on it while the kid plays.** In the same session, it looks at a screenshot
+  of it running (with its frame rate and any errors) three times (`solo.polish`):
+  1. it grows it into its full version: about twice as much, with everything a kid pictures for
+     that kind of thing (a race gets rivals to beat), more of its place, characters who
+     react, a goal that grows, and surprises that come from exactly what the kid said;
+  2. it makes it beautiful: the star readable at a glance, with a face whose expression changes,
+     every word of the look really on screen, and no bare corners;
+  3. it tests it like a demanding parent: it follows every arrow key, tap and drag to what moves,
+     plays the goal through more than once, and fixes what it finds.
+
+  Each pass is tried out of sight first and slides in at a calm moment, keeping the kid's progress,
+  like team mode's polish. One that would crash is taken back, and Claude is told why (a lost grow
+  or beautifying pass happens again).
+- **Changes from memory.** It already knows the page, so a change is a few edits written straight
+  away (5 to 30 s in tests), and the kid's progress carries over.
+- **The kid comes first.** If they ask for something while a pass is still working, that pass stops,
+  their request is answered next, and the pass happens later.
+- **Thinks a little while the kid waits, a lot while they play:** `solo.thinking` gives the budgets.
+
+If the session runs into trouble, that request is built the classic way. After 24 turns, or 20
+minutes without one, the session is replaced by a fresh one, handed the page as it is and what the
+kid asked for lately; what it still had to do (growing it, making it beautiful) carries over.
+
+On the same eight test creations as team mode, judged blind one at a time against the same fixed
+anchors (10 = nothing noticeably wrong), solo mode's creations averaged about 7.4 out of 10 after
+its three passes, against 7.6 for team mode in the same rounds, and were judged the most original of
+the three ways of building (6.8 against team mode's 6.4). The heart of each creation was on screen
+after 32 s on average (at most 40 s), Sparky's first words came after about 3 s (at most 6 s), and
+each pass took about 40 s (20 s to a little over a minute) while the kid played. In a session in the
+real app, changes took 7 to 15 s and the kid's progress carried over each one. Solo mode runs one
+`claude` program at a time, where team mode runs up to eight.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
@@ -303,8 +353,8 @@ Buddy changes.
   anything, or touch the rest of the app. The only things they can load are the bundled Phaser and
   Three.js.
 - **What leaves your computer:** the text of each request and the current creation's code, sent to
-  Claude or ChatGPT. The overwatch (and in team mode the checker) also sends a small screenshot of
-  the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
+  Claude or ChatGPT. The overwatch (and in team mode the checker, in solo mode each pass) also
+  sends a small screenshot of the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
 - **Kid-friendly by instruction.** Sparky is told to keep everything friendly and age-appropriate,
@@ -330,6 +380,7 @@ but `setup.sh` needs WSL, or use `"stt": "browser", "tts": "browser"` with Chrom
 server/main.mjs      web server, API, full-screen browser launcher
 server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
 server/team.mjs      team mode: a lead and helpers that build a creation together, at the same time
+server/solo.mjs      solo mode: one Claude session per creation that remembers it and keeps improving it
 server/speech.mjs    whisper.cpp (listening), Kokoro and Piper (talking)
 server/watch.mjs     the overwatch: a stronger model that checks on games and fixes them
 server/store.mjs     creations and their versions, saved in data/projects/
