@@ -66,11 +66,12 @@ export const DEFAULTS = {
     tester: { model: '', effort: 'medium' },
   },
   // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
-  // in mind - no team. It writes the page in one go, then looks at screenshots of it running and
-  // makes it better (polish: how many times), and makes the kid's changes from memory. model,
-  // effort and args as for a team role; left empty, it uses the Claude settings above.
+  // in mind - no team. Its first reply is the heart of it, on screen quickly; then, while the kid
+  // plays, it looks at screenshots of it running, grows it into its full version and polishes it
+  // (polish: how many of those passes), and it makes the kid's changes from memory. model, effort
+  // and args as for a team role; left empty, it uses the Claude settings above.
   // enabled: true builds this way (it comes before team mode).
-  solo: { enabled: false, polish: 2, model: '', effort: '' },
+  solo: { enabled: false, polish: 3, model: '', effort: '' },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 

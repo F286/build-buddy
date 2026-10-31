@@ -1,14 +1,15 @@
 // Solo mode: one Claude builds the whole creation, and remembers it. No team and no helpers: a
 // single `claude -p` session per creation, kept running between requests.
 //
-//   - It writes the page in one go (the session is started while the kid is still talking).
-//   - Right after the page appears, it looks at a screenshot of it running and makes it better -
-//     as a demanding parent who is also a game designer would want (team.polish-like passes,
-//     solo.polish of them) - in the same session, so it knows what it meant every piece to do.
+//   - Its first reply is the heart of it - the star, its place, the main thing to do - on screen in
+//     seconds (the session is started while the kid is still talking).
+//   - Then, while the kid plays, it looks at a screenshot of it running and grows it into its full
+//     version, then looks again as a demanding parent would and polishes it (solo.polish passes in
+//     all) - in the same session, so it knows what it meant every piece to do.
 //   - The kid's changes go to the same session: it knows every line it wrote, so it changes the
 //     page with small edits instead of reading it again.
-//   - Something the kid asks for comes first: a look-and-improve pass that's still running is
-//     interrupted (the session keeps everything it knew).
+//   - Something the kid asks for comes first: a pass that's still running is interrupted (the
+//     session keeps everything it knew).
 //
 // If a session ends (the creation changes, the app restarts, it gets too long), the next one is
 // handed the page as it is.
@@ -30,7 +31,7 @@ export function enabled() {
 // How many look-and-improve passes follow a creation (or a change).
 export function polishPasses() {
   const v = config().solo?.polish;
-  return v === false ? 0 : v === true || v == null ? 2 : Math.max(0, Math.min(3, Math.round(Number(v)) || 0));
+  return v === false ? 0 : v === true || v == null ? 3 : Math.max(0, Math.min(4, Math.round(Number(v)) || 0));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -47,16 +48,16 @@ function soloSystem() {
   return `${systemPrompt()}
 
 # Make it excellent - and its own
-You build it alone, in one go, and you'll keep working on it: after it appears you'll see screenshots of it running and make it better, and the kid's changes come back to you. So build the heart of it first and build it well.
+You build it alone, and you keep working on it: your first reply is the heart of it, on screen in seconds; right after, you'll see it running and grow it into its full version, then look again and polish it, while the kid plays. The kid's changes come back to you too.
 - Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects. Give it everything a kid pictures when they ask for that kind of thing (a soccer game has a goalie to beat, a train has tracks and a station).
 - The star of it - the thing they asked for - is big, near the middle of the action, easy to recognize at a glance, with a face and personality, and in proportion with its world.
 - Everything is drawn in the look, so the whole scene looks like one picture: shapes drawn in that style, not big emoji.
 - Controls a 5-year-old gets at once: the arrow keys move things the way they point on the screen (seen from above, never steering-wheel turns), a quick tap gets a clear answer right away, and a drag does what a finger would expect.
 - Make it this kid's own creation, not a generic version: little surprises and details that come from exactly what they said, a place with character, a look that fits. Never a copy of the last thing.
-- Keep it quick: start writing straight away - SAY first, then TITLE, then the page - rather than thinking it all through first (you'll see it running and improve it right after). About 200 to 300 short lines: rich where it shows, short everywhere else.
+- Something new, first reply: start writing straight away - SAY first, then TITLE, then the page - rather than thinking it all through first. Write the heart of it: the star, its place, the main thing to do with its reward, and the controls, all working and in the look - about 120 to 180 short lines, so it's there in seconds. You grow it right after.
 
 # After it appears
-You'll get a screenshot of it running and how it runs (frame rate, errors). Then look at it as a demanding parent who is also a game designer would, and fix what keeps it from being excellent, most important first. Reply then with WHY: <what you improved, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits, each as:
+You'll get a screenshot of it running and how it runs (frame rate, errors), and be asked to grow it or to look again. Reply then with WHY: <what you improved, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits, each as:
 ${EDITS}
 If it's already as good as it can be, reply with just: OK`;
 }
@@ -340,6 +341,22 @@ function saveScreenshot(dataUrl) {
   return file;
 }
 
+// After something new appears: grow it into its full version (FIND/REPLACE edits, adding to it).
+const GROW = `Now grow it into its full, excellent version, adding to what's there with FIND/REPLACE edits:
+- First fix anything you can see isn't working or showing yet.
+- Then add what it still lacks to be a delight: everything a kid pictures for this kind of thing, more of its place (near and far, made in loops), characters with faces and personality that react, a reward that feels great and a goal that grows, and one or two surprises that come from exactly what the kid said.
+- Keep it smooth (no filters or shadowBlur, nothing made every frame) and everything in the look.`;
+
+// Then (and after each change): look again, as the tester in team mode would.
+const LOOK = `Look at it again as a demanding parent who is also a game designer. First write, under NOTES:, the most important things they'd mark down - at most 6, most important first - looking for:
+- what the kid asked for, or the look, not fully there or not visible
+- glitches you can see in the screenshot: cut off, overlapping, muddy, floating, facing the wrong way, hidden
+- the star hard to recognize, too small, without personality, or out of proportion
+- controls that do nothing, answer weakly, or confuse a small kid (left that doesn't go left, a quick tap that barely does anything, a drag that does nothing special)
+- nothing to reach or beat, a goal that can't be reached, a thin reward, nothing new as they keep playing
+- a thin or empty scene; bugs you can see in the code
+Then fix as many of them as you can do well. If nothing important is left, reply with just: OK`;
+
 export async function check({ projectId, version, report, screenshot, polish = false }) {
   if (!enabled() || !polishPasses()) return { skipped: 'off' };
   let p = store.currentProject();
@@ -354,14 +371,12 @@ export async function check({ projectId, version, report, screenshot, polish = f
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   try {
-    const first = !since.length;
+    const grow = !since.length && v.backend === 'claude solo' && !v.continues;
     const prompt = [
       s.page === page ? 'Here it is, running - the kid has been playing with it.' : `<current_page>\n${page}\n</current_page>\nHere it is, running (this is the page as it is now).`,
       running(report, shot),
-      first
-        ? 'First make sure it really works and is what they asked for: everything there and easy to see, every control answering, the goal reachable. Then make the changes that matter most to make it excellent.'
-        : 'Look again, as a demanding parent who is also a game designer: what still keeps it from being excellent? Make the changes that matter most.',
-      "Keep it the kid's creation: don't change what they chose, don't add big things they didn't ask for, keep the controls and the KB.keep names.",
+      grow ? GROW : LOOK,
+      "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].join('\n\n');
     const reply = await s.ask(prompt, { timeoutSec: 420, kind: 'polish' });
     const edits = parseReply(reply.text).edits;
