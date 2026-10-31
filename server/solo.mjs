@@ -111,6 +111,14 @@ function sessionArgs() {
   return args;
 }
 
+// Which model answers: `first` writes something new while the kid waits (a quicker one), `main`
+// everything else - the passes, the kid's changes, repairs. Without a main model set, it never
+// switches.
+function models() {
+  const main = config().solo?.model || config().claude.model || '';
+  return { main, first: main ? config().solo?.firstModel || main : '' };
+}
+
 class Session {
   constructor(projectId) {
     const args = sessionArgs();
@@ -118,6 +126,7 @@ class Session {
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
     this.key = JSON.stringify(args);
     this.fast = args.includes('--settings');
+    this.model = models().main; // the model answering now
     this.projectId = projectId;
     this.page = null; // the page as it knows it (null: it's handed the page on its next turn)
     this.unsure = false; // it wrote edits whose fate isn't settled: it's handed the page next time
@@ -285,6 +294,13 @@ class Session {
     await this.control({ subtype: 'set_max_thinking_tokens', max_thinking_tokens: tokens });
   }
 
+  // Which model answers from its next turn on (the session keeps everything it knew).
+  async use(model) {
+    if (!model || this.model === model) return;
+    this.model = model;
+    await this.control({ subtype: 'set_model', model });
+  }
+
   // Stop the turn being answered (it ends without an answer); the session goes on.
   interrupt() {
     if (!this.current || this.closed) return;
@@ -358,6 +374,7 @@ export async function build({ page, history, text, alt, fix, look = pickLook() }
   const s = sessionFor(p.id, { renew: true });
   const w = workFor(p.id);
   makeWay(s);
+  await s.use(page ? models().main : models().first);
   await s.think(thinkingFor('build'));
   makeWay(s); // (one that started meanwhile)
   let chars = 0;
@@ -455,13 +472,11 @@ Then WHY: <what you improved, in one short sentence for the grown-ups' log>, and
 
 // Then (and after each change): look again, as the tester in team mode would - testing it in its
 // head, since things that look fine in the code are often what a demanding judge marks down.
-const LOOK = `Test it the way a demanding parent who is also a game designer would, before they play it with their kid. Go through it step by step, in the code and in the screenshot:
+const LOOK = `Test it the way a demanding parent who is also a game designer would, before they play it with their kid - in the code and in the screenshot:
 1. Every control: follow each arrow key, a tap anywhere and a drag from its handler to what moves on screen. Does each one do something the kid sees right away, and does left go left? (A camera control that never listens to keys answers nothing.) Where one does nothing, give it an answer.
-2. Play it through, more than once: can the goal be reached, and reached again - do counters, cooldowns and flags reset? Does the reward really fire?
-3. The star: is it what they asked for, easy to recognize, big enough, facing and moving the way it goes, with a face?
-4. What they asked for: everything a kid pictures for this kind of thing (a race has someone to race), and every part of the look really showing - nothing muddy, flat, cut off, hidden or out of the camera's view, no look effect left out to save time (draw it the cheap way instead).
-5. Anything thin, or that plays itself, or a bug you can see.
-First write, under NOTES:, what you found - most important first, at most 6. Then WHY: <what you fixed, in one short sentence for the grown-ups' log>, and the FIND/REPLACE edits that fix them. Only if you really found nothing, reply with just: OK`;
+2. Every goal and reward: trace each collision, overlap, distance check, timer and counter in the code - would it really fire (both things it checks exist, are in range, and have what the check needs)? Play it through more than once: does it reset, and does it happen again?
+3. Then score it 1 to 10 the way that parent would, on: what they asked for (all of it, in the look), delight (charming and polished, a full scene, characters with personality), alive (things move on their own, every input answers), easy for a 5-year-old (no reading, big targets, forgiving), solid (no bugs, glitches or anything cut off), and its own (touches that come from exactly what the kid said, not a generic version).
+First write, under NOTES:, the scores and, for each below 9, what keeps it there - most important first. Then WHY: <what you fixed, in one short sentence for the grown-ups' log>, and the FIND/REPLACE edits that fix as much of it as you can do well. Only if everything is a 9 or 10, reply with just: OK`;
 
 // How long it may think: little while the kid waits, a lot when it looks its creation over.
 function thinkingFor(what) {
@@ -499,6 +514,7 @@ export async function check({ projectId, version, report, screenshot }) {
       grow ? GROW : shine ? SHINE : LOOK,
       "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].join('\n\n');
+    await s.use(models().main);
     await s.think(thinkingFor('look'));
     if (stale()) return { skipped: 'stale' };
     w.note = '';
@@ -625,6 +641,7 @@ export async function repair({ version, errors, keep, accept = false }) {
   const known = s.page === page && !s.unsure;
   // Until its repair is taken, it's handed the page next time.
   s.unsure = true;
+  await s.use(models().main);
   try {
     const reply = await s.ask(
       (known ? '' : `<current_page>\n${page}\n</current_page>\n\n`) +

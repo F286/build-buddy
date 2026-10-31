@@ -73,7 +73,9 @@ export const DEFAULTS = {
   // enabled: true builds this way (it comes before team mode).
   // thinking: how long it may think (tokens) while the kid waits (build) and when it looks its
   // creation over (look).
-  solo: { enabled: false, polish: 3, model: '', effort: '', thinking: { build: 2000, look: 12000 } },
+  // firstModel: the quicker model that writes something new while the kid waits (the same
+  // session then switches to the main model for everything else).
+  solo: { enabled: false, polish: 3, model: '', firstModel: 'sonnet', effort: '', thinking: { build: 2000, look: 12000 } },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 
