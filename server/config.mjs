@@ -71,7 +71,9 @@ export const DEFAULTS = {
   // (polish: how many of those passes), and it makes the kid's changes from memory. model, effort
   // and args as for a team role; left empty, it uses the Claude settings above.
   // enabled: true builds this way (it comes before team mode).
-  solo: { enabled: false, polish: 3, model: '', effort: '' },
+  // thinking: how long it may think (tokens) while the kid waits (build) and when it looks its
+  // creation over (look).
+  solo: { enabled: false, polish: 3, model: '', effort: '', thinking: { build: 2000, look: 12000 } },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 

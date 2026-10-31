@@ -168,6 +168,12 @@ class Session {
     } catch {
       return;
     }
+    if (ev.type === 'control_response') {
+      const id = ev.response?.request_id;
+      this.controls?.get(id)?.(ev.response);
+      this.controls?.delete(id);
+      return;
+    }
     const t = this.current;
     if (!t) return;
     t.quietSince = Date.now();
@@ -232,6 +238,26 @@ class Session {
     this.end();
   }
 
+  // Change how it runs from its next turn on (like its thinking budget); resolves once it's done.
+  control(request) {
+    if (this.closed) return Promise.resolve(null);
+    const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.controls ??= new Map();
+    return new Promise(resolve => {
+      const timer = setTimeout(() => (this.controls.delete(id), resolve(null)), 5000);
+      this.controls.set(id, r => (clearTimeout(timer), resolve(r)));
+      this.child.stdin.write(`${JSON.stringify({ type: 'control_request', request_id: id, request })}\n`);
+    });
+  }
+
+  // How long it thinks before it answers: briefly when the kid is waiting, long when it looks
+  // its creation over (team mode's tester does that separately; here it's the same session).
+  async think(tokens) {
+    if (this.thinking === tokens) return;
+    this.thinking = tokens;
+    await this.control({ subtype: 'set_max_thinking_tokens', max_thinking_tokens: tokens });
+  }
+
   // Stop the turn being answered (it ends without an answer); the session goes on.
   interrupt() {
     if (!this.current || this.closed) return;
@@ -278,6 +304,7 @@ export async function build({ page, history, text, alt, fix, look = pickLook() }
     s.queue.splice(s.queue.indexOf(t), 1);
     t.finish(new Error('stale'));
   }
+  await s.think(thinkingFor('build'));
   let chars = 0;
   let said = '';
   let got = '';
@@ -350,15 +377,21 @@ const GROW = `Now grow it into its full, excellent version, adding to what's the
 - Then add what it still lacks to be a delight: everything a kid pictures for this kind of thing, more of its place (near and far, made in loops), characters with faces and personality that react, a reward that feels great and a goal that grows, and one or two surprises that come from exactly what the kid said.
 - Keep it smooth (no filters or shadowBlur, nothing made every frame) and everything in the look.`;
 
-// Then (and after each change): look again, as the tester in team mode would.
-const LOOK = `Look at it again as a demanding parent who is also a game designer. First write, under NOTES:, the most important things they'd mark down - at most 6, most important first - looking for:
-- what the kid asked for, or the look, not fully there or not visible
-- glitches you can see in the screenshot: cut off, overlapping, muddy, floating, facing the wrong way, hidden
-- the star hard to recognize, too small, without personality, or out of proportion
-- controls that do nothing, answer weakly, or confuse a small kid (left that doesn't go left, a quick tap that barely does anything, a drag that does nothing special)
-- nothing to reach or beat, a goal that can't be reached, a thin reward, nothing new as they keep playing
-- a thin or empty scene; bugs you can see in the code
-Then fix as many of them as you can do well. If nothing important is left, reply with just: OK`;
+// Then (and after each change): look again, as the tester in team mode would - testing it in its
+// head, since things that look fine in the code are often what a demanding judge marks down.
+const LOOK = `Test it the way a demanding parent who is also a game designer would, before they play it with their kid. Go through it step by step, in the code and in the screenshot:
+1. Every control: follow each arrow key, a tap anywhere and a drag from its handler to what moves on screen. Does each one do something the kid sees right away, and does left go left? (A camera control that never listens to keys answers nothing.)
+2. Play it through, more than once: can the goal be reached, and reached again - do counters, cooldowns and flags reset? Does the reward really fire?
+3. The star: is it what they asked for, easy to recognize, big enough, facing and moving the way it goes, with a face?
+4. What they asked for: everything a kid pictures for this kind of thing (a race has someone to race), and the look really showing - nothing muddy, cut off, hidden or out of the camera's view.
+5. Anything thin, or that plays itself, or a bug you can see.
+First write, under NOTES:, what you found - most important first, at most 6. Then fix them with FIND/REPLACE edits. Only if you really found nothing, reply with just: OK`;
+
+// How long it may think: little while the kid waits, a lot when it looks its creation over.
+function thinkingFor(what) {
+  const t = config().solo?.thinking || {};
+  return what === 'build' ? (t.build ?? 2000) : (t.look ?? 12000);
+}
 
 export async function check({ projectId, version, report, screenshot, polish = false }) {
   if (!enabled() || !polishPasses()) return { skipped: 'off' };
@@ -382,6 +415,7 @@ export async function check({ projectId, version, report, screenshot, polish = f
       grow ? GROW : LOOK,
       "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].join('\n\n');
+    await s.think(thinkingFor('look'));
     const reply = await s.ask(prompt, { timeoutSec: 420, kind: 'polish' });
     const edits = parseReply(reply.text).edits;
     const why = field(reply.text, 'WHY') || 'made it better';
