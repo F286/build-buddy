@@ -516,7 +516,7 @@ async function build(body) {
         sfx.tada();
         cheer();
       }
-      if (/^claude (team|solo)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version);
+      if (/^claude (team|solo)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend === 'claude solo' });
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -698,10 +698,12 @@ setInterval(() => checkCreation(), 15000);
 // Something built meanwhile doesn't stop it: it waits. A newer team build does (that one gets its
 // own check).
 let checkRun = 0;
-async function checkTeamBuild(projectId, version) {
+// Solo mode's passes go on until the server says it's done (a pass the kid interrupted, or one
+// taken back, happens again), with a few extra calls at most.
+async function checkTeamBuild(projectId, version, { solo = false } = {}) {
   const run = ++checkRun;
   try {
-    for (const polish of [false, ...Array(state.config.polishPasses ?? 1).fill(true)]) {
+    for (const polish of [false, ...Array((state.config.polishPasses ?? 1) + (solo ? 3 : 0)).fill(true)]) {
       // Let it start up and draw for a moment, then send how it's running and a screenshot.
       await sleep(1500);
       // Something being built meanwhile (a crash fix, or what the kid said next): wait for it. If it
@@ -714,6 +716,7 @@ async function checkTeamBuild(projectId, version) {
       report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];
       const r = await api('/api/check', { projectId, version: v, report, screenshot, polish });
       if (r.fixed) await applyFix(projectId, r.base ?? v, r); // (base: a newer version it was carried over onto)
+      if (solo && /^(polished enough|off)$/.test(r.skipped || '')) return;
     }
   } catch (err) {
     console.warn('team check failed', err);

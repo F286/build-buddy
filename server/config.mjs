@@ -73,7 +73,7 @@ export const DEFAULTS = {
   // enabled: true builds this way (it comes before team mode).
   // thinking: how long it may think (tokens) while the kid waits (build) and when it looks its
   // creation over (look).
-  solo: { enabled: false, polish: 3, model: '', effort: '', thinking: { build: 2000, look: 12000 } },
+  solo: { enabled: false, polish: 3, model: '', effort: '', thinking: { build: 1024, look: 12000 } },
   codex: { bin: '', model: '', reasoning: 'low' },
   command: { cmd: '', args: [] },
 

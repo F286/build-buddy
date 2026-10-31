@@ -262,6 +262,7 @@ const routes = {
     if (['kokoro', 'piper', 'browser', 'off'].includes(b.tts)) patch.tts = b.tts;
     if (speech.KOKORO_VOICES.includes(b.voice)) patch.kokoro = { voice: b.voice };
     saveConfig(patch);
+    if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
     return publicConfig();
   },
 
