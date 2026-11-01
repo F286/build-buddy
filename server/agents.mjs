@@ -8,7 +8,6 @@
 //   parts/<name>.js  each part, written by a helper (and fixed by the lead to fit)
 //   rules.md         the rules every helper follows, and what the kid asked for (written here, so
 //                    the lead's jobs stay short)
-//   plan.md          the lead's own notes for its helpers (the shared names, how the parts talk)
 // After each turn the page is put together from them (each `// @part` line becomes its file).
 //
 // After a creation appears, while the kid plays, the lead looks at screenshots of it and grows and
@@ -48,7 +47,10 @@ function lead() {
     fast: r.fast ?? Boolean(c.claude.fast),
     args: Array.isArray(r.args) ? r.args.map(String) : [],
     helperModel: helperAlias(c.team?.agentHelper?.model),
-    thinking: { build: 3000, look: 10000, ...(r.thinking || {}) },
+    // firstModel: who leads the turn that makes something new while the kid waits (the main model
+    // takes over for everything else - its passes, the kid's changes, repairs).
+    firstModel: r.firstModel || '',
+    thinking: { build: 1500, look: 10000, ...(r.thinking || {}) },
   };
 }
 
@@ -66,7 +68,7 @@ DONE: <1-2 short sentences said when it appears: how to play with it. You may en
 Someone else has already answered the kid out loud, so don't write SAY - unless there is nothing to build (you didn't understand, or they asked you something): then write only SAY: <what to say> and change no files.
 
 # You lead a building team - and the creation lives in files
-Your working folder holds the creation: page.html is the page, with a line \`// @part <name>\` wherever a part's code goes, and parts/<name>.js holds each part. Build Buddy puts them together (each \`// @part\` line becomes that part's file) and shows it the moment your reply ends. rules.md holds the rules every helper follows and what the kid asked for - Build Buddy writes it, so never change it. If your helpers need to know something about the whole creation (the shared names, the coordinates, how the parts talk to each other), write it in plan.md: they read it too.
+Your working folder holds the creation: page.html is the page, with a line \`// @part <name>\` wherever a part's code goes, and parts/<name>.js holds each part. Build Buddy puts them together (each \`// @part\` line becomes that part's file) and shows it the moment your reply ends. rules.md holds the rules every helper follows and what the kid asked for - Build Buddy writes it, so never change it. If your helpers need to know something about the whole creation (the coordinates, how the parts talk to each other), say it in a short comment in page.html's shared code: they read it there.
 
 Your helpers are subagents (the Agent tool, subagent_type "general-purpose", model "${helperModel}"). They write at the same time as each other, so the kid gets it much sooner - but only if you hand the work out: every part file is written by a helper, never by you. Your own writing is page.html, the jobs, and the fixes that make the parts fit. You are the one who knows the whole creation, so you make it one thing that works.
 
@@ -75,8 +77,8 @@ Your helpers are subagents (the Agent tool, subagent_type "general-purpose", mod
    - the shared code: every import any part needs, the palette and sizes, the shared state - the world's rules as a few plain numbers that one place updates every frame - the shared input object, and \`const keep = KB.keep({ ... })\` with every field the kid would miss when the page changes;
    - a \`// @part <name>\` line for each part, in the order they must load;
    - MAIN: it makes the page's elements, creates everything by calling the parts exactly as their jobs say, runs the one animation loop (dt and t in seconds, dt at most 0.05) and turns the arrow keys, taps and drags into the shared input object.
-2. In the same message, an Agent call for every part: 3 to 6 parts, similar in size, about 30-50 lines each (for example: the rules, the place, the star, the other characters, the effects and sounds). Each job is short - the helper reads rules.md, plan.md and page.html itself:
-   "Read rules.md, plan.md and page.html, then write parts/<name>.js defining exactly: <the code it defines, like drawSky(ctx, t) or makeFrog(scene) → { update(dt, t), hitTest(x, y) }>. <In under 40 words: how it looks, sounds and feels, what it does when poked, and the shared names and keep fields it reads or changes.>"
+2. In the same message, an Agent call for every part, biggest first (the slowest helper starts first): 3 to 6 parts, similar in size, about 30-50 lines each (for example: the rules, the place, the star, the other characters, the effects and sounds). Each job is short - the helper reads rules.md and page.html itself:
+   "Read rules.md and page.html, then write parts/<name>.js defining exactly: <the code it defines, like drawSky(ctx, t) or makeFrog(scene) → { update(dt, t), hitTest(x, y) }>. <In under 40 words: how it looks, sounds and feels, what it does when poked, and the shared names and keep fields it reads or changes.>"
 3. When the helpers are done, Read every part (all the Reads in one message) and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash, anything that doesn't fit the plan or the look - with the Edit tool, in the part or in page.html. Then end with DONE.
 
 ## A change to what's there
@@ -96,9 +98,9 @@ ${buildingRules()}`;
 function helperRules({ asked, latest = '', look, freshLook = '' }) {
   return `# How to write your part
 
-You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. The team lead wrote page.html: the shared code at the top, a \`// @part <name>\` line where each part goes, and MAIN at the bottom, which calls your part exactly as your job says. In plan.md the lead may have left notes about the whole creation (the shared names, the coordinates, how the parts talk to each other) - follow them. Other helpers write the other parts at the same time.
+You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. The team lead wrote page.html: the shared code at the top, a \`// @part <name>\` line where each part goes, and MAIN at the bottom, which calls your part exactly as your job says. The comments in the shared code tell you how the parts fit together (the coordinates, how they talk to each other) - follow them. Other helpers write the other parts at the same time.
 
-- Write only the file your job names, with the Write tool (or Edit, if your job is to change a part that's there). Then reply with one short line: what you defined.
+- Read rules.md and page.html together (both Reads at once), then write only the file your job names, in one go with the Write tool (or Edit, if your job is to change a part that's there) - the lead checks every part afterwards, so don't polish it with more edits. Then reply with one short line: what you defined.
 - Define exactly what your job says (the same names and parameters, returning the same things): MAIN depends on it. Use the shared code's names as they are.
 - Only define things at the top level: nothing runs until MAIN calls your part. No imports and no <script> tags (the shared code has every import). Extra top-level names you add start with your part's name and an underscore, so they can't clash. Whatever your piece needs before its first frame happens in the function MAIN calls first.
 - Time is in seconds: use dt and t exactly as passed (never divide them by 1000). Read the arrow keys and the pointer from the shared input object, unless your job says otherwise.
@@ -170,7 +172,6 @@ function snapshot(dir) {
     } catch {}
   };
   read('page.html');
-  read('plan.md');
   for (const f of fs.existsSync(path.join(dir, 'parts')) ? fs.readdirSync(path.join(dir, 'parts')) : []) read(path.join('parts', f));
   return files;
 }
@@ -205,7 +206,7 @@ function sync(s, page) {
   s.files = page;
   return now === page
     ? 'Your folder holds the creation as it is: page.html and its parts in parts/ (Read what you need before you change it).'
-    : 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part. plan.md may describe parts that are no longer there: update it before you hand out work.';
+    : 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part.';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -232,7 +233,7 @@ function sessionFor(projectId, { renew = false } = {}) {
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
   // (Helpers always work in the foreground: the lead's turn ends only once they're done.)
-  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
+  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
   return session;
@@ -350,6 +351,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const s = sessionFor(p.id, { renew: true });
   makeWay(s);
   await settled(w);
+  await s.use(page ? lead().model : lead().firstModel || lead().model);
   await s.think(lead().thinking.build);
   makeWay(s); // (one that started meanwhile)
 
@@ -372,7 +374,6 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   if (!fix || !fs.existsSync(rules)) {
     fs.writeFileSync(rules, helperRules({ asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' }));
   }
-  if (!page) fs.writeFileSync(path.join(s.dir, 'plan.md'), ''); // (its own notes for its helpers, fresh for something new)
 
   let chars = 0;
   const team = helperTracker(() => progress());
@@ -380,7 +381,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   progress();
   const prompt = [
     page ? note || (known ? '' : 'Your folder holds the creation as it is.') : 'The screen is blank - nothing has been built yet: your folder is empty.',
-    !fix && (page ? `If this turns into a fresh new page, try this look, unless the kid asked for something else: ${look} - and write plan.md anew (what's there is the old creation's), giving every part a fresh file (parts/ still holds the old creation's).` : `For this new creation, try this look, unless the kid asked for something else: ${look}.`),
+    !fix && (page ? `If this turns into a fresh new page, try this look, unless the kid asked for something else: ${look} - giving every part a fresh file (parts/ still holds the old creation's).` : `For this new creation, try this look, unless the kid asked for something else: ${look}.`),
     !known && historyNote(history),
     fix ? `The page just crashed with this problem:\n${fix}\nFix it in the files without changing anything else. Keep DONE very short.` : `The kid just said: "${text}"`,
     !fix && alt && `(The other listener heard: "${alt}". Little kids are hard to hear - use both versions and the conversation to work out what they meant.)`,
@@ -490,6 +491,7 @@ export async function check({ projectId, version, report, screenshot }) {
       grow ? GROW : LOOK,
       "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].filter(Boolean).join('\n\n');
+    await s.use(lead().model);
     await s.think(lead().thinking.look);
     if (stale()) return { skipped: 'stale' };
     w.note = '';
@@ -593,6 +595,7 @@ export async function repair({ version, errors, keep, accept = false }) {
   const note = sync(s, page);
   const before = snapshot(s.dir);
   w.repairing = true;
+  await s.use(lead().model);
   try {
     await s.ask(
       [
