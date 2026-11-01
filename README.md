@@ -407,10 +407,10 @@ panel, set `"team": { "agents": true }` in `config.json`, or try it for one run 
   notes for its helpers (the shared names, how the parts talk to each other) are comments in
   `page.html`'s shared code, so every helper reads them with the page.
 - **Then it keeps working on it while the kid plays,** three times in the same session (one more
-  than `team.polish`): it grows it into its full version, handing the additions out to helpers and
-  wiring each one into the main idea, then looks it over twice as a demanding parent would, fixing
-  small things itself and handing out bigger ones (none with `team.check: false`). The kid's changes
-  go to it too.
+  than `team.polish`): it grows it into its full version, handing the additions out to helpers (who
+  write fuller parts here than while the kid waited) and making them fit, then looks it over twice
+  as a demanding parent would, fixing small things itself and handing out bigger ones (none with
+  `team.check: false`). The kid's changes go to it too.
 - **It stays the kid's creation.** If the page changes outside its files (undone, fixed by the
   overwatch), it's handed the page as it is; a pass that crashes when tried is taken back and its
   files are put back; and a change that keeps the creation's progress fields carries the kid's
@@ -431,12 +431,20 @@ basketball game and a bubble machine), each pair judged twice with the two shown
   next to a beehive) but more than solo mode's (7.4 against 6.8). A prompt asking it to wire every
   addition into the main idea made its creations worse (7.4 against 7.9 scored alone, with more
   wiring bugs), so it was taken back.
-- **The price is waiting.** Something new took about 80 s to appear, against about 37 s for team
-  mode's usual way in the same test runs (two at once on one computer); its three passes then take
-  half a minute to 3 minutes each while the kid plays.
+- **The price is waiting.** Something new takes about 60 s to appear (49 to 85 s), against about
+  37 s for team mode's usual way in the same kind of test runs (two at once on one computer); its
+  three passes then take about 2 minutes, then about 1 each, while the kid plays.
+- **Quicker at the same quality.** The comparisons above were measured when its helpers wrote bigger
+  parts and something new took about 85 s. Small parts while the kid waits (fuller ones in the
+  passes), the biggest handed out first, each part written in one go and less thinking time brought
+  that to 60 s. Judged blind against that slower version, each creation scored alone averaged the
+  same (7.75 for both, and for team mode's usual way); side by side it won 7 of 16 judgments, with a
+  little less to discover (6.7 against 7.4). Keeping parts that small in the passes too was about
+  as quick but lost 14 of 16, so the passes get fuller parts.
 
-(Measured just before a last round of review fixes, which changed how its files are kept in step
-with the page and a few lines of its prompts, not how it builds.)
+(The comparisons with team mode and solo mode were measured just before a last round of review
+fixes, which changed how its files are kept in step with the page and a few lines of its prompts,
+not how it builds.)
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
