@@ -73,11 +73,11 @@ Your working folder holds the creation: page.html is the page, with a line \`// 
 Your helpers are subagents (the Agent tool, subagent_type "general-purpose", model "${helperModel}"). They write at the same time as each other, so the kid gets it much sooner - but only if you hand the work out: every part file is written by a helper, never by you. Your own writing is page.html, the jobs, and the fixes that make the parts fit. You are the one who knows the whole creation, so you make it one thing that works.
 
 ## Something new - start writing straight away, all in your FIRST message, so it all runs at once
-1. Write page.html (the Write tool) - about 50-80 lines: \`<!doctype html>\`, a style that fills the window with no scrollbars, and one \`<script type="module">\` holding, in order:
+1. Write page.html (the Write tool) - about 40-60 lines: \`<!doctype html>\`, a style that fills the window with no scrollbars, and one \`<script type="module">\` holding, in order:
    - the shared code: every import any part needs, the palette and sizes, the shared state - the world's rules as a few plain numbers that one place updates every frame - the shared input object, and \`const keep = KB.keep({ ... })\` with every field the kid would miss when the page changes;
    - a \`// @part <name>\` line for each part, in the order they must load;
    - MAIN: it makes the page's elements, creates everything by calling the parts exactly as their jobs say, runs the one animation loop (dt and t in seconds, dt at most 0.05) and turns the arrow keys, taps and drags into the shared input object.
-2. In the same message, an Agent call for every part, biggest first (the slowest helper starts first): 3 to 6 parts, similar in size, about 30-50 lines each (for example: the rules, the place, the star, the other characters, the effects and sounds). Each job is short - the helper reads rules.md and page.html itself:
+2. In the same message, an Agent call for every part, biggest first (the slowest helper starts first): 4 to 6 small parts, similar in size, about 25-40 lines each (for example: the rules, the place, the star, the other characters, the effects and sounds) - the kid waits for the slowest one, so split anything big (the star, a track, a whole scene) into two parts. Each job is short - the helper reads rules.md and page.html itself:
    "Read rules.md and page.html, then write parts/<name>.js defining exactly: <the code it defines, like drawSky(ctx, t) or makeFrog(scene) → { update(dt, t), hitTest(x, y) }>. <In under 40 words: how it looks, sounds and feels, what it does when poked, and the shared names and keep fields it reads or changes.>"
 3. When the helpers are done, Read every part (all the Reads in one message) and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash, anything that doesn't fit the plan or the look - with the Edit tool, in the part or in page.html. Then end with DONE.
 
@@ -106,7 +106,7 @@ You are a helper on a small team building a web page for a ${config().kidAge}-ye
 - Time is in seconds: use dt and t exactly as passed (never divide them by 1000). Read the arrow keys and the pointer from the shared input object, unless your job says otherwise.
 - The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules your job doesn't ask for.
 - No words on the page - pictures instead. Draw everything in the look, so it's all one picture - shapes, not emoji.
-- About 30-50 short lines, never more than about 3,000 characters: the kid is waiting for the slowest helper. Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
+- About 25-40 short lines, never more than 2,500 characters: the kid is waiting for the slowest helper, and a small polished part beats a big one. Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
 - What the kid would miss when the page changes lives in the fields of page.html's \`KB.keep({ ... })\` (only those carry over): put it back from there when your piece starts, and update it as it changes. Use the keep fields your job names; never call KB.keep yourself.
 - If your piece is the star, make it easy to recognize at a glance, with a face, big enough to see - in proportion with its world. If it's the place, make it full and unmistakable: a few kinds of things, each made in a loop with varied sizes, colors and spots.
 - Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen.
@@ -294,13 +294,24 @@ export function madeByAgents(p, version) {
 
 // The lead's helpers at work, for the app's little robots: Agent calls started and finished.
 function helperTracker(onChange) {
-  const helpers = new Map();
+  const helpers = new Map(); // id → done
+  const seen = new Map(); // id → when it was last heard from
+  const what = new Map(); // id → its job, in a few words
   return {
     helpers,
     onEvent(ev) {
-      if (ev.parent_tool_use_id) return;
+      if (ev.parent_tool_use_id) {
+        if (seen.has(ev.parent_tool_use_id)) seen.set(ev.parent_tool_use_id, Date.now());
+        return;
+      }
       if (ev.type === 'assistant') {
-        for (const c of ev.message?.content || []) if (c.type === 'tool_use' && /^(Agent|Task)$/.test(c.name) && !helpers.has(c.id)) helpers.set(c.id, false), onChange();
+        for (const c of ev.message?.content || []) {
+          if (c.type !== 'tool_use' || !/^(Agent|Task)$/.test(c.name) || helpers.has(c.id)) continue;
+          helpers.set(c.id, false);
+          seen.set(c.id, Date.now());
+          what.set(c.id, String(c.input?.description || 'a part').slice(0, 80));
+          onChange();
+        }
       } else if (ev.type === 'user') {
         for (const c of ev.message?.content || []) if (c.type === 'tool_result' && helpers.get(c.tool_use_id) === false) helpers.set(c.tool_use_id, true), onChange();
       }
@@ -308,8 +319,16 @@ function helperTracker(onChange) {
     get done() {
       return [...helpers.values()].filter(Boolean).length;
     },
+    // A helper still at work that hasn't been heard from in that long (its job), if any.
+    stuck(ms) {
+      for (const [id, done] of helpers) if (!done && Date.now() - seen.get(id) > ms) return what.get(id);
+      return null;
+    },
   };
 }
+
+// A helper silent this long is stuck (they usually finish in well under a minute).
+const HELPER_STALL_MS = 90000;
 
 // For a session that's new to the creation: what the kid asked for lately.
 function historyNote(history) {
@@ -386,26 +405,38 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     fix ? `The page just crashed with this problem:\n${fix}\nFix it in the files without changing anything else. Keep DONE very short.` : `The kid just said: "${text}"`,
     !fix && alt && `(The other listener heard: "${alt}". Little kids are hard to hear - use both versions and the conversation to work out what they meant.)`,
   ].filter(Boolean).join('\n\n');
-  let reply;
-  try {
-    reply = await s.ask(prompt, {
-      priority: true,
-      timeoutSec: Math.max(config().timeoutSec, 360),
-      stallSec: 120,
-      onText: chunk => {
-        chars += chunk.length;
+  const turn = {
+    priority: true,
+    timeoutSec: Math.max(config().timeoutSec, 360),
+    stallSec: 120,
+    onText: chunk => {
+      chars += chunk.length;
+      progress();
+    },
+    onEvent: ev => {
+      team.onEvent(ev);
+      // (The helpers' writing keeps the building blocks coming too.)
+      if (ev.parent_tool_use_id && ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta') {
+        chars += ev.event.delta.text.length;
         progress();
-      },
-      onEvent: ev => {
-        team.onEvent(ev);
-        // (The helpers' writing keeps the building blocks coming too.)
-        if (ev.parent_tool_use_id && ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta') {
-          chars += ev.event.delta.text.length;
-          progress();
-        }
-      },
+      }
+    },
+  };
+  let reply;
+  let stuck = null;
+  const watch = setInterval(() => {
+    if (stuck || !(stuck = team.stuck(HELPER_STALL_MS))) return;
+    log(`agents: a helper got stuck (${stuck}), stopping it`);
+    s.interrupt();
+  }, 5000);
+  try {
+    reply = await s.ask(prompt, turn).catch(err => {
+      if (!stuck || err.message !== 'interrupted') throw err;
+      // It knows everything it planned: it finishes the stuck helper's job itself.
+      return s.ask(`Your helper for "${stuck}" got stuck and was stopped. Write what it was doing yourself now (or hand it to a new helper), then make it all fit and end with DONE.`, turn);
     });
   } finally {
+    clearInterval(watch);
     over = true;
   }
   const r = parseReply(reply.text);
