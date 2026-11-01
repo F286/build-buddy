@@ -268,19 +268,20 @@ On the same eight test creations as team mode, judged blind side by side, each p
 two shown in both orders, solo mode won all 16 judgments against the classic way, every one by a
 clear margin (its creations scored 8 to 9 out of 10 there, the classic way's 4 to 6), and 9 of the
 16 against team mode's creations, including all 4 won by a clear margin. Scored one at a time
-against fixed anchors (10 = nothing noticeably wrong), its creations averaged 7.8 out of 10 over six
-rounds (7.6 to 7.9), the same as team mode's in the same rounds (7.5 to 8.0; earlier tests put Opus
-at high effort with no time limit at 7.9); in three of them, seven of its eight creations scored 8
-("very good"). They were also judged the most original of the three ways of building (6.9 to 7.4,
-against team mode's 6.0 to 6.8). What got it there, each measured the same way: a quicker model
-writing the heart (as good, and 10 s sooner), making it beautiful after growing it, a test pass that
-checks 3D space (its 3D creations went from 6.7 to 7.7), one big idea per creation (originality from
-6.6 to 7.4), and each pass re-reading what it changed before it goes in (no pass crashed in the
-final round). The heart of each creation was on screen after 23 s on average (at most 28 s), sooner
-than team mode's creations (27 s), and Sparky's first words came after about 1.1 s; the grown,
-beautiful and tested versions followed while the kid played, each pass taking about 45 s. In
-sessions in the real app, changes took 7 to 19 s and the kid's progress carried over each one. Solo
-mode runs one `claude` program at a time, where team mode runs up to eight.
+against fixed anchors (10 = nothing noticeably wrong), its creations averaged 7.8 out of 10 over
+seven rounds (7.6 to 7.9), level with team mode's in the same rounds (7.5 to 8.0; earlier tests put
+Opus at high effort with no time limit at 7.9) and ahead in four of the seven; in three of them,
+seven of its eight creations scored 8 ("very good"). Having Fable instead of Opus do the passes
+scored no higher (7.6). They were also judged the most original of the three ways of building (6.9
+to 7.4, against team mode's 6.0 to 6.8). What got it there, each measured the same way: a quicker
+model writing the heart (as good, and 10 s sooner), making it beautiful after growing it, a test
+pass that checks 3D space (its 3D creations went from 6.7 to 7.7), one big idea per creation
+(originality from 6.6 to 7.4), and each pass re-reading what it changed before it goes in (no pass
+crashed in the final round). The heart of each creation was on screen after 23 s on average (at most
+28 s), sooner than team mode's creations (27 s), and Sparky's first words came after about 1.1 s;
+the grown, beautiful and tested versions followed while the kid played, each pass taking about 45 s.
+In sessions in the real app, changes took 7 to 19 s and the kid's progress carried over each one.
+Solo mode runs one `claude` program at a time, where team mode runs up to eight.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
