@@ -41,15 +41,17 @@ function helperAlias(want) {
 function lead() {
   const c = config();
   const r = c.team?.agentLead || {};
+  const model = r.model || c.claude.model || '';
   return {
-    model: r.model || c.claude.model || '',
+    model,
     effort: r.effort || c.claude.effort || '',
     fast: r.fast ?? Boolean(c.claude.fast),
     args: Array.isArray(r.args) ? r.args.map(String) : [],
     helperModel: helperAlias(c.team?.agentHelper?.model),
     // firstModel: who leads the turn that makes something new while the kid waits (the main model
-    // takes over for everything else - its passes, the kid's changes, repairs).
-    firstModel: r.firstModel || '',
+    // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
+    // model set: without one there'd be nothing to switch back to.
+    firstModel: model ? r.firstModel || '' : '',
     thinking: { build: 1500, look: 10000, ...(r.thinking || {}) },
   };
 }
@@ -245,7 +247,7 @@ function sessionFor(projectId, { renew = false } = {}) {
 // What's still to do for a creation (kept apart from the session, so a new one carries on).
 let work = { projectId: null };
 function workFor(projectId) {
-  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '' };
+  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '', rules: null };
   return work;
 }
 
@@ -327,6 +329,14 @@ function helperTracker(onChange) {
       for (const [id, done] of helpers) if (!done && Date.now() - seen.get(id) > ms) return what.get(id);
       return null;
     },
+    // Every helper still at work (their jobs), then counted as done: stopping the lead's turn stops
+    // them all.
+    stopAll() {
+      const jobs = [...helpers].filter(([, done]) => !done).map(([id]) => what.get(id));
+      for (const [id, done] of helpers) if (!done) helpers.set(id, true);
+      onChange();
+      return jobs;
+    },
   };
 }
 
@@ -394,10 +404,12 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const first = page ? w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '' : text;
   const rules = path.join(s.dir, 'rules.md');
   if (!fix || !fs.existsSync(rules)) {
-    fs.writeFileSync(rules, helperRules({ asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' }));
+    w.rules = { asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' };
+    fs.writeFileSync(rules, helperRules(w.rules));
   }
 
   let chars = 0;
+  let heard = ''; // the lead's own words this build (an interrupted turn's TITLE line among them)
   const team = helperTracker(() => progress());
   const progress = () => emit({ type: 'progress', chars, helpers: team.helpers.size, helpersDone: team.done, team: true, leads: 1 });
   progress();
@@ -413,6 +425,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     timeoutSec: Math.max(config().timeoutSec, 360),
     stallSec: 120,
     onText: chunk => {
+      heard += chunk;
       chars += chunk.length;
       progress();
     },
@@ -427,16 +440,24 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   };
   let reply;
   let stuck = null;
+  let stopped = [];
+  // A helper gone silent stops the lead's turn - and with it every helper still at work. Once more
+  // in the turn that follows, and the build fails (the classic way takes over).
   const watch = setInterval(() => {
-    if (stuck || !(stuck = team.stuck(HELPER_STALL_MS))) return;
-    log(`agents: a helper got stuck (${stuck}), stopping it`);
+    const job = s.current?.interrupted ? null : team.stuck(HELPER_STALL_MS);
+    if (!job) return;
+    [stuck, stopped] = [job, team.stopAll()];
+    log(`agents: a helper got stuck (${job}), stopping the turn${stopped.length > 1 ? ` and ${stopped.length - 1} more helpers` : ''}`);
     s.interrupt();
   }, 5000);
   try {
     reply = await s.ask(prompt, turn).catch(err => {
       if (!stuck || err.message !== 'interrupted') throw err;
-      // It knows everything it planned: it finishes the stuck helper's job itself.
-      return s.ask(`Your helper for "${stuck}" got stuck and was stopped. Write what it was doing yourself now (or hand it to a new helper), then make it all fit and end with DONE.`, turn);
+      // It knows everything it planned: it finishes the stopped helpers' jobs itself.
+      const said = heard; // (its TITLE line came in the turn that was stopped)
+      const others = stopped.filter(j => j !== stuck);
+      const ask = `Your helper for "${stuck}" got stuck, so your turn was stopped${others.length ? ` - and with it your helpers for ${others.map(j => `"${j}"`).join(', ')}, before they finished` : ''}. Their files may be missing or half-written: write what they were doing yourself now (or hand it to new helpers), then make it all fit and end with DONE.`;
+      return s.ask(ask, turn).then(r => ({ ...r, text: `${said}\n${r.text}` }));
     });
   } finally {
     clearInterval(watch);
@@ -470,7 +491,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   if (fresh) {
     [w.grow, w.passes, w.tries, w.asked] = [true, 0, 0, text || w.asked];
     // (Its grow pass's helpers go by the new creation's request and look.)
-    if (page) fs.writeFileSync(rules, helperRules({ asked: text, look }));
+    if (page) fs.writeFileSync(rules, helperRules((w.rules = { asked: text, look })));
   } else [w.passes, w.tries] = [0, 0];
   log(`ok   claude agents ${secs()} ${team.helpers.size} helpers, ${built.html.length} chars, turn ${s.turns}`);
   const edited = Boolean(page) && sameCreation(page, built.html);
@@ -514,11 +535,14 @@ export async function check({ projectId, version, report, screenshot }) {
   };
   w.checking = true;
   let before = null;
+  let rules = null;
   const shot = saveScreenshot(s.dir, screenshot);
   try {
     const note = [sync(s, page), w.note].filter(Boolean).join(' ');
     before = snapshot(s.dir);
-    fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '', quick: false }));
+    // (Its helpers write fuller parts while the kid plays; the quick rules come back after.)
+    rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
+    fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ ...rules, freshLook: '', quick: false }));
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
@@ -581,6 +605,7 @@ export async function check({ projectId, version, report, screenshot }) {
     log(err.message === 'interrupted' ? `AGENTS stop ${took()} (the kid asked for something)` : `AGENTS fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
     return { skipped: err.message === 'interrupted' ? 'stale' : 'failed' };
   } finally {
+    if (rules) fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules(rules));
     w.checking = false;
     if (shot) fs.rmSync(shot, { force: true });
   }
