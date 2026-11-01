@@ -250,7 +250,8 @@ classic way and team mode stay exactly as they are.
      own), and fixes what keeps each score down. When it runs slowly, it lightens each frame
      without taking away anything the look asked for.
 
-  Each pass is tried out of sight first and slides in at a calm moment, keeping the kid's progress,
+  After each pass it re-reads the code it just changed, as a tester, and fixes what it broke. Each
+  pass is tried out of sight first and slides in at a calm moment, keeping the kid's progress,
   like team mode's polish. One that would crash is taken back, and Claude is told why (a lost grow
   or beautifying pass happens again).
 - **Changes from memory.** It already knows the page, so a change is a few edits written straight
@@ -263,21 +264,21 @@ If the session runs into trouble, that request is built the classic way. After 2
 minutes without one, the session is replaced by a fresh one, handed the page as it is and what the
 kid asked for lately; what it still had to do (growing it, making it beautiful) carries over.
 
-On the same eight test creations as team mode, scored blind one at a time against fixed anchors (10
-= nothing noticeably wrong), solo mode's creations averaged 7.6 to 7.75 out of 10 over its last two
-rounds, against 7.6 to 7.9 for team mode in the same rounds (and 7.9 for Opus at high effort with no
-time limit, in earlier tests), with six of the eight usually at 8 ("very good"). Its "one big idea"
-step made them the most original of the three ways of building by a clear margin (7.4, against team
-mode's 6.3). Judged side by side against team mode's creations, each pair twice with the two shown
-in both orders, it won 7 of the 16 judgments, every one of them either way by a slight margin. Its
-test pass's check of 3D scenes (the camera sees the star's face, things face the way they move,
-gates stand across the path, the sky is in view) raised its 3D creations from 6.7 to 7.7 on average
-over three runs (team mode: 7.5). The heart of each creation was on screen after 21 s on average (at
-most 29 s), sooner than team mode's creations (27 s), and Sparky's first words came after about 1.1
-s; the grown, beautiful and tested versions followed while the kid played, each pass taking about 45
-s. Opus writing the heart instead scored the same, but took 32 s. In sessions in the real app,
-changes took 7 to 19 s and the kid's progress carried over each one. Solo mode runs one `claude`
-program at a time, where team mode runs up to eight.
+On the same eight test creations as team mode, judged blind side by side against team mode's
+creations, each pair twice with the two shown in both orders, solo mode won 9 of the 16 judgments,
+including all 4 won by a clear margin. Scored one at a time against fixed anchors (10 = nothing
+noticeably wrong), its creations averaged 7.75 out of 10 against team mode's 7.5 in the same round
+(earlier tests put Opus at high effort with no time limit at 7.9), with six of the eight at 8 ("very
+good") and the piano at 9 side by side. They were also judged the most original of the three ways of
+building (7.0 to 7.4, against team mode's 6.0 to 6.3). What got it there, each measured the same
+way: a quicker model writing the heart (as good, and 10 s sooner), making it beautiful after growing
+it, a test pass that checks 3D space (its 3D creations went from 6.7 to 7.7), one big idea per
+creation (originality from 6.6 to 7.4), and each pass re-reading what it changed before it goes in
+(no pass crashed in the final round). The heart of each creation was on screen after 23 s on average
+(at most 28 s), sooner than team mode's creations (27 s), and Sparky's first words came after about
+1.1 s; the grown, beautiful and tested versions followed while the kid played, each pass taking
+about 45 s. In sessions in the real app, changes took 7 to 19 s and the kid's progress carried over
+each one. Solo mode runs one `claude` program at a time, where team mode runs up to eight.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
