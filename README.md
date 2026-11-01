@@ -8,14 +8,15 @@ The screen starts empty except for a friendly robot named Sparky. Your kid holds
 says what they want ("a red car I can drive around!"), and a few seconds later it's on the screen,
 playable. Then they keep going: *"make it blue"*, *"add a honking horn"*, *"now make it 3D"*. That loop
 of describing an idea, seeing it, and making it better is the skill Build Buddy teaches: how to build
-things with AI.
+things with AI. Whatever they ask for comes out as a little world that works: a simulation they can
+poke and watch, with a spark of joy, and a game only when they ask for one.
 
 It runs on your own computer and uses the **Claude or ChatGPT subscription you already have**. Your
 kid's voice is understood and spoken on the computer itself, so their voice never leaves it.
 
 | Hold space and talk | Sparky builds it |
 |---|---|
-| ![Welcome screen with Sparky the robot](docs/welcome.png) | ![A race car game on a road with trees and flowers](docs/car.png) |
+| ![Welcome screen with Sparky the robot](docs/welcome.png) | ![A red car to drive on a road with trees and flowers](docs/car.png) |
 | **Keep improving it** (the old version stays playable while the new one builds) | **Real 3D games, at full frame rate** |
 | ![The building card at the top of a race car game](docs/building.png) | ![A 3D kart racing game with a jungle track](docs/game-3d.png) |
 
@@ -23,6 +24,7 @@ kid's voice is understood and spoken on the computer itself, so their voice neve
 
 ## Contents
 
+- [What it makes: little worlds that work](#what-it-makes-little-worlds-that-work)
 - [What a session looks like](#what-a-session-looks-like)
 - [Install](#install)
 - [Run it](#run-it)
@@ -35,6 +37,93 @@ kid's voice is understood and spoken on the computer itself, so their voice neve
 - [Credits](#credits)
 - [License](#license)
 
+## What it makes: little worlds that work
+
+The aim of every creation is an interactive simulation with a spark of joy, not necessarily a game.
+Whatever a kid asks for becomes a little world that works:
+
+- **It works like the real thing,** simplified, playful and quick. A garden's seeds need water and
+  sun, a volcano's pressure builds before it blows, and gears side by side turn opposite ways. Each
+  creation is built on the 2 or 3 real rules that make it what it is.
+- **It's already going when it appears,** with everything they asked for in plain view, and the
+  first thing they try does what they asked for. The rules make it richer; they never stand in
+  the way.
+- **Poke it and watch what happens.** The kid acts on the things themselves (drag the watering can,
+  tap the cloud, steer the car), not on a row of buttons, and each poke sets off the next thing:
+  water the seed, it sprouts, then it flowers. A tap or a drag can do anything the arrow keys do,
+  and amounts show as pictures (a water line, a growing pile), never as words or numbers to read.
+- **It keeps going on its own.** Things grow, flow, get hungry and sleepy, windmills turn,
+  characters blink and breathe, and the place sways, drifts and twinkles. Left alone, it's still
+  worth watching.
+- **There's something to discover** by trying "what happens if...?" (more, faster, two things mixed,
+  a long wait), and a peek inside where the real thing has a hidden inside. Sparky never points them
+  out: they're for finding.
+- **A spark of joy.** Everyone in it notices what happens and reacts, whatever the kid taps answers
+  in its own way, and what they set going ends in one big happy moment. Results are silly but true
+  (too much soap and the bath foams over), and only kind truths are told: nobody gets hurt, and needs
+  never turn into suffering (a hungry fish nibbles the plants by itself). Extremes settle back (an
+  overflowing bath drains, a too-hot pot cools), but what the kid grew or built stays, and adds up
+  to something new by the world's own rules (well-fed hens lay an egg that hatches), never to a
+  score.
+- **Not necessarily a game.** There's no score, goal or timer unless the kid asks for a game, and
+  then the game is built on a world that works: the race car slows on the grass and drifts in
+  tight turns.
+
+What the kid says always wins over realism (their flying car flies; it just runs low on fuel), and
+the ideas stay theirs: the world's rules come from what they asked for, never from big new things
+Sparky adds. All three ways of building are told this. In team and solo mode, the passes after a
+creation appears also look for it: does poking its main things set something off, does it keep going
+on its own (team mode's checker, tester and polisher, and solo mode's test pass), and is there
+something to find (team mode's tester and solo mode's test pass). They know what counts as asking
+for a game, so a car to drive doesn't quietly turn into a race; after a change, they're told what
+the kid asked for earlier, so a game stays a game and a river the kid made run uphill stays theirs.
+None of them gives away what's there to find. Solo mode's test pass also plays it a few minutes
+ahead in its head, looking for anything that gets stuck, piles up or never stops.
+
+Asked for "a hamster with a little house and a running wheel", for example, it builds a hamster that
+runs in its wheel until it's tired, then naps in its house; seeds the kid drops get stuffed into its
+cheeks and carried home, and the stash grows sunflowers. Asked for "a beehive where the bees make
+honey", the bees drink flowers dry (they slowly fill back up), carry the nectar home and fill the
+cells, and a full hive brings a jar of honey and a new baby bee.
+
+### How it measured
+
+Creations made this way were compared, blind, with ones made from the same requests by the earlier
+prompts, which planned a game: one clear thing to do, a reward every time and a goal that grows.
+Claude, judging as a demanding parent who loves toys that show kids how the world works, looked at
+each pair side by side (two screenshots, the code and its errors), each pair twice with the two
+shown in both orders, and scored both out of 10 on how much it is a little world that works, what
+there is to discover, its spark of joy, whether it's what was asked, whether it's easy for a
+5-year-old, and how solid it is.
+
+- **Requests no example in the prompts mentions** (a beehive, a marble run, a hamster with a wheel,
+  a pirate ship, a caterpillar that turns into a butterfly, a treehouse with a slide, a basketball
+  game and a bubble machine): solo mode's little worlds won 15 of 16 judgments, 10 of them clearly.
+  A world that works went from 5.3 to 7.6, something to discover from 5.5 to 7.3, the spark of joy
+  from 7.0 to 7.6, what they asked for from 7.8 to 8.4 and easy for a 5-year-old from 7.4 to 7.9;
+  solid stayed level (7.4 and 7.3).
+- **The twelve test requests** the earlier prompts were tuned on: solo mode won 19 of 24, and a world
+  that works went from 5.4 to 6.8, though joy went from 7.5 to 7.0 and solid from 7.5 to 6.8.
+  Racing is where the earlier prompts still win: their 3D kart race, with three animal rivals, gems
+  and a rainbow, won both its judgments.
+- **On the general scale** used in the rest of this README (each creation scored alone, 10 = nothing
+  noticeably wrong), solo mode's creations averaged 7.4 on the new requests, against 7.1 with the
+  earlier prompts, and 7.3 on the twelve test requests, against 7.75.
+- **Team mode, on the same eight new requests:** its little worlds won 14 of 16 judgments, 11 of
+  them clearly. A world that works went from 5.1 to 7.4, something to discover from 4.8 to 6.9, joy
+  from 7.0 to 7.2, what they asked for from 7.7 to 8.1 and solid from 7.6 to 7.8; easy for a
+  5-year-old went from 8.1 to 7.6. On that general scale they averaged 7.6, against 7.5 with the
+  earlier prompts.
+- **Just as quick:** the heart of a solo creation was on screen after 22.5 s on average, and after
+  28 s at most.
+
+Together, these parts earn their place. A first version of these rules had the working world but not
+the parts that make it a delight (already going, everyone reacting, a big happy moment, things
+adding up, a finger doing what the arrow keys do) or the test pass's look a few minutes ahead. On
+the new requests, in solo mode, its creations scored lower on every count, most of all on what was
+asked for (7.0 against 8.5) and on being a world that works (5.9 against 7.3), and today's version
+won all 16 judgments against it, 9 of them clearly.
+
 ## What a session looks like
 
 1. **They hold space and talk.** *"I want a rocket ship that flies to the moon!"*
@@ -43,11 +132,11 @@ kid's voice is understood and spoken on the computer itself, so their voice neve
 3. **It appears** with a ta-da sound, and Sparky explains how to play: *"Click anywhere to blast off!"*
 4. **The next idea is theirs.** Sparky never suggests what to add. At most it asks *"What's next?"*,
    so they learn to come up with ideas and put them into words, instead of just saying yes or no.
-5. **They keep building, without starting over.** Changes take a few seconds and slot into the
-   game they're playing: their score and where they were come back. If they don't like something,
+5. **They keep building, without starting over.** Changes take a few seconds and slot into what
+   they're playing: where they were and what they made come back. If they don't like something,
    the back button undoes it.
-6. **A careful helper keeps watch.** Once they've played for a bit, a stronger AI looks at the game
-   and quietly fixes it if it's broken or stuck.
+6. **A careful helper keeps watch.** Once they've played for a bit, a stronger AI looks at what they
+   made and quietly fixes it if it's broken or stuck.
 
 ## Install
 
@@ -187,9 +276,9 @@ team, and each member is its own `claude` run:
 | `lead` | your `claude.model` / `claude.effort` | Three race (`team.leads`); the first to start a plan is used. Plans the page: the code every piece shares, one job per helper (each starting with exactly what it defines, like `makeWorld(scene) → { update(dt) }`), and the code that puts the pieces together. Small changes it makes itself, as edits. |
 | `helper` | `sonnet`, low effort | Each writes one piece, all at the same time (Sonnet writes about 40% faster than Opus, and with the lead's detailed plan its pieces judged as well). A helper starts the moment its job is written, while the lead is still writing the rest. One that hasn't written a word after 7 s is thinking hard, so a second helper takes the same job and whichever finishes first is used. |
 | `fixer` | your `claude.model` / `claude.effort` | Before anything is shown, every script on the page is checked (two pieces that declared the same name are untangled automatically); if one doesn't parse, or if edits don't fit, the fixer gets one try to repair it. Edits written apart by helpers are applied by the lines they really change when their context has moved; one or two that still don't fit (out of many) are left out, and the checker makes sure the change is there - if more don't fit, the classic way builds that request instead (so nothing the kid made goes missing); if a script still doesn't parse, the usual wobbly-bit fixing takes over. Every page the team makes is also run out of sight for a moment first (with the kid's progress, for a change); if it crashes, the fixer's repair is tried out of sight too and only then shown - if the repair doesn't work (or takes over 30 s), the page is shown and the usual crash fixing takes over. |
-| `checker` | your `claude.model`, medium effort | Right after the creation appears, takes a careful look at the whole page and at a screenshot of it running (with its frame rate and any errors): is everything the kid asked for really there, do new goals or levels come soon, do the pieces fit, do the controls work with both the keys and the pointer, is everything in view and nothing cut off or in the way, can the goal really be reached, is it smooth (below about 30 frames per second it finds what makes each frame heavy and lightens it). Where an arrow key or a tap does nothing it adds a small answer (a wiggle, or sparkles where they tapped), and where reaching the goal has no celebration it adds one. Its fixes (usually about half a minute later) are first tried out of sight for a moment (a fix that throws errors is taken back, so a creation that works is never broken by its polish), then slide in at a calm moment, keeping the kid's progress, so the kid never waits for it. |
-| `polisher` | your `claude.model`, high effort | After the check, looks at it again as a demanding parent who is also a game designer and makes the two or three changes that matter most: the look they were given really showing, the star recognizable, in proportion and with a visible face, a goal that needs the kid, every action answered, nothing cut off or harsh. Twice by default (`team.polish`); tried out of sight and slid in like the check's fixes. |
-| `tester` | your `claude.model`, medium effort | Starts each polish pass: looks at the creation (and a screenshot of it running) the way a demanding parent would, and lists what it would mark down, most important first; the polisher then fixes as many of those as it can do well. `team.tester: false` leaves it out. |
+| `checker` | your `claude.model`, medium effort | Right after the creation appears, takes a careful look at the whole page and at a screenshot of it running (with its frame rate and any errors): is everything the kid asked for really there, do the pieces fit, do the controls work with both the keys and the pointer, does what each key, tap and drag does to the main things really set off what comes next, does it keep working on its own (nothing freezes, runs away or piles up), is everything in view and nothing cut off or in the way, in a game can the goal really be reached and do new levels come soon, is it smooth (below about 30 frames per second it finds what makes each frame heavy and lightens it). Where an arrow key or a tap does nothing it adds a small answer (a wiggle, or sparkles where they tapped), and in a game, where reaching the goal has no celebration, it adds one. Its fixes (usually about half a minute later) are first tried out of sight for a moment (a fix that throws errors is taken back, so a creation that works is never broken by its polish), then slide in at a calm moment, keeping the kid's progress, so the kid never waits for it. |
+| `polisher` | your `claude.model`, high effort | After the check, looks at it again as a demanding parent who designs kids' simulations and games and makes the two or three changes that matter most: the look they were given really showing, the star recognizable, in proportion and with a visible face, a world that works (poking its main things sets something off, and it keeps going when left alone; in a game, a goal that needs the kid), every action answered, nothing cut off or harsh. Twice by default (`team.polish`); tried out of sight and slid in like the check's fixes. |
+| `tester` | your `claude.model`, medium effort | Starts each polish pass: looks at the creation (and a screenshot of it running) the way a demanding parent would, and lists what it would mark down, most important first (including a page that's a picture rather than a working world); the polisher then fixes as many of those as it can do well. `team.tester: false` leaves it out. |
 
 A creation then takes about as long as its biggest piece, instead of the whole page, and each
 helper puts its full attention on one thing. If the team gets stuck, that request is built the
@@ -231,23 +320,26 @@ classic way and team mode stay exactly as they are.
   still talking and keeps running between requests, so it knows every line it wrote and what it
   meant each piece to do.
 - **The heart of it first, quickly.** Its first reply is the heart of the creation: the star, its
-  place, the main thing to do with its reward, and the controls, all working and in the look. For a
+  place, its real rules and what each poke sets off (in a game, the goal and its reward), and the
+  controls, all working and in the look. For a
   new creation on a fresh page, a quicker model (Sonnet) writes it while the kid waits; then the
   same session switches to the main model (Opus) for everything else, still remembering every line.
 - **Then it keeps working on it while the kid plays.** In the same session, it looks at a screenshot
   of it running (with its frame rate and any errors) three times (`solo.polish`):
   1. it grows it into its full version: about twice as much, with everything a kid pictures for
-     that kind of thing (a race gets rivals to beat), more of its place, characters who
-     react, a goal that grows, surprises that come from exactly what the kid said, and one big idea
-     that makes it unlike any other (a sleepy cloud named Puff who wishes for a rainbow, painted
-     stripe by stripe as the kid plays the piano);
+     that kind of thing, more of its place, characters who react to the kid, one more thing a poke
+     sets off, things to discover (in a game, a reward every time and a goal that grows), and one
+     big idea of its own from exactly what the kid said (a sleepy cloud named Puff who wishes for a
+     rainbow, painted stripe by stripe as the kid plays the piano);
   2. it makes it beautiful: the star readable at a glance, with a face whose expression changes,
      every word of the look really on screen, and no bare corners;
   3. it tests it like a demanding parent: it follows every arrow key, tap and drag to what moves,
-     traces every collision, timer and counter to check it really fires, checks a 3D scene's
+     traces every cause and effect (each poke, collision and timer) to check it really fires and
+     shows, checks it keeps going when left alone, plays it a few minutes ahead in its head for
+     anything that gets stuck, piles up or never stops, checks a 3D scene's
      space (the star's face toward the camera, everything facing the way it moves), scores it the
-     way that parent would (what was asked for, delight, alive, easy for a 5-year-old, solid, its
-     own), and fixes what keeps each score down. When it runs slowly, it lightens each frame
+     way that parent would (what was asked for, a world that works, delight, easy for a
+     5-year-old, solid, its own), and fixes what keeps each score down. When it runs slowly, it lightens each frame
      without taking away anything the look asked for.
 
   After each pass it re-reads the code it just changed, as a tester, and fixes what it broke. Each
@@ -281,7 +373,9 @@ crashed in the final round). The heart of each creation was on screen after 23 s
 28 s), sooner than team mode's creations (27 s), and Sparky's first words came after about 1.1 s;
 the grown, beautiful and tested versions followed while the kid played, each pass taking about 45 s.
 In sessions in the real app, changes took 7 to 19 s and the kid's progress carried over each one.
-Solo mode runs one `claude` program at a time, where team mode runs up to eight.
+Solo mode runs one `claude` program at a time, where team mode runs up to eight. (These scores were
+measured with the earlier prompts, which planned a game; how today's little worlds score is in
+[How it measured](#how-it-measured).)
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
@@ -343,7 +437,9 @@ Buddy changes.
   team's got that top score, against none of the classic way's; more polish passes didn't raise it,
   but a tester's list did: on eight fresh creations, polish passes guided by the tester brought
   every one to 8 (8.0 on average against 7.75 without it, with every part of the score up). It
-  writes about twice as much, so it uses more of your plan.
+  writes about twice as much, so it uses more of your plan. (These scores were measured with the
+  earlier prompts, which planned a game; how today's little worlds score is in
+  [How it measured](#how-it-measured).)
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
@@ -358,7 +454,7 @@ Buddy changes.
   `data/log.txt` has a `WATCH` line for every check.
 - **No two creations look the same.** Each new creation is nudged toward a different look (cartoon
   outlines, paper cut-out, glowing night, pixel art, picture book, and so on), with a full scene
-  behind it, characters with personality, and a small hidden surprise or two to discover. What to
+  behind it, characters with personality, and a thing or two to discover by trying. What to
   build is always the kid's idea; Sparky never suggests one.
 - **Smooth by default.** The AI follows a short performance checklist, and creations render at no
   more than 1.5× pixel density, so sharp screens don't quadruple the work.
