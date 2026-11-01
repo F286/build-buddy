@@ -403,8 +403,9 @@ panel, set `"team": { "agents": true }` in `config.json`, or try it for one run 
   that's missing, a part that doesn't fit the plan - before the kid sees it.
 - **The creation lives in files**, in its own folder: `page.html`, with a `// @part <name>` line
   where each part goes, and `parts/<name>.js` for each part. Build Buddy puts them together after
-  each turn. `rules.md` holds the rules every helper follows (Build Buddy writes it); `plan.md` is
-  the lead's own notes for its helpers (the shared names, how the parts talk to each other).
+  each turn. `rules.md` holds the rules every helper follows (Build Buddy writes it); the lead's
+  notes for its helpers (the shared names, how the parts talk to each other) are comments in
+  `page.html`'s shared code, so every helper reads them with the page.
 - **Then it keeps working on it while the kid plays,** three times in the same session (one more
   than `team.polish`): it grows it into its full version, handing the additions out to helpers and
   wiring each one into the main idea, then looks it over twice as a demanding parent would, fixing
