@@ -96,10 +96,15 @@
   </button>
 </section>
 
-<!-- Shown when the time limit runs out. A grown-up adds time (or removes the limit) with Ctrl+Shift+P. -->
+<!-- Shown when the time limit runs out: Sparky yawns and falls asleep (and mumbles that it's sleeping
+     when poked). A grown-up adds time (or removes the limit) with Ctrl+Shift+P. -->
 <section id="timeUp" class="overlay" hidden>
   <div class="time-up">
-    <div class="robot-slot"></div>
+    <div class="sleeper">
+      <div class="robot-slot"></div>
+      <div class="zzz" aria-hidden="true"><span>Z</span><span>Z</span><span>Z</span></div>
+      <div id="sleepTalk" class="sleep-talk" hidden></div>
+    </div>
     <h1>Time's up!</h1>
     <p>Great building today. See you next time!</p>
     <small>Grown-ups: press Ctrl+Shift+P to add more time.</small>
