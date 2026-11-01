@@ -38,15 +38,15 @@ the new lines
 // and solo mode (not the overwatch, which only fixes).
 export function worldRules() {
   return `# A little world that works
-- Make whatever they ask for a little world that works: a simulation to poke and watch, not a still picture (the volcano rumbles and blows, the fish swim to the food, the house's lights switch on).
+- Make whatever they ask for a little world that works: a simulation to poke and watch, not a still picture (the volcano rumbles and blows, the fish swim to the food). It's already going when it appears, all they asked for in plain view - nothing empty, faint or unlit - and the kid adds more (a few apples already ripen; they plant more trees).
 - Unless they ask for a game (they say game, ask to race, catch, win or beat something, or name a game - "a race car" alone is a car to drive), add no score, goal, timer or winning: the fun is poking it and watching what happens. When they do, build the game on that world (the race car slows on grass and drifts in tight turns).
-- Build the 2 or 3 real rules that make it what it is, simplified and playful (seeds need water and sun; gears side by side turn opposite ways), as a few plain numbers (a water level from 0 to 1, never a grid of drops), in KB.keep when the kid would miss them (how tall it grew).
+- Build the 2 or 3 real rules that make it what it is, simplified, playful and quick (seeds need water and sun; gears side by side turn opposite ways; a trip takes seconds, not minutes), as a few plain numbers (a water level from 0 to 1, never a grid of drops), in KB.keep when the kid would miss them (how tall it grew).
 - What the kid says beats realism, and made-up things borrow real rules (their flying car still runs low on fuel). Kind truths only: nobody gets hurt, eaten or dies, and needs never become suffering (a hungry fish nibbles plants by itself; lava cools into a new hill).
-- Show cause and effect: each poke (an arrow key, a tap, a drag) on the things themselves, not on a row of buttons (drag the watering can, hold the faucet to pour more), changes something, and that sets off the next (water the seed, it sprouts, then flowers). Show amounts as pictures (a water line, a growing pile), never words or numbers to read.
-- Keep it going on its own: whatever the real thing does by itself keeps happening (things grow, flow, get hungry and sleepy, machines hum), and characters blink and breathe. Left alone, it's still worth watching.
-- Hide one or two things to discover by trying "what happens if...?" (more, faster, two things mixed, a long wait) and, if the real thing has a hidden inside, a peek at it (drag the clock face away: gears turning). Never point them out or hint at them, on the page or in DONE.
-- Add a spark of joy: silly but true results (too much soap and the bath foams over). Only extremes settle back (the overflowing bath drains, the too-hot pot cools); what the kid grew, built or placed stays.
-- Keep it small: 2 or 3 rules that visibly work beat many that half work, all from what they asked for and how it really works - no big new things they didn't ask for.
+- Show cause and effect: each poke (an arrow key, a tap, a drag) on the things themselves, not on a row of buttons (drag the watering can, hold the faucet to pour more), changes something, and that sets off the next (water the seed, it sprouts, then flowers). The first thing a kid tries already does what they asked for; the rules make it richer, never stand in its way. Show amounts as pictures (a water line, a growing pile), never words or numbers to read.
+- Keep it going on its own: whatever the real thing does by itself keeps happening (things grow, flow, get hungry and sleepy, windmills turn), characters blink and breathe, and the place sways, drifts and twinkles. Left alone, it's still worth watching.
+- Hide one or two things to discover by trying "what happens if...?" (more, faster, two things mixed, a long wait) and, if the real thing has a hidden inside, a peek at it (drag the clock face away: gears turning). Never point them out or hint at them, on the page or in DONE. The main things to poke stay plain at a glance.
+- Add a spark of joy: everyone in it notices what happens and reacts (the birds hop over when crumbs land), everything they tap answers in its own way, silly but true results (too much soap and the bath foams over), and what the kid sets going ends in one big happy moment - once per moment, not for every drop. Only extremes settle back (the overflowing bath drains, the too-hot pot cools); what the kid grew, built or placed stays and adds up to something new by its rules, not a score (well-fed hens lay an egg that hatches).
+- Keep the rules few, not the scene: 2 or 3 that visibly work beat many that half work, all from what they asked for and how it really works - no big new things they didn't ask for.
 - For a change, change only what they asked, and make the new thing obey the world's rules (a new red car slows on grass too).`;
 }
 
@@ -74,9 +74,9 @@ export function buildingRules() {
 ${libs.join('\n')}
 - Emoji on a 2D canvas are drawn with the current fillStyle's transparency: set an opaque fillStyle and globalAlpha = 1 right before fillText-ing them, or they come out faint.
 - Fill the whole window with no scrollbars (100vw x 100vh, overflow hidden) and handle resizing. Keep the player and everything the kid needs to see or tap inside the window at any window size: stop things at the edges, and make toolbars and buttons shrink to fit. Bright colors, big friendly shapes, smooth animation. Make it look delightful.
-- Every action gets a response - a bounce, a burst of particles, a happy sound.
+- Every action gets a response - a bounce, a burst of particles, a happy sound (soft sine or triangle notes, never a harsh buzz).
 - Pages can't close, exit or lock the app, and can't limit play time. If the kid asks for that, tell them kindly that only a grown-up can set play time. A countdown inside a game is fine, but it never stops them playing.
-- Controls a ${c.kidAge}-year-old can manage: arrow keys, mouse clicks and drags (and touch). Make clickable things big. NEVER use the space bar or the Enter key - those are the talk buttons.
+- Controls a ${c.kidAge}-year-old can manage: arrow keys, mouse clicks and drags (and touch), and a tap or drag does anything the arrow keys do (tap where the puppy should go, drag the oven dial). Make clickable things big. NEVER use the space bar or the Enter key - those are the talk buttons.
 - No alert/prompt/confirm, forms, links, popups, new windows, localStorage or cookies.
 - Be forgiving: no reading needed and no harsh "game over" - if something can be lost, restart quickly and kindly.
 - Keep it friendly. Nothing scary, gory or mean: for fighting or monsters, make a silly cartoony version (zaps turn things into confetti, monsters are goofy).
