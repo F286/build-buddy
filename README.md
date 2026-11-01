@@ -179,6 +179,7 @@ cd build-buddy
 ./start.sh --window --debug # also lets Chrome DevTools tools attach on port 9222
 ./start.sh --classic        # one AI writes each creation by itself, instead of a team (see Team mode)
 ./start.sh --solo           # one Claude that remembers the creation and keeps improving it (see Solo mode)
+./start.sh --agents         # a team led by one Claude that remembers it (see Team mode, the agent way)
 ```
 
 **Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, how Claude builds, voice, names), the
@@ -247,6 +248,9 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.check` | `true` | Right after a creation appears, the checker takes a careful look and its fixes slide in at a calm moment. |
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
+| `team.agents` | `false` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers (subagents) and makes them fit. Slower to build, richer to play. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents`. |
+| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 3000, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). |
+| `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with. |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
 | `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
 | `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
@@ -380,6 +384,33 @@ In sessions in the real app, changes took 7 to 19 s and the kid's progress carri
 Solo mode runs one `claude` program at a time, where team mode runs up to eight. (These scores were
 measured with the earlier prompts, which planned a game; how today's little worlds score is in
 [How it measured](#how-it-measured).)
+
+### Team mode, the agent way
+
+The agent way is team mode led by one Claude that keeps the creation in mind, the way solo mode
+does, and hands the work to helpers. Pick *A team led by one AI that remembers it* in the Ctrl+Shift+P
+panel, set `"team": { "agents": true }` in `config.json`, or try it for one run with
+`./start.sh --agents`. Team mode's usual way stays as it is.
+
+- **One lead that remembers it.** A single `claude` program is started while the kid is still
+  talking and keeps running between requests, like solo mode's. Sparky's first words still come
+  from team mode's quick voice while it works.
+- **Helpers that write at the same time.** The lead plans the page and hands every part to a helper:
+  Claude Code subagents (Sonnet by default) that all write at once. Then it reads what they wrote
+  and makes it one creation that works - a name that doesn't match, a call that's missing, a part
+  that doesn't fit the plan - before the kid sees it.
+- **The creation lives in files**, in its own folder: `page.html`, with a `// @part <name>` line
+  where each part goes, and `parts/<name>.js` for each part. Build Buddy puts them together after
+  each turn. `rules.md` holds the rules every helper follows (Build Buddy writes it); `plan.md` is
+  the lead's own notes for its helpers (the shared names, how the parts talk to each other).
+- **Then it keeps working on it while the kid plays,** three times in the same session (one more
+  than `team.polish`): it grows it into its full version, handing the additions out to helpers and
+  wiring each one into the main idea, then looks it over twice as a demanding parent would, fixing
+  small things itself and handing out bigger ones. The kid's changes go to it too.
+- **It stays the kid's creation.** If the page changes outside its files (undone, fixed by the
+  overwatch), it's handed the page as it is; a pass that crashes when tried is taken back and its
+  files are put back; and a change that keeps the creation's progress fields carries the kid's
+  progress over, whatever the lead calls it.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
