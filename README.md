@@ -430,7 +430,7 @@ basketball game and a bubble machine), each pair judged twice with the two shown
   wiring bugs), so it was taken back.
 - **The price is waiting.** Something new took about 80 s to appear, against about 37 s for team
   mode's usual way in the same test runs (two at once on one computer); its three passes then take
-  1 to 3 minutes each while the kid plays.
+  half a minute to 3 minutes each while the kid plays.
 
 (Measured just before a last round of review fixes, which changed how its files are kept in step
 with the page and a few lines of its prompts, not how it builds.)
