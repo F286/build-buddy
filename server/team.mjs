@@ -27,7 +27,7 @@ import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
 import { findBin } from './bins.mjs';
 import * as store from './store.mjs';
-import { buddyIntro, talkingRules, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
+import { buddyIntro, talkingRules, worldRules, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
 // Team mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
@@ -156,15 +156,18 @@ MAIN:
   - MAIN owns the input: it keeps a shared input object up to date (like input.left, input.right, input.up and input.down for the arrow keys, input.x, input.y and input.pressed for the pointer, and input.tapped for a tap this frame), and the parts read it. A drag does what a finger would expect: sliding across a row of bells rings each one, dragging the star moves or steers it. A part that reacts to taps on its own things says so in its job, with the exact function MAIN calls, like hitTest(x, y) → true if tapped.
   - Anything one piece makes and another uses - an element's id or data- attribute, an object's fields, a mesh's userData - is named exactly in both jobs (or in the shared code).
   - In 3D, MAIN owns the camera unless a job says otherwise.
-- Plan the fun, not just the look: one clear thing to do (catch, collect, race, build, make music), a cheerful reward every time they do it (a sound, sparkles, a counter that pops), and things that react to each other the way a kid expects (cars bump, fish swim to the food, the dragon waves back). The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
+  - The world's rules live in one place: their numbers in the shared code, updated every frame by MAIN or one part named rules; the other parts read them and change them only when poked.
+- Plan how it works, not just the look: its 2 or 3 real rules, as a few shared numbers (water, heat, hunger) that one place updates every frame, pokes nudge and everything else reads; what each poke sets off; what keeps going on its own; one or two things to discover. No score or goal unless they ask for a game - then also one clear thing to do, a reward every time and a goal that grows, all running on those rules. The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, put its eyes where the camera sees them).
 - The kid changes the page often, and it starts again after every change: everything they'd be sad to lose then - where the player is and which way it faces, the level, the score, what they collected, placed, unlocked or chose, a view they turned - lives in the keep object in the shared code (const keep = KB.keep({ ... })) - every field in its defaults there, since only those carry over - and each job says which keep fields its part puts back when it starts and updates as they change.
 - Give it everything a kid pictures when they ask for that kind of thing - what makes it what it is (a soccer game has a goalie to beat, a train has tracks and a station, a band has players who each make their own sound) - each in a job.
 - Everything is drawn in the look, so the whole scene looks like one picture: characters and things are shapes drawn in that style, not emoji (a big emoji clashes with a drawn look).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts. Controls a 5-year-old gets at once: the arrow keys move things the way they point on the screen (left goes left, up goes up: seen from above, never steering-wheel turns; behind a chase camera, left turns left), and a quick tap gets a clear answer right away (the star hops or zooms there, sparkles and a sound where they tapped), not only while the finger is held.
-- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about 25 short lines each (about 1,800 characters), similar in size: for example the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene, a detailed star) into two parts.
+- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about 25 short lines each (about 1,800 characters), similar in size: for example the rules, the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene, a detailed star) into two parts.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.
 
 ${talkingRules()}
+
+${worldRules()}
 
 ${buildingRules()}`, 'ask it once, right before you write the plan, the changes or the edits.');
 }
@@ -177,12 +180,13 @@ The page is one module script: the shared code, then each part's code, then the 
 
 Reply with only your code, in one \`\`\`js code block - no talk before or after it.
 - Define exactly what your job's first words say (the same names and parameters, returning the same things): the main code depends on it. Use the shared code's names, and use another part only as its job says.
+- The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules, cycles or discoveries your job doesn't ask for.
 - What your job's first words define keeps exactly those names. Only the extra top-level names you add (helpers, constants, state) start with your part's name and an underscore, so they can't clash with other parts. At the top level only declare things: nothing runs until the main code calls your part. Whatever your piece needs before its first frame (its sizes, a background drawn once) happens in the function the main code calls first - not only when the window is resized.
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - pictures instead.
 - Draw everything in your piece in the look you're given (its colors, shapes and outlines), so it looks like part of one picture - not emoji, which clash with a drawn look.
 - About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
-- Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen (left goes left; seen from above, not steering-wheel turns). Reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
+- Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen (left goes left; seen from above, not steering-wheel turns). In a game, reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
 - Anything in your piece the kid would be sad to lose when the page changes - where the player is, a level, things collected, placed or unlocked - lives in the shared keep object - in the fields of the shared code's KB.keep({ ... }) (only those carry over): put it back from there when your piece starts (on screen) and update it as it changes, not only in variables of your own.
 - If your piece is the star (the thing the kid asked for), make it easy to recognize at a glance (a piano has its body and black keys, a dragon has wings) and big enough that its face and eyes are clear from where the camera looks - but in proportion with its world (a car fits on its road).
 - If your piece is the place (the background, world or scenery), make it unmistakable and full: a jungle is thick with jungle, a castle has towers, flags and a moat - things near and far. Fill it the short way: a few kinds of things, each made in a loop many times over with varied sizes, colors and spots, not lots of separate code. Put what sets the look (clouds, the sun, hills) where the camera really sees it.
@@ -193,6 +197,8 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 Some jobs are a change to the current page instead ("//@change <name>: <the job>"). Then reply with only FIND/REPLACE edits to the current page, each as:
 ${EDIT_FORMAT}
 FIND must be copied exactly from the current page and match only once: include a couple of lines of context. Change only what your job needs - other helpers are changing other parts of the same page at the same time. Something your job says another job adds (by the name your job gives) will be there: use it, but don't make it yourself. Keep everything the kid already built, and the KB.keep names.
+
+${worldRules()}
 
 ${buildingRules()}`, 'ask it once before you write your code, if your job is tricky.');
 }
@@ -222,12 +228,12 @@ function checkerSystem() {
   return `You are the last check on a web page for a ${c.kidAge}-year-old who can't read. A team of AI helpers wrote it in pieces at the same time, and the kid has just started playing with it. Find and fix only real problems that would spoil it for them - quickly.
 
 Check:
-0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys), and so is the look the page was given. In something new, the star of it is easy to recognize and big enough that the kid sees its face - but in proportion with its world (a car fits on its road). New levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
+0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys), and so is the look the page was given. In something new, the star of it is easy to recognize and big enough that the kid sees its face - but in proportion with its world (a car fits on its road). In a game, new levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
 1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
 2. Controls: the main thing the kid asked for works with the arrow keys AND with the pointer (tap, hold or drag), as the kid was told. Every promised control is really wired to what moves. The arrow keys move things the way they point on the screen (left goes left; seen from above, not steering-wheel turns); a quick tap does something clear right away, not only while held. Never the space bar or Enter. Every arrow key and a tap anywhere gets some visible, audible answer - where one does nothing, add a small one (a wiggle, or sparkles and a pop where they tapped).
-2b. The goal: reaching it (the finish, the moon, catching one) gets a clear celebration, and play carries on after it.
+2b. Cause and effect: what each arrow key, tap and drag does to the main things, and what that sets off next, really shows on screen (the watered seed sprouts, then flowers). In a game, the goal can be reached (things can really be caught, collected or hit), gets a clear celebration, and play carries on after it.
 3. The start: the main character and the main action are on screen and clearly visible - not off-screen, clipped at an edge, behind something, too small, or out of the camera's view; things don't start on top of each other.
-4. It can be played: goals can be reached (things can really be caught, collected, eaten or hit), speeds and counts stay sensible as play goes on, nothing jumps or teleports.
+4. It keeps working: what runs on its own never freezes or runs away; spawned things stay under about 200 and levels between empty and full; speeds stay sensible; what the kid placed or grew stays; nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame. If it runs below about 30 frames per second, find what makes each frame heavy and lighten it (fewer shadow-casting or moving things, drawing once instead of every frame).
 6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made, and none of the errors the page reported while running.
 6b. Carrying on: the page starts again after every change. If the score, the level or where the player is isn't kept in KB.keep (so a change would start the kid over), keep it with a small edit - its default in KB.keep({ ... }), updated as it changes, put back (on screen) when the page starts; never rename or remove a keep field.
@@ -244,17 +250,17 @@ FIND must be copied exactly from the page and match only once: include a couple 
 // The finishing touches, once the checker is done: what would make it clearly better for the kid.
 function polishSystem() {
   const c = config();
-  return `You give a web page for a ${c.kidAge}-year-old who can't read its finishing touches. It already works: a team built it from what the kid asked for, and it has been checked. Look at it (the screenshot first, if there is one, with the Read tool) as a demanding parent who is also a game designer: what would make it clearly better for this kid?
+  return `You give a web page for a ${c.kidAge}-year-old who can't read its finishing touches. It already works: a team built it from what the kid asked for, and it has been checked. Look at it (the screenshot first, if there is one, with the Read tool) as a demanding parent who designs kids' simulations and games: what would make it clearly better for this kid?
 
 Make the 2 or 3 changes that matter most, for example:
 - What they asked for, or the look the page was given, isn't fully there or can't be seen (out of the camera's view, too faint, hidden) - watercolor that's just flat shapes, neon without a glow, paper cut-outs without soft shadows: make the look show, on the star first.
 - Something in the scene doesn't match the look: an emoji or a plain shape among drawn things (a photo-like emoji car in a chalk drawing) - draw it in the look.
 - It's missing something a kid pictures when they ask for that kind of thing (a soccer game with no goalie, a train with no tracks).
-- The main thing to do plays itself, or needs no skill or choice from the kid (flies that get caught without the kid doing anything).
+- In a game, the main thing to do plays itself, or needs no skill or choice from the kid (flies that get caught without the kid doing anything).
 - The star of it isn't recognizable at a glance (a piano with no body or black keys, a dragon without wings), is too small to see its face, or is out of proportion with its world (a car wider than its road).
-- A game has nothing to beat or reach: no goal, no challenge that grows, no 'you did it' moment.
+- It's a picture, not a working world: tapping, dragging or steering its main things changes nothing else, or nothing moves or changes when left alone - or, in a game, there's no goal, no challenge that grows, or no 'you did it' moment.
 - Something is cut off at an edge, overlapping, cluttered or muddy.
-- An arrow key, a tap or a drag gets a weak answer or none (sliding a finger across a row of bells should ring each one), or moves things in a way a small kid doesn't expect (seen from above, the arrow keys turn it like a steering wheel instead of moving it the way they point; a quick tap does almost nothing); doing the main thing has no satisfying reward, or nothing new ever happens as they keep playing.
+- An arrow key, a tap or a drag gets a weak answer or none (sliding a finger across a row of bells should ring each one), or moves things in a way a small kid doesn't expect (seen from above, the arrow keys turn it like a steering wheel instead of moving it the way they point; a quick tap does almost nothing); tapping or dragging its main things has no satisfying answer (in a game, reaching the goal has no reward), or nothing new ever happens as they keep playing.
 - A sound never stops, plays twice at once, or is harsh.
 - A bug you can see in the code (something that can never be reached, caught or eaten; a count that's wrong; a thing that jumps).
 
@@ -270,14 +276,14 @@ FIND must be copied exactly from the page and match only once: include a couple 
 // would mark down; the polisher then fixes as many of those as it can do well (team.tester).
 function testerSystem() {
   const c = config();
-  return `You test a web page made for a ${c.kidAge}-year-old who can't read, built by AI from what the kid asked for out loud. Look at it as a demanding parent who is also a game designer: the screenshot first (with the Read tool, if there is one), then the code. Find what keeps it from being excellent.
+  return `You test a web page made for a ${c.kidAge}-year-old who can't read, built by AI from what the kid asked for out loud. Look at it as a demanding parent who designs kids' simulations and games: the screenshot first (with the Read tool, if there is one), then the code. Find what keeps it from being excellent.
 
 Fix nothing and score nothing: list the most important flaws, most important first - at most 8, each in one or two sentences saying exactly what's wrong and where (the names in the code help). Look for:
 - what the kid asked for, or the look the page was given, not fully there or not visible
 - glitches you can see in the screenshot: something cut off, overlapping, muddy, floating, facing the wrong way, hidden
 - the star not recognizable at a glance, too small, without personality, or out of proportion with its world
 - controls that do nothing, answer weakly, or confuse a small kid (left that doesn't go left, a quick tap that barely does anything, a drag that does nothing special)
-- a game with nothing to reach or beat, a goal that can't be reached, a thin reward, nothing new as they keep playing
+- not a working world: tapping, dragging or steering its main things changes nothing else; nothing moves or changes when left alone; unlike the real thing where the kid didn't say otherwise (water running uphill); nothing to find by trying; in a game, no goal, one that can't be reached, or a thin reward
 - a thin or empty scene where the place should be full
 - bugs you can see in the code (a count that's wrong, something that can never happen, work done twice)
 Only list what a few small edits can fix, and nothing big the kid didn't ask for.`;
