@@ -520,7 +520,7 @@ async function build(body) {
   // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
   // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
   state.fixing = false; // the server counted the fix's time back up to here; trying it is play time
-  if (result?.html && /^claude (team|solo)$/.test(result.backend)) result = await repairFirst(result);
+  if (result?.html && /^claude (team|solo|agents)$/.test(result.backend)) result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -549,7 +549,8 @@ async function build(body) {
         sfx.tada();
         cheer();
       }
-      if (/^claude (team|solo)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend === 'claude solo' });
+      // (Solo mode and the agent way keep looking until the server says it's done.)
+      if (/^claude (team|solo|agents)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend !== 'claude team' });
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -1398,7 +1399,7 @@ async function openParent() {
   f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
-  f.building.value = c.solo ? 'solo' : c.team ? 'team' : '';
+  f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? 'agents' : 'team') : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
@@ -1451,7 +1452,7 @@ $('#parentForm').addEventListener('submit', async e => {
     backends: f.brains.value.split(','),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
-    ...(f.building.value !== state.buildingShown && { team: f.building.value === 'team', solo: f.building.value === 'solo' }),
+    ...(f.building.value !== state.buildingShown && { team: ['team', 'agents'].includes(f.building.value), agents: f.building.value === 'agents', solo: f.building.value === 'solo' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     stt: f.stt.value,

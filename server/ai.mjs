@@ -9,6 +9,7 @@ import { config, DATA, ROOT } from './config.mjs';
 import { findBin, run } from './bins.mjs';
 import * as store from './store.mjs';
 import * as team from './team.mjs';
+import * as agents from './agents.mjs';
 import * as solo from './solo.mjs';
 
 const WORK = path.join(DATA, 'tmp');
@@ -468,10 +469,12 @@ export async function build({ text, alt, fix }, emit) {
         emit({ type: 'progress', chars: 0, note: 'building the classic way' });
       }
     } else if (team.enabled()) {
+      // (The agent way - agents.mjs - is team mode with one lead that keeps the creation in mind.)
+      const way = agents.enabled() ? 'agents' : 'team';
       try {
-        r = await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
+        r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
-        log(`FAIL claude team ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
+        log(`FAIL claude ${way} ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
         emit({ type: 'progress', chars: 0, note: 'the team got stuck, building the classic way' });
       }
     }
