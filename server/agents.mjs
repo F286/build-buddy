@@ -8,7 +8,6 @@
 //   parts/<name>.js  each part, written by a helper (and fixed by the lead to fit)
 //   rules.md         the rules every helper follows, and what the kid asked for (written here, so
 //                    the lead's jobs stay short)
-//   plan.md          the lead's own notes for its helpers (the shared names, how the parts talk)
 // After each turn the page is put together from them (each `// @part` line becomes its file).
 //
 // After a creation appears, while the kid plays, the lead looks at screenshots of it and grows and
@@ -42,13 +41,18 @@ function helperAlias(want) {
 function lead() {
   const c = config();
   const r = c.team?.agentLead || {};
+  const model = r.model || c.claude.model || '';
   return {
-    model: r.model || c.claude.model || '',
+    model,
     effort: r.effort || c.claude.effort || '',
     fast: r.fast ?? Boolean(c.claude.fast),
     args: Array.isArray(r.args) ? r.args.map(String) : [],
     helperModel: helperAlias(c.team?.agentHelper?.model),
-    thinking: { build: 3000, look: 10000, ...(r.thinking || {}) },
+    // firstModel: who leads the turn that makes something new while the kid waits (the main model
+    // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
+    // model set: without one there'd be nothing to switch back to.
+    firstModel: model ? r.firstModel || '' : '',
+    thinking: { build: 1500, look: 10000, ...(r.thinking || {}) },
   };
 }
 
@@ -66,17 +70,18 @@ DONE: <1-2 short sentences said when it appears: how to play with it. You may en
 Someone else has already answered the kid out loud, so don't write SAY - unless there is nothing to build (you didn't understand, or they asked you something): then write only SAY: <what to say> and change no files.
 
 # You lead a building team - and the creation lives in files
-Your working folder holds the creation: page.html is the page, with a line \`// @part <name>\` wherever a part's code goes, and parts/<name>.js holds each part. Build Buddy puts them together (each \`// @part\` line becomes that part's file) and shows it the moment your reply ends. rules.md holds the rules every helper follows and what the kid asked for - Build Buddy writes it, so never change it. If your helpers need to know something about the whole creation (the shared names, the coordinates, how the parts talk to each other), write it in plan.md: they read it too.
+Your working folder holds the creation: page.html is the page, with a line \`// @part <name>\` wherever a part's code goes, and parts/<name>.js holds each part. Build Buddy puts them together (each \`// @part\` line becomes that part's file) and shows it the moment your reply ends. rules.md holds the rules every helper follows and what the kid asked for - Build Buddy writes it, so never change it. If your helpers need to know something about the whole creation (the coordinates, how the parts talk to each other), say it in a short comment in page.html's shared code: they read it there.
 
 Your helpers are subagents (the Agent tool, subagent_type "general-purpose", model "${helperModel}"). They write at the same time as each other, so the kid gets it much sooner - but only if you hand the work out: every part file is written by a helper, never by you. Your own writing is page.html, the jobs, and the fixes that make the parts fit. You are the one who knows the whole creation, so you make it one thing that works.
 
 ## Something new - start writing straight away, all in your FIRST message, so it all runs at once
-1. Write page.html (the Write tool) - about 50-80 lines: \`<!doctype html>\`, a style that fills the window with no scrollbars, and one \`<script type="module">\` holding, in order:
+1. Write page.html (the Write tool) - about 40-60 lines: \`<!doctype html>\`, a style that fills the window with no scrollbars, and one \`<script type="module">\` holding, in order:
    - the shared code: every import any part needs, the palette and sizes, the shared state - the world's rules as a few plain numbers that one place updates every frame - the shared input object, and \`const keep = KB.keep({ ... })\` with every field the kid would miss when the page changes;
    - a \`// @part <name>\` line for each part, in the order they must load;
    - MAIN: it makes the page's elements, creates everything by calling the parts exactly as their jobs say, runs the one animation loop (dt and t in seconds, dt at most 0.05) and turns the arrow keys, taps and drags into the shared input object.
-2. In the same message, an Agent call for every part: 3 to 6 parts, similar in size, about 30-50 lines each (for example: the rules, the place, the star, the other characters, the effects and sounds). Each job is short - the helper reads rules.md, plan.md and page.html itself:
-   "Read rules.md, plan.md and page.html, then write parts/<name>.js defining exactly: <the code it defines, like drawSky(ctx, t) or makeFrog(scene) → { update(dt, t), hitTest(x, y) }>. <In under 40 words: how it looks, sounds and feels, what it does when poked, and the shared names and keep fields it reads or changes.>"
+2. In the same message, an Agent call for every part, biggest first (the slowest helper starts first): 4 to 6 small parts, similar in size, about 25-40 lines each (for example: the rules, the place, the star, the other characters, the effects and sounds) - the kid waits for the slowest one, so split anything big (the star, a track, a whole scene) into two parts. Each job is short - the helper reads rules.md and page.html itself:
+   "Read rules.md and page.html, then write parts/<name>.js defining exactly: <the code it defines, like drawSky(ctx, t) or makeFrog(scene) → { update(dt, t), hitTest(x, y) }>. <In under 40 words: how it looks, sounds and feels, what it does when poked, and the shared names and keep fields it reads or changes.>"
+   Ask each helper for no more than fits in about 30 lines - at most three things it does. Extras come when you grow it, after the kid sees it.
 3. When the helpers are done, Read every part (all the Reads in one message) and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash, anything that doesn't fit the plan or the look - with the Edit tool, in the part or in page.html. Then end with DONE.
 
 ## A change to what's there
@@ -93,18 +98,20 @@ ${buildingRules()}`;
 }
 
 // What every helper follows (the lead's jobs point to it).
-function helperRules({ asked, latest = '', look, freshLook = '' }) {
+// quick: the kid is waiting for this (something new or a change) - small parts; otherwise (the
+// passes while the kid plays) fuller ones.
+function helperRules({ asked, latest = '', look, freshLook = '', quick = true }) {
   return `# How to write your part
 
-You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. The team lead wrote page.html: the shared code at the top, a \`// @part <name>\` line where each part goes, and MAIN at the bottom, which calls your part exactly as your job says. In plan.md the lead may have left notes about the whole creation (the shared names, the coordinates, how the parts talk to each other) - follow them. Other helpers write the other parts at the same time.
+You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. The team lead wrote page.html: the shared code at the top, a \`// @part <name>\` line where each part goes, and MAIN at the bottom, which calls your part exactly as your job says. The comments in the shared code tell you how the parts fit together (the coordinates, how they talk to each other) - follow them. Other helpers write the other parts at the same time.
 
-- Write only the file your job names, with the Write tool (or Edit, if your job is to change a part that's there). Then reply with one short line: what you defined.
+- Read rules.md and page.html together (both Reads at once), then write only the file your job names, with the Write tool (or Edit, if your job is to change a part that's there)${quick ? " - in one go: the lead checks every part afterwards, so don't polish it with more edits" : ''}. Then reply with one short line: what you defined.
 - Define exactly what your job says (the same names and parameters, returning the same things): MAIN depends on it. Use the shared code's names as they are.
 - Only define things at the top level: nothing runs until MAIN calls your part. No imports and no <script> tags (the shared code has every import). Extra top-level names you add start with your part's name and an underscore, so they can't clash. Whatever your piece needs before its first frame happens in the function MAIN calls first.
 - Time is in seconds: use dt and t exactly as passed (never divide them by 1000). Read the arrow keys and the pointer from the shared input object, unless your job says otherwise.
 - The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules your job doesn't ask for.
 - No words on the page - pictures instead. Draw everything in the look, so it's all one picture - shapes, not emoji.
-- About 30-50 short lines, never more than about 3,000 characters: the kid is waiting for the slowest helper. Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
+${quick ? '- About 25-40 short lines, never more than 2,500 characters - a hard limit: the kid is waiting for the slowest helper. Write the heart of your part well and leave the extras out; the lead grows the creation after it appears.' : '- About 30-60 short lines: the kid is playing with it, not waiting, so make your part rich and complete - what it does when poked, how it reacts to what happens, the little things to find.'} Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
 - What the kid would miss when the page changes lives in the fields of page.html's \`KB.keep({ ... })\` (only those carry over): put it back from there when your piece starts, and update it as it changes. Use the keep fields your job names; never call KB.keep yourself.
 - If your piece is the star, make it easy to recognize at a glance, with a face, big enough to see - in proportion with its world. If it's the place, make it full and unmistakable: a few kinds of things, each made in a loop with varied sizes, colors and spots.
 - Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen.
@@ -170,7 +177,6 @@ function snapshot(dir) {
     } catch {}
   };
   read('page.html');
-  read('plan.md');
   for (const f of fs.existsSync(path.join(dir, 'parts')) ? fs.readdirSync(path.join(dir, 'parts')) : []) read(path.join('parts', f));
   return files;
 }
@@ -205,7 +211,7 @@ function sync(s, page) {
   s.files = page;
   return now === page
     ? 'Your folder holds the creation as it is: page.html and its parts in parts/ (Read what you need before you change it).'
-    : 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part. plan.md may describe parts that are no longer there: update it before you hand out work.';
+    : 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part.';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -232,7 +238,7 @@ function sessionFor(projectId, { renew = false } = {}) {
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
   // (Helpers always work in the foreground: the lead's turn ends only once they're done.)
-  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
+  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
   return session;
@@ -241,7 +247,7 @@ function sessionFor(projectId, { renew = false } = {}) {
 // What's still to do for a creation (kept apart from the session, so a new one carries on).
 let work = { projectId: null };
 function workFor(projectId) {
-  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '' };
+  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '', rules: null };
   return work;
 }
 
@@ -293,13 +299,24 @@ export function madeByAgents(p, version) {
 
 // The lead's helpers at work, for the app's little robots: Agent calls started and finished.
 function helperTracker(onChange) {
-  const helpers = new Map();
+  const helpers = new Map(); // id → done
+  const seen = new Map(); // id → when it was last heard from
+  const what = new Map(); // id → its job, in a few words
   return {
     helpers,
     onEvent(ev) {
-      if (ev.parent_tool_use_id) return;
+      if (ev.parent_tool_use_id) {
+        if (seen.has(ev.parent_tool_use_id)) seen.set(ev.parent_tool_use_id, Date.now());
+        return;
+      }
       if (ev.type === 'assistant') {
-        for (const c of ev.message?.content || []) if (c.type === 'tool_use' && /^(Agent|Task)$/.test(c.name) && !helpers.has(c.id)) helpers.set(c.id, false), onChange();
+        for (const c of ev.message?.content || []) {
+          if (c.type !== 'tool_use' || !/^(Agent|Task)$/.test(c.name) || helpers.has(c.id)) continue;
+          helpers.set(c.id, false);
+          seen.set(c.id, Date.now());
+          what.set(c.id, String(c.input?.description || 'a part').slice(0, 80));
+          onChange();
+        }
       } else if (ev.type === 'user') {
         for (const c of ev.message?.content || []) if (c.type === 'tool_result' && helpers.get(c.tool_use_id) === false) helpers.set(c.tool_use_id, true), onChange();
       }
@@ -307,8 +324,24 @@ function helperTracker(onChange) {
     get done() {
       return [...helpers.values()].filter(Boolean).length;
     },
+    // A helper still at work that hasn't been heard from in that long (its job), if any.
+    stuck(ms) {
+      for (const [id, done] of helpers) if (!done && Date.now() - seen.get(id) > ms) return what.get(id);
+      return null;
+    },
+    // Every helper still at work (their jobs), then counted as done: stopping the lead's turn stops
+    // them all.
+    stopAll() {
+      const jobs = [...helpers].filter(([, done]) => !done).map(([id]) => what.get(id));
+      for (const [id, done] of helpers) if (!done) helpers.set(id, true);
+      onChange();
+      return jobs;
+    },
   };
 }
+
+// A helper silent this long is stuck (they usually finish in well under a minute).
+const HELPER_STALL_MS = 90000;
 
 // For a session that's new to the creation: what the kid asked for lately.
 function historyNote(history) {
@@ -350,6 +383,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const s = sessionFor(p.id, { renew: true });
   makeWay(s);
   await settled(w);
+  await s.use(page ? lead().model : lead().firstModel || lead().model);
   await s.think(lead().thinking.build);
   makeWay(s); // (one that started meanwhile)
 
@@ -369,42 +403,63 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // What the creation was asked for (kept across turns; the first request after a restart).
   const first = page ? w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '' : text;
   const rules = path.join(s.dir, 'rules.md');
-  if (!fix || !fs.existsSync(rules)) {
-    fs.writeFileSync(rules, helperRules({ asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' }));
-  }
-  if (!page) fs.writeFileSync(path.join(s.dir, 'plan.md'), ''); // (its own notes for its helpers, fresh for something new)
+  // (Kept for its passes only once the page changes: a turn that only talked leaves them as they were.)
+  const asks = !fix || !fs.existsSync(rules) ? { asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' } : null;
+  if (asks) fs.writeFileSync(rules, helperRules(asks));
 
   let chars = 0;
+  let heard = ''; // the lead's own words this build (an interrupted turn's TITLE line among them)
   const team = helperTracker(() => progress());
   const progress = () => emit({ type: 'progress', chars, helpers: team.helpers.size, helpersDone: team.done, team: true, leads: 1 });
   progress();
   const prompt = [
     page ? note || (known ? '' : 'Your folder holds the creation as it is.') : 'The screen is blank - nothing has been built yet: your folder is empty.',
-    !fix && (page ? `If this turns into a fresh new page, try this look, unless the kid asked for something else: ${look} - and write plan.md anew (what's there is the old creation's), giving every part a fresh file (parts/ still holds the old creation's).` : `For this new creation, try this look, unless the kid asked for something else: ${look}.`),
+    !fix && (page ? `If this turns into a fresh new page, try this look, unless the kid asked for something else: ${look} - giving every part a fresh file (parts/ still holds the old creation's).` : `For this new creation, try this look, unless the kid asked for something else: ${look}.`),
     !known && historyNote(history),
     fix ? `The page just crashed with this problem:\n${fix}\nFix it in the files without changing anything else. Keep DONE very short.` : `The kid just said: "${text}"`,
     !fix && alt && `(The other listener heard: "${alt}". Little kids are hard to hear - use both versions and the conversation to work out what they meant.)`,
   ].filter(Boolean).join('\n\n');
-  let reply;
-  try {
-    reply = await s.ask(prompt, {
-      priority: true,
-      timeoutSec: Math.max(config().timeoutSec, 360),
-      stallSec: 120,
-      onText: chunk => {
-        chars += chunk.length;
+  const turn = {
+    priority: true,
+    timeoutSec: Math.max(config().timeoutSec, 360),
+    stallSec: 120,
+    onText: chunk => {
+      heard += chunk;
+      chars += chunk.length;
+      progress();
+    },
+    onEvent: ev => {
+      team.onEvent(ev);
+      // (The helpers' writing keeps the building blocks coming too.)
+      if (ev.parent_tool_use_id && ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta') {
+        chars += ev.event.delta.text.length;
         progress();
-      },
-      onEvent: ev => {
-        team.onEvent(ev);
-        // (The helpers' writing keeps the building blocks coming too.)
-        if (ev.parent_tool_use_id && ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta') {
-          chars += ev.event.delta.text.length;
-          progress();
-        }
-      },
+      }
+    },
+  };
+  let reply;
+  let stuck = null;
+  let stopped = [];
+  // A helper gone silent stops the lead's turn - and with it every helper still at work. Once more
+  // in the turn that follows, and the build fails (the classic way takes over).
+  const watch = setInterval(() => {
+    const job = s.current?.interrupted ? null : team.stuck(HELPER_STALL_MS);
+    if (!job) return;
+    [stuck, stopped] = [job, team.stopAll()];
+    log(`agents: a helper got stuck (${job}), stopping the turn${stopped.length > 1 ? ` and ${stopped.length - 1} more helpers` : ''}`);
+    s.interrupt();
+  }, 5000);
+  try {
+    reply = await s.ask(prompt, turn).catch(err => {
+      if (!stuck || err.message !== 'interrupted') throw err;
+      // It knows everything it planned: it finishes the stopped helpers' jobs itself.
+      const said = heard; // (its TITLE line came in the turn that was stopped)
+      const others = stopped.filter(j => j !== stuck);
+      const ask = `Your helper for "${stuck}" got stuck, so your turn was stopped${others.length ? ` - and with it your helpers for ${others.map(j => `"${j}"`).join(', ')}, before they finished` : ''}. Their files may be missing or half-written: write what they were doing yourself now (or hand it to new helpers), then make it all fit and end with DONE.`;
+      return s.ask(ask, turn).then(r => ({ ...r, text: `${said}\n${r.text}` }));
     });
   } finally {
+    clearInterval(watch);
     over = true;
   }
   const r = parseReply(reply.text);
@@ -414,6 +469,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     // It only talked (or changed nothing): the files stay as they were. Only its own SAY means
     // there was nothing to build - otherwise the classic way builds it.
     if (page) sync(s, page);
+    if (asks && w.rules) fs.writeFileSync(rules, helperRules(w.rules));
     if (fix || !r.say) throw new Error(fix ? 'the fix changed nothing' : page ? 'it changed nothing' : "it didn't build anything");
     log(`ok   claude agents ${secs()} only talked, turn ${s.turns}`);
     // (When the quick voice spoke first, the lead's answer is said too, as in team mode.)
@@ -430,12 +486,13 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (problems.length) log(`agents: still doesn't run (${problems.join('; ').slice(0, 160)})`);
   }
   s.files = built.html;
+  if (asks) w.rules = asks;
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (r.title && r.title !== p.title && !sameCreation(page, built.html));
   if (fresh) {
     [w.grow, w.passes, w.tries, w.asked] = [true, 0, 0, text || w.asked];
     // (Its grow pass's helpers go by the new creation's request and look.)
-    if (page) fs.writeFileSync(rules, helperRules({ asked: text, look }));
+    if (page) fs.writeFileSync(rules, helperRules((w.rules = { asked: text, look })));
   } else [w.passes, w.tries] = [0, 0];
   log(`ok   claude agents ${secs()} ${team.helpers.size} helpers, ${built.html.length} chars, turn ${s.turns}`);
   const edited = Boolean(page) && sameCreation(page, built.html);
@@ -479,10 +536,14 @@ export async function check({ projectId, version, report, screenshot }) {
   };
   w.checking = true;
   let before = null;
+  let rules = null;
   const shot = saveScreenshot(s.dir, screenshot);
   try {
     const note = [sync(s, page), w.note].filter(Boolean).join(' ');
     before = snapshot(s.dir);
+    // (Its helpers write fuller parts while the kid plays; the quick rules come back after.)
+    rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
+    fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ ...rules, freshLook: '', quick: false }));
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
@@ -490,6 +551,7 @@ export async function check({ projectId, version, report, screenshot }) {
       grow ? GROW : LOOK,
       "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].filter(Boolean).join('\n\n');
+    await s.use(lead().model);
     await s.think(lead().thinking.look);
     if (stale()) return { skipped: 'stale' };
     w.note = '';
@@ -544,6 +606,7 @@ export async function check({ projectId, version, report, screenshot }) {
     log(err.message === 'interrupted' ? `AGENTS stop ${took()} (the kid asked for something)` : `AGENTS fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
     return { skipped: err.message === 'interrupted' ? 'stale' : 'failed' };
   } finally {
+    if (rules) fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules(rules));
     w.checking = false;
     if (shot) fs.rmSync(shot, { force: true });
   }
@@ -593,6 +656,7 @@ export async function repair({ version, errors, keep, accept = false }) {
   const note = sync(s, page);
   const before = snapshot(s.dir);
   w.repairing = true;
+  await s.use(lead().model);
   try {
     await s.ask(
       [

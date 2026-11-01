@@ -249,7 +249,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `team.agents` | `false` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers (subagents) and makes them fit. Slower to build, richer to play. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents`. |
-| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 3000, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). |
+| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
 | `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable` (the Agent tool takes no full model names). |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
 | `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
@@ -396,18 +396,21 @@ panel, set `"team": { "agents": true }` in `config.json`, or try it for one run 
   talking and keeps running between requests, like solo mode's. Sparky's first words still come
   from team mode's quick voice while it works.
 - **Helpers that write at the same time.** The lead plans the page and hands every part to a helper:
-  Claude Code subagents (Sonnet by default) that all write at once. Then it reads what they wrote
-  and makes it one creation that works - a name that doesn't match, a call that's missing, a part
-  that doesn't fit the plan - before the kid sees it.
+  Claude Code subagents (Sonnet by default) that all write at once. The kid waits for the slowest
+  one, so parts are small (25 to 40 lines - extras come when it's grown) and the biggest goes out
+  first; a helper that goes silent for 90 s is stopped, and the lead does its job itself. Then it
+  reads what they wrote and makes it one creation that works - a name that doesn't match, a call
+  that's missing, a part that doesn't fit the plan - before the kid sees it.
 - **The creation lives in files**, in its own folder: `page.html`, with a `// @part <name>` line
   where each part goes, and `parts/<name>.js` for each part. Build Buddy puts them together after
-  each turn. `rules.md` holds the rules every helper follows (Build Buddy writes it); `plan.md` is
-  the lead's own notes for its helpers (the shared names, how the parts talk to each other).
+  each turn. `rules.md` holds the rules every helper follows (Build Buddy writes it); the lead's
+  notes for its helpers (the shared names, how the parts talk to each other) are comments in
+  `page.html`'s shared code, so every helper reads them with the page.
 - **Then it keeps working on it while the kid plays,** three times in the same session (one more
-  than `team.polish`): it grows it into its full version, handing the additions out to helpers and
-  wiring each one into the main idea, then looks it over twice as a demanding parent would, fixing
-  small things itself and handing out bigger ones (none with `team.check: false`). The kid's changes
-  go to it too.
+  than `team.polish`): it grows it into its full version, handing the additions out to helpers (who
+  write fuller parts here than while the kid waited) and making them fit, then looks it over twice
+  as a demanding parent would, fixing small things itself and handing out bigger ones (none with
+  `team.check: false`). The kid's changes go to it too.
 - **It stays the kid's creation.** If the page changes outside its files (undone, fixed by the
   overwatch), it's handed the page as it is; a pass that crashes when tried is taken back and its
   files are put back; and a change that keeps the creation's progress fields carries the kid's
@@ -428,12 +431,20 @@ basketball game and a bubble machine), each pair judged twice with the two shown
   next to a beehive) but more than solo mode's (7.4 against 6.8). A prompt asking it to wire every
   addition into the main idea made its creations worse (7.4 against 7.9 scored alone, with more
   wiring bugs), so it was taken back.
-- **The price is waiting.** Something new took about 80 s to appear, against about 37 s for team
-  mode's usual way in the same test runs (two at once on one computer); its three passes then take
-  half a minute to 3 minutes each while the kid plays.
+- **The price is waiting.** Something new takes about 60 s to appear (49 to 85 s), against about
+  37 s for team mode's usual way in the same kind of test runs (two at once on one computer); its
+  three passes then take about 2 minutes, then about 1 each, while the kid plays.
+- **Quicker at the same quality.** The comparisons above were measured when its helpers wrote bigger
+  parts and something new took about 85 s. Small parts while the kid waits (fuller ones in the
+  passes), the biggest handed out first, each part written in one go and less thinking time brought
+  that to 60 s. Judged blind against that slower version, each creation scored alone averaged the
+  same (7.75 for both, and for team mode's usual way); side by side it won 7 of 16 judgments, with a
+  little less to discover (6.7 against 7.4). Keeping parts that small in the passes too was about
+  as quick but lost 14 of 16, so the passes get fuller parts.
 
-(Measured just before a last round of review fixes, which changed how its files are kept in step
-with the page and a few lines of its prompts, not how it builds.)
+(The comparisons with team mode and solo mode were measured just before a last round of review
+fixes, which changed how its files are kept in step with the page and a few lines of its prompts,
+not how it builds.)
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build

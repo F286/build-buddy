@@ -148,13 +148,13 @@ function models() {
 // (Team mode's agent way - agents.mjs - runs its lead in one of these too: its own command line,
 // its own working folder and name.)
 export class Session {
-  constructor(projectId, { args = sessionArgs(), cwd = WORK_DIR, label = 'solo', env = null } = {}) {
+  constructor(projectId, { args = sessionArgs(), cwd = WORK_DIR, label = 'solo', env = null, model = null } = {}) {
     const bin = findBin('claude', config().claude.bin);
     this.label = label;
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
     this.key = JSON.stringify(args);
     this.fast = args.includes('--settings');
-    this.model = models().main; // the model answering now
+    this.model = model ?? models().main; // the model answering now
     this.projectId = projectId;
     this.page = null; // the page as it knows it (null: it's handed the page on its next turn)
     this.unsure = false; // it wrote edits whose fate isn't settled: it's handed the page next time
