@@ -462,6 +462,7 @@ function saveScreenshot(dataUrl) {
 const GROW = `Now grow it into its full, excellent version - about twice as much as there is now - adding to what's there with FIND/REPLACE edits (big REPLACE blocks are fine: whole new functions and scenery, next to the code they belong with):
 - First fix anything you can see isn't working or showing yet.
 - Then add what it still lacks to be a delight: everything a kid pictures for this kind of thing (a race has rivals to beat), more of its place near and far (made in loops), characters with faces and personality who react to the kid, a reward that feels great and a goal that grows (after a few, something new appears), and two or three surprises that come from exactly what the kid said.
+- Give it one big idea that makes it unlike any other version of this kind of thing, built from exactly what the kid said: a twist, a place with a story, a character with a name and a wish. Not the standard template.
 - Every arrow key, a tap anywhere and a drag each get an answer the kid sees.
 - Keep it smooth (nothing made every frame, a costly look drawn the cheap way) and everything in the look.`;
 
