@@ -250,7 +250,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `team.agents` | `false` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers (subagents) and makes them fit. Slower to build, richer to play. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents`. |
 | `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 3000, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). |
-| `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with. |
+| `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable` (the Agent tool takes no full model names). |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
 | `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
 | `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
@@ -406,7 +406,8 @@ panel, set `"team": { "agents": true }` in `config.json`, or try it for one run 
 - **Then it keeps working on it while the kid plays,** three times in the same session (one more
   than `team.polish`): it grows it into its full version, handing the additions out to helpers and
   wiring each one into the main idea, then looks it over twice as a demanding parent would, fixing
-  small things itself and handing out bigger ones. The kid's changes go to it too.
+  small things itself and handing out bigger ones (none with `team.check: false`). The kid's changes
+  go to it too.
 - **It stays the kid's creation.** If the page changes outside its files (undone, fixed by the
   overwatch), it's handed the page as it is; a pass that crashes when tried is taken back and its
   files are put back; and a change that keeps the creation's progress fields carries the kid's

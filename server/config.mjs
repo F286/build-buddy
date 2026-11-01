@@ -67,7 +67,8 @@ export const DEFAULTS = {
     // agents: true builds team mode the agent way (server/agents.mjs): one lead Claude that keeps the
     // creation in mind and hands its parts to helpers (subagents), then makes them fit. agentLead is
     // the lead (model, effort and args as for a role; thinking: how long it may think while the kid
-    // waits, and when it looks its creation over); agentHelper.model is the helpers' model.
+    // waits, and when it looks its creation over); agentHelper.model is the helpers' model, as an alias
+    // (sonnet, opus, haiku or fable: the Agent tool takes no full model names).
     agents: false,
     agentLead: { model: '', effort: '', thinking: { build: 3000, look: 10000 } },
     agentHelper: { model: 'sonnet' },

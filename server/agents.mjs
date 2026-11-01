@@ -32,6 +32,13 @@ export function enabled() {
 // Passes after something new or a change: growing it, then looking again (team.polish more).
 export const passes = () => 1 + teamPolish();
 
+// The Agent tool takes a model alias only (no full model names).
+const ALIASES = ['sonnet', 'opus', 'haiku', 'fable'];
+function helperAlias(want) {
+  const v = String(want || 'sonnet').toLowerCase();
+  return ALIASES.find(a => v.includes(a)) || 'sonnet';
+}
+
 function lead() {
   const c = config();
   const r = c.team?.agentLead || {};
@@ -40,7 +47,7 @@ function lead() {
     effort: r.effort || c.claude.effort || '',
     fast: r.fast ?? Boolean(c.claude.fast),
     args: Array.isArray(r.args) ? r.args.map(String) : [],
-    helperModel: c.team?.agentHelper?.model || 'sonnet',
+    helperModel: helperAlias(c.team?.agentHelper?.model),
     thinking: { build: 3000, look: 10000, ...(r.thinking || {}) },
   };
 }
@@ -73,10 +80,10 @@ Your helpers are subagents (the Agent tool, subagent_type "general-purpose", mod
 3. When the helpers are done, Read every part (all the Reads in one message) and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash, anything that doesn't fit the plan or the look - with the Edit tool, in the part or in page.html. Then end with DONE.
 
 ## A change to what's there
-The files are there from before - unless you're told the page changed, Read only what you need. A small change: make it yourself with the Edit tool. Several separate things, or something big: hand them out - each helper owns different files (a new part, which you add a \`// @part\` line for, or a part it rewrites), never two on the same file - then Read what they wrote, make it fit, and end with DONE. Keep the KB.keep names and what they mean, so the kid carries on where they were.
+The files are there from before - unless you're told the page changed, Read only what you need. A small change: make it yourself with the Edit tool. Several separate things, or something big: hand them out - each helper owns different files (a new part, which you add a \`// @part\` line for, or a part it rewrites), never two on the same file - then Read what they wrote, make it fit, and end with DONE. Keep the KB.keep names and what they mean, so the kid carries on where they were. Anything new the kid can make progress in gets its default in page.html's \`KB.keep({ ... })\` - only those fields carry over, and only you can add them, since helpers write only their own part - and its job names that keep field.
 
 ## Later, while the kid plays
-You'll be shown how it's running (a screenshot, the frame rate, any errors) and asked to grow it or look it over. Work the same way: hand out anything big, each helper on its own files, then make it fit. Keep it one creation: add only what plugs into the main idea, and never rewrite what works just to tidy it.
+You'll be shown how it's running (a screenshot, the frame rate, any errors) and asked to grow it or look it over. Work the same way: hand out anything big, each helper on its own files, then make it fit. Keep it one creation: add only what plugs into the main idea, and never rewrite what works just to tidy it. New progress gets its keep field in page.html, as above.
 
 ${talkingRules()}
 
@@ -86,7 +93,7 @@ ${buildingRules()}`;
 }
 
 // What every helper follows (the lead's jobs point to it).
-function helperRules({ asked, look }) {
+function helperRules({ asked, latest = '', look, freshLook = '' }) {
   return `# How to write your part
 
 You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. The team lead wrote page.html: the shared code at the top, a \`// @part <name>\` line where each part goes, and MAIN at the bottom, which calls your part exactly as your job says. In plan.md the lead may have left notes about the whole creation (the shared names, the coordinates, how the parts talk to each other) - follow them. Other helpers write the other parts at the same time.
@@ -98,7 +105,7 @@ You are a helper on a small team building a web page for a ${config().kidAge}-ye
 - The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules your job doesn't ask for. Your part is part of one creation: it notices what happens in the shared state and changes it as your job says, so the other parts notice what yours does - never a piece that just sits beside the rest.
 - No words on the page - pictures instead. Draw everything in the look, so it's all one picture - shapes, not emoji.
 - About 30-50 short lines, never more than about 3,000 characters: the kid is waiting for the slowest helper. Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
-- What the kid would miss when the page changes lives in the shared keep object: put it back from there when your piece starts, and update it as it changes.
+- What the kid would miss when the page changes lives in the fields of page.html's \`KB.keep({ ... })\` (only those carry over): put it back from there when your piece starts, and update it as it changes. Use the keep fields your job names; never call KB.keep yourself.
 - If your piece is the star, make it easy to recognize at a glance, with a face, big enough to see - in proportion with its world. If it's the place, make it full and unmistakable: a few kinds of things, each made in a loop with varied sizes, colors and spots.
 - Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen.
 
@@ -107,7 +114,7 @@ ${worldRules()}
 ${buildingRules()}
 
 # This creation
-${asked ? `The kid asked for: "${asked}"` : ''}${look ? `\nThe look: ${look}.` : ''}
+${asked ? `The kid asked for: "${asked}"` : ''}${latest ? `\nThen they said: "${latest}"` : ''}${look ? `\nThe look: ${look}.` : ''}${freshLook ? `\n(If the lead is making a fresh new page instead, its look is: ${freshLook}.)` : ''}
 `;
 }
 
@@ -166,6 +173,7 @@ function snapshot(dir) {
     } catch {}
   };
   read('page.html');
+  read('plan.md');
   for (const f of fs.existsSync(path.join(dir, 'parts')) ? fs.readdirSync(path.join(dir, 'parts')) : []) read(path.join('parts', f));
   return files;
 }
@@ -200,7 +208,7 @@ function sync(s, page) {
   s.files = page;
   return now === page
     ? 'Your folder holds the creation as it is: page.html and its parts in parts/ (Read what you need before you change it).'
-    : 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part.';
+    : 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part. plan.md may describe parts that are no longer there: update it before you hand out work.';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -236,7 +244,7 @@ function sessionFor(projectId, { renew = false } = {}) {
 // What's still to do for a creation (kept apart from the session, so a new one carries on).
 let work = { projectId: null };
 function workFor(projectId) {
-  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false };
+  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '' };
   return work;
 }
 
@@ -244,7 +252,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // A pass still finishing (stopped for the kid): wait until it has put its files back.
 async function settled(w) {
-  for (let i = 0; w.checking && i < 100; i++) await sleep(100);
+  for (let i = 0; (w.checking || w.repairing) && i < 100; i++) await sleep(100);
+}
+
+// Its own changes were taken out of the files (a pass stopped or that didn't run, a repair that
+// didn't fix it): it's told, and it reads the files again before changing them.
+function undone(s, w, why) {
+  s.files = null;
+  w.note = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
 }
 
 // What the kid says comes first: a pass at work stops, and any waiting are dropped.
@@ -354,7 +369,12 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const note = [sync(s, page), w.note].filter(Boolean).join(' ');
   w.note = '';
   const creationLook = page ? p.versions.filter(x => x.look).at(-1)?.look || look : look;
-  fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ asked: fix ? '' : text, look: creationLook }));
+  // What the creation was asked for (kept across turns; the first request after a restart).
+  const first = page ? w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '' : text;
+  const rules = path.join(s.dir, 'rules.md');
+  if (!fix || !fs.existsSync(rules)) {
+    fs.writeFileSync(rules, helperRules({ asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' }));
+  }
   if (!page) fs.writeFileSync(path.join(s.dir, 'plan.md'), ''); // (its own notes for its helpers, fresh for something new)
 
   let chars = 0;
@@ -363,7 +383,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   progress();
   const prompt = [
     page ? note || (known ? '' : 'Your folder holds the creation as it is.') : 'The screen is blank - nothing has been built yet: your folder is empty.',
-    !fix && `${page ? 'If this turns into a fresh new page, try' : 'For this new creation, try'} this look, unless the kid asked for something else: ${look}.`,
+    !fix && (page ? `If this turns into a fresh new page, try this look, unless the kid asked for something else: ${look} - and write plan.md anew (what's there is the old creation's), giving every part a fresh file (parts/ still holds the old creation's).` : `For this new creation, try this look, unless the kid asked for something else: ${look}.`),
     !known && historyNote(history),
     fix ? `The page just crashed with this problem:\n${fix}\nFix it in the files without changing anything else. Keep DONE very short.` : `The kid just said: "${text}"`,
     !fix && alt && `(The other listener heard: "${alt}". Little kids are hard to hear - use both versions and the conversation to work out what they meant.)`,
@@ -394,11 +414,13 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   let built = assemble(s.dir);
   const changed = Boolean(built?.html) && built.html !== (page || '');
   if (!changed) {
-    // It only talked (or changed nothing): the files stay as they were.
+    // It only talked (or changed nothing): the files stay as they were. Only its own SAY means
+    // there was nothing to build - otherwise the classic way builds it.
     if (page) sync(s, page);
-    if (!r.say && !state.said && !r.done) throw new Error("it didn't build anything");
+    if (fix || !r.say) throw new Error(fix ? 'the fix changed nothing' : page ? 'it changed nothing' : "it didn't build anything");
     log(`ok   claude agents ${secs()} only talked, turn ${s.turns}`);
-    return { say: state.said || r.say, done: r.done || '', title: r.title, emoji: r.emoji, html: null, edited: false, look, backend: 'claude agents' };
+    // (When the quick voice spoke first, the lead's answer is said too, as in team mode.)
+    return { say: state.said || r.say, done: state.said && state.said !== r.say ? r.say : '', title: r.title, emoji: r.emoji, html: null, edited: false, look, backend: 'claude agents' };
   }
   let problems = await problemsIn(built);
   if (problems.length) {
@@ -412,11 +434,15 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   }
   s.files = built.html;
   // Something new: it's grown into its full version in the next pass.
-  if (!page || (r.title && r.title !== p.title && !sameCreation(page, built.html))) [w.grow, w.passes, w.tries] = [true, 0, 0];
-  else [w.passes, w.tries] = [0, 0];
+  const fresh = !page || (r.title && r.title !== p.title && !sameCreation(page, built.html));
+  if (fresh) {
+    [w.grow, w.passes, w.tries, w.asked] = [true, 0, 0, text || w.asked];
+    // (Its grow pass's helpers go by the new creation's request and look.)
+    if (page) fs.writeFileSync(rules, helperRules({ asked: text, look }));
+  } else [w.passes, w.tries] = [0, 0];
   log(`ok   claude agents ${secs()} ${team.helpers.size} helpers, ${built.html.length} chars, turn ${s.turns}`);
   const edited = Boolean(page) && sameCreation(page, built.html);
-  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built.html, edited, look: creationLook, backend: 'claude agents' };
+  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built.html, edited, look, backend: 'claude agents' };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -440,12 +466,12 @@ function saveScreenshot(dir, dataUrl) {
 }
 
 export async function check({ projectId, version, report, screenshot }) {
-  if (!enabled()) return { skipped: 'off' };
+  if (!enabled() || config().team.check === false) return { skipped: 'off' };
   let p = store.currentProject();
   if (p.id !== projectId || p.current !== version || isBusy() || !madeByAgents(p, version)) return { skipped: 'stale' };
   const w = workFor(projectId);
   if ((w.passes >= passes() && !w.grow) || w.tries >= passes() + 2) return { skipped: 'polished enough' };
-  if (w.checking) return { skipped: 'busy' };
+  if (w.checking || w.repairing) return { skipped: 'busy' };
   const s = sessionFor(projectId);
   const page = store.html(p);
   const t0 = Date.now();
@@ -479,7 +505,10 @@ export async function check({ projectId, version, report, screenshot }) {
     };
     let built = assemble(s.dir);
     if (!built?.html || built.html === page) {
-      if (!built?.html) restore(s.dir, before);
+      if (!built?.html) {
+        restore(s.dir, before);
+        undone(s, w, 'page.html was gone');
+      }
       done();
       log(`AGENTS ok   ${took()} (pass ${w.passes})`);
       return { ok: true };
@@ -499,7 +528,7 @@ export async function check({ projectId, version, report, screenshot }) {
     }
     if (probs || stale()) {
       restore(s.dir, before);
-      s.files = page;
+      undone(s, w, probs ? "with them in, the page didn't run" : 'the page changed meanwhile');
       log(`AGENTS skip ${took()} ${why} (${probs ? "it didn't run" : 'stale'})`);
       return { skipped: probs ? "the change didn't run" : 'stale' };
     }
@@ -513,7 +542,7 @@ export async function check({ projectId, version, report, screenshot }) {
     // Stopped for the kid, or it failed: its half-done changes are taken out of the files.
     if (before) {
       restore(s.dir, before);
-      s.files = page;
+      undone(s, w, err.message === 'interrupted' ? 'the kid asked for something first' : 'that turn failed');
     }
     log(err.message === 'interrupted' ? `AGENTS stop ${took()} (the kid asked for something)` : `AGENTS fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
     return { skipped: err.message === 'interrupted' ? 'stale' : 'failed' };
@@ -566,6 +595,7 @@ export async function repair({ version, errors, keep, accept = false }) {
   await settled(w);
   const note = sync(s, page);
   const before = snapshot(s.dir);
+  w.repairing = true;
   try {
     await s.ask(
       [
@@ -578,7 +608,10 @@ export async function repair({ version, errors, keep, accept = false }) {
     );
     const built = assemble(s.dir);
     if (!built?.html || built.html === page || (await syntaxErrors(built.html)).length > (await syntaxErrors(page)).length) {
-      restore(s.dir, before);
+      if (built?.html !== page) {
+        restore(s.dir, before);
+        undone(s, w, "they didn't fix the crash");
+      }
       return { skipped: 'no fix' };
     }
     // (Until it's taken, the files are ahead of the page: the next turn sees that and catches up.)
@@ -588,7 +621,10 @@ export async function repair({ version, errors, keep, accept = false }) {
     return { html: built.html };
   } catch (err) {
     restore(s.dir, before);
+    undone(s, w, err.message === 'interrupted' ? 'the kid asked for something first' : 'that repair failed');
     log(`AGENTS repair fail ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
     return { skipped: 'failed' };
+  } finally {
+    w.repairing = false;
   }
 }
