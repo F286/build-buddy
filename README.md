@@ -259,16 +259,18 @@ If the session runs into trouble, that request is built the classic way. After 2
 minutes without one, the session is replaced by a fresh one, handed the page as it is and what the
 kid asked for lately; what it still had to do (growing it, making it beautiful) carries over.
 
-On the same eight test creations as team mode, judged blind one at a time against the same fixed
-anchors (10 = nothing noticeably wrong), solo mode's creations averaged 7.5 out of 10 after its
-three passes, against 7.6 to 7.9 for team mode in the same rounds, and were judged the most original
-of the three ways of building (6.8 to 7.0, against team mode's 6.4 to 6.6). Its heart was on screen
-after 22 s on average (at most 30 s), sooner than team mode's creations (27 s), and Sparky's first
-words came after about 1.3 s (at most 2 s); the grown, beautiful and tested versions followed while
-the kid played, each pass taking about 45 s (20 s to 90 s). Opus writing the heart instead scored
-the same, but took 32 s. In sessions in the real app, changes took 7 to 19 s and the kid's progress
-carried over each one. Solo mode runs one `claude` program at a time, where team mode runs up to
-eight.
+On the same eight test creations as team mode, two separate solo runs were judged blind side by side
+against team mode's creations, each pair twice with the two shown in both orders: solo mode won 16
+of the 32 judgments, as good as team mode. Scored one at a time against fixed anchors (10 = nothing
+noticeably wrong), they averaged 7.5 to 7.6 out of 10 against 7.6 to 7.9 for team mode in the same
+rounds, and were judged the most original of the three ways of building (6.8 to 7.0, against team
+mode's 6.4 to 6.6). Solo mode is strongest on 2D creations (piano, fish, frog) and weakest on 3D and
+driving games, where team mode's checker catches more. Its heart was on screen after 22 s on average
+(at most 30 s), sooner than team mode's creations (27 s), and Sparky's first words came after about
+1.3 s (at most 2 s); the grown, beautiful and tested versions followed while the kid played, each
+pass taking about 45 s (20 s to 90 s). Opus writing the heart instead scored the same, but took 32
+s. In sessions in the real app, changes took 7 to 19 s and the kid's progress carried over each one.
+Solo mode runs one `claude` program at a time, where team mode runs up to eight.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
