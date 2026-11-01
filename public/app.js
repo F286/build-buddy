@@ -36,7 +36,7 @@ async function api(path, body) {
 // ------------------------------------------------------------------------------------- robot
 
 for (const slot of document.querySelectorAll('.robot-slot')) slot.append($('#robotTpl').content.cloneNode(true));
-const buddyEls = [$('#buddy'), $('.big-buddy')];
+const buddyEls = [$('#buddy'), $('.big-buddy'), $('#timeUp .robot-slot')];
 
 function mood(name) {
   for (const el of buddyEls) {
@@ -74,6 +74,24 @@ function tone(freq, at, dur, type = 'sine', gain = 0.12) {
   osc.stop(t + dur + 0.05);
 }
 
+// A sliding note through [seconds, frequency] points, for yawns, snores and sleepy mumbles.
+function glide(points, type = 'sine', gain = 0.06, at = 0) {
+  const t0 = audio.currentTime + at;
+  const end = points.at(-1)[0];
+  const osc = audio.createOscillator();
+  const g = audio.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(points[0][1], t0);
+  for (const [s, f] of points.slice(1)) osc.frequency.linearRampToValueAtTime(f, t0 + s);
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(gain, t0 + Math.min(0.15, end / 4));
+  g.gain.setValueAtTime(gain, t0 + end * 0.7);
+  g.gain.linearRampToValueAtTime(0.0001, t0 + end);
+  osc.connect(g).connect(audio.destination);
+  osc.start(t0);
+  osc.stop(t0 + end + 0.05);
+}
+
 const sfx = {
   listen: () => (tone(660, 0, 0.1), tone(990, 0.08, 0.14)),
   stop: () => (tone(800, 0, 0.08), tone(520, 0.07, 0.14)),
@@ -83,6 +101,11 @@ const sfx = {
   sparkle: () => [1319, 1568, 2093].forEach((f, i) => tone(f, i * 0.07, 0.25, 'sine', 0.05)),
   tick: () => tone(880, 0, 0.06, 'triangle', 0.06),
   timeUp: () => [784, 659, 523, 392].forEach((f, i) => tone(f, i * 0.18, 0.5, 'triangle', 0.12)),
+  // A big yawn: up, then a long slide down.
+  yawn: () => glide([[0, 330], [0.35, 520], [0.6, 500], [1.5, 220]], 'triangle', 0.07),
+  // A cartoon snore: a low rumble in, a little whistle out.
+  snore: () => (glide([[0, 80], [0.9, 100]], 'sawtooth', 0.02), glide([[0, 900], [0.35, 1400]], 'sine', 0.025, 1)),
+  mumble: () => glide([[0, 260], [0.2, 300], [0.5, 210]], 'triangle', 0.05),
 };
 
 // ------------------------------------------------------------------------------------- voice out
@@ -104,11 +127,14 @@ const LINES = {
   freshPage: ['A fresh new page! What should we build?', "Brand new page! What's your idea?"],
   nothingYet: ["You haven't built anything yet. Let's make something!"],
   gallery: ['Here are the things you made! Pick one!'],
-  oneMinute: ['One more minute!'],
+  oneMinute: ["One more minute! I'm getting sleepy..."],
   lastBuild: ["Time's almost up! Let me finish this one for you."],
   playOn: ['No more building today. Have fun playing!'],
-  timeUp: ["Time's up! Great building today. See you next time!"],
-  moreTime: ["More time! Let's keep building!"],
+  timeUp: ["Time's up! Great building today."],
+  sleepy: ["I'm so sleepy... Good night!"],
+  asleep: ["I'm sleeping now."],
+  stirred: ["Shhh... I'm sleeping.", "Mmm... I'm sleeping. See you next time!", "I'm sleeping... dreaming about what you made."],
+  moreTime: ["Oh! I'm awake! More time! Let's keep building!"],
   // Nudges when the screen sits blank: open invitations only, never ideas (those are the kid's job).
   ideas: [
     'What do you want to build? Hold the space bar and tell me!',
@@ -120,6 +146,7 @@ const line = key => pick(LINES[key]);
 
 const voice = { queue: [], current: null, hideTimer: null, preparing: Promise.resolve() };
 const buddySaid = $('#buddySaid');
+const sleepTalk = $('#sleepTalk'); // the sleeping robot's own bubble (the usual one is hidden then)
 const serverVoice = () => ['kokoro', 'piper'].includes(state.config.tts);
 const ttsUrl = text => `/api/tts?text=${encodeURIComponent(text)}`;
 
@@ -140,11 +167,11 @@ function sentences(text) {
   return out.map(t => t.trim()).filter(Boolean);
 }
 
-function say(text) {
+function say(text, { caption = text, card = false } = {}) {
   text = (text || '').trim();
   if (!text) return;
   for (const part of sentences(text)) {
-    voice.queue.push({ text: part, caption: text });
+    voice.queue.push({ text: part, caption, card });
     if (serverVoice()) prepare(part);
   }
   if (!voice.current && !mic.recording) nextLine(); // never talk over the kid
@@ -166,6 +193,7 @@ function hush() {
   window.speechSynthesis?.cancel();
   mood(null);
   buddySaid.hidden = true;
+  sleepTalk.hidden = true;
 }
 
 function nextLine() {
@@ -174,13 +202,18 @@ function nextLine() {
     voice.current = null;
     if (!micBtn.classList.contains('listening')) mood(state.busy ? 'thinking' : null);
     clearTimeout(voice.hideTimer);
-    voice.hideTimer = setTimeout(() => (buddySaid.hidden = true), 3500);
+    voice.hideTimer = setTimeout(() => {
+      buddySaid.hidden = true;
+      sleepTalk.hidden = true;
+    }, 3500);
     return;
   }
   const { text } = item;
   clearTimeout(voice.hideTimer);
   buddySaid.textContent = item.caption;
   buddySaid.hidden = false;
+  sleepTalk.textContent = item.caption;
+  sleepTalk.hidden = !item.card;
   mood('talking');
   const line = { stop: null };
   voice.current = line;
@@ -769,9 +802,17 @@ function tickTimer() {
   if (left > 60000) {
     el.hidden = true;
     timer.warned = false;
+    setSleepy(0);
     return;
   }
   const sec = Math.ceil(left / 1000);
+  setSleepy(sec <= 15 ? 2 : 1);
+  for (const at of [40, 22]) {
+    if (sec > at || drowsy.yawned.has(at)) continue;
+    drowsy.yawned.add(at);
+    // Right on time only (not when the limit was set inside the last minute), and never over talk.
+    if (sec > at - 3 && !voice.current && !mic.recording) yawn(buddyEls);
+  }
   el.hidden = false;
   el.style.setProperty('--left', String(left / 60000));
   el.classList.toggle('hurry', sec <= 10);
@@ -836,11 +877,89 @@ async function timeIsUp() {
   $('#timeUp').hidden = false;
   document.body.classList.add('time-is-up');
   sfx.timeUp();
-  say(line('timeUp'));
+  fallAsleep();
 }
+
+// Sparky gets sleepy in the last minute - heavy eyelids, a yawn or two, nodding off at the very
+// end - and when time is up it says good night, yawns, falls asleep and says it's sleeping. Poked
+// while asleep (a tap, the space bar), it wriggles and mumbles that it's sleeping.
+const sleeper = $('#timeUp .sleeper');
+const drowsy = { level: 0, yawned: new Set(), run: 0, stirs: 0, stirredAt: 0 };
+
+function setSleepy(level) {
+  if (level === drowsy.level) return;
+  drowsy.level = level;
+  for (const el of buddyEls) {
+    el.classList.toggle('sleepy', level >= 1);
+    el.classList.toggle('sleepier', level >= 2);
+  }
+  if (!level) drowsy.yawned.clear();
+}
+
+function yawn(els) {
+  sfx.yawn();
+  for (const el of els) {
+    el.classList.remove('yawn');
+    void el.offsetWidth;
+    el.classList.add('yawn');
+  }
+  setTimeout(() => els.forEach(el => el.classList.remove('yawn')), 2000);
+}
+
+async function fallAsleep() {
+  const run = ++drowsy.run;
+  const still = () => run === drowsy.run && state.timeUp;
+  const talked = async maxMs => {
+    for (let t = 0; t < maxMs && (voice.current || voice.queue.length); t += 100) await sleep(100);
+  };
+  setSleepy(0); // the card's own robot does the rest
+  drowsy.stirs = 0;
+  sleeper.className = 'sleeper drowsy';
+  sleeper.closest('.time-up').classList.remove('night');
+  say(line('timeUp'));
+  await talked(7000);
+  if (!still()) return;
+  yawn([sleeper]);
+  await sleep(2100);
+  if (!still()) return;
+  say(line('sleepy'), { card: true });
+  await talked(6000);
+  if (!still()) return;
+  sleeper.classList.replace('drowsy', 'asleep');
+  sleeper.closest('.time-up').classList.add('night');
+  await sleep(2400);
+  if (!still()) return;
+  const words = line('asleep');
+  say(words, { caption: `💤 ${words}`, card: true });
+  // A few soft snores, then only the Zs (the screen can stay up for a long time).
+  for (let i = 0; i < 4; i++) {
+    await sleep(7000);
+    if (!still()) return;
+    if (!voice.current) sfx.snore();
+  }
+}
+
+function stir() {
+  if (!sleeper.classList.contains('asleep') || voice.current) return;
+  sleeper.classList.remove('stir');
+  void sleeper.offsetWidth;
+  sleeper.classList.add('stir');
+  // Mumbles now and then; poked again right away (or a lot), it just wriggles.
+  const now = Date.now();
+  if (drowsy.stirs >= 6 || now - drowsy.stirredAt < 5000) return;
+  drowsy.stirs++;
+  drowsy.stirredAt = now;
+  sfx.mumble();
+  const words = line('stirred');
+  say(words, { caption: `💤 ${words}`, card: true });
+}
+$('#timeUp').addEventListener('pointerdown', stir);
 
 function moreTime() {
   state.timeUp = false;
+  drowsy.run++;
+  sleeper.className = 'sleeper';
+  sleeper.closest('.time-up').classList.remove('night');
   $('#timeUp').hidden = true;
   document.body.classList.remove('time-is-up');
   hush();
@@ -1209,7 +1328,11 @@ function handleKey(k) {
     return;
   }
   if (k.code === 'Escape') return down && closeOverlays();
-  if (state.timeUp || !$('#parent').hidden) return;
+  if (!$('#parent').hidden) return;
+  if (state.timeUp) {
+    if (down && !k.repeat && ['Space', 'Enter', 'NumpadEnter'].includes(k.code)) stir();
+    return;
+  }
   if (k.code === 'Space') {
     if (k.repeat) return;
     return down ? pressTalk() : releaseTalk();

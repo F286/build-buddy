@@ -186,10 +186,14 @@ current creation's frame rate, and the **Quit** button. Press **Enter** to type 
 talking.
 
 **Time limit:** pick one at the top of the Ctrl+Shift+P panel (2 to 60 minutes) and press Save; the
-countdown starts then. For the last minute a clock counts down in the corner and Sparky says *"One
-more minute!"*. When it runs out, the game is put away and a *"Time's up!"* screen stays until a
-grown-up opens the panel again and adds time or picks *No limit*. Their progress in the game is
-kept for when it comes back. If time runs out while they're still asking for something (still
+countdown starts then. For the last minute a clock counts down in the corner and Sparky gets
+sleepy: *"One more minute! I'm getting sleepy..."*, then heavy eyelids, a yawn or two, and nodding
+off in the last seconds. When it runs out, the creation is put away and Sparky says good night on the
+*"Time's up!"* screen, yawns, falls asleep under a night sky with Zs floating up, and says *"I'm
+sleeping now."* Poke it (a tap or the space bar) and it wriggles and mumbles *"Shhh... I'm
+sleeping."* The screen stays until a grown-up opens the panel again and adds time or picks *No
+limit*, and Sparky wakes up (*"Oh! I'm awake! More time!"*). Their progress in the creation is kept
+for when it comes back. If time runs out while they're still asking for something (still
 talking, or Sparky is still building), nothing gets cut off: Sparky finishes it, and they get one
 more minute to play with it, but can't ask for anything new.
 Time spent fixing a wobbly bit (a creation that crashed) isn't counted. The limit is off unless a grown-up turns it on here; kids can't set

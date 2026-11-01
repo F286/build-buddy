@@ -395,6 +395,36 @@ button {
   40% { transform: translateY(-14px); }
 }
 
+/* The last minute: heavy eyelids with slow blinks, a dim bulb, and nodding off at the very end.
+   (Listening perks it up.) */
+.sleepy:not(.listening) .robot .eye { animation: drowsy-blink 3.2s ease-in-out infinite; }
+.sleepier:not(.listening) .robot .eye { animation-duration: 2.2s; }
+.sleepy .robot .bulb { opacity: 0.55; }
+@keyframes drowsy-blink {
+  0%, 70%, 100% { transform: scaleY(0.55) translateY(2px); }
+  80%, 86% { transform: scaleY(0.1) translateY(3px); }
+}
+.sleepier .robot { animation: nod 4.5s ease-in-out infinite; transform-origin: 50% 85%; }
+@keyframes nod {
+  0%, 45% { transform: rotate(0) translateY(0); }
+  74% { transform: rotate(8deg) translateY(6px); } /* drifting off... */
+  80% { transform: rotate(-3deg) translateY(-3px); } /* ...and jerking awake */
+  88%, 100% { transform: rotate(0) translateY(0); }
+}
+
+/* A big yawn: mouth wide open, eyes squeezed shut, head tipped back. */
+.yawn .robot { animation: yawn-tilt 2s ease-in-out; transform-origin: 50% 85%; }
+.yawn:not(.listening) .robot .eye { animation: none; transform: scaleY(0.1) translateY(3px); }
+.yawn .robot .mouth { animation: yawn-mouth 2s ease-in-out; }
+@keyframes yawn-tilt {
+  0%, 100% { transform: rotate(0); }
+  35%, 70% { transform: rotate(-6deg) translateY(-4px); }
+}
+@keyframes yawn-mouth {
+  0%, 100% { transform: scale(1, 1); }
+  35%, 70% { transform: scale(1.25, 4.4); }
+}
+
 /* ---------------------------------------------------------------- bubbles */
 
 .bubble {
@@ -469,6 +499,7 @@ button {
 .time-is-up .bubble { display: none; }
 
 .time-up {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 10px;
@@ -479,10 +510,104 @@ button {
   text-align: center;
   animation: pop-in 0.4s cubic-bezier(0.3, 1.5, 0.6, 1);
 }
-.time-up .robot-slot { width: min(28vh, 220px); animation: bob 3.2s ease-in-out infinite; }
-.time-up h1 { margin: 8px 0 0; font-size: clamp(48px, 9vw, 110px); line-height: 1; color: var(--ink); }
-.time-up p { margin: 0; font-size: clamp(20px, 2.6vw, 32px); font-weight: 500; color: var(--ink-2); }
-.time-up small { margin-top: 18px; font-size: 15px; color: #5b6090; }
+.time-up > * { position: relative; }
+.time-up h1 { margin: 8px 0 0; font-size: clamp(48px, 9vw, 110px); line-height: 1; color: var(--ink); transition: color 2s; }
+.time-up p { margin: 0; font-size: clamp(20px, 2.6vw, 32px); font-weight: 500; color: var(--ink-2); transition: color 2s; }
+.time-up small { margin-top: 18px; font-size: 15px; color: #5b6090; transition: color 2s; }
+
+/* When Sparky falls asleep, night falls on the card. */
+.time-up::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    /* stars only in the top corners, clear of the words */
+    radial-gradient(circle at 10% 12%, #fff 0 2.5px, transparent 3.5px),
+    radial-gradient(circle at 22% 30%, #fffbe0 0 2px, transparent 3px),
+    radial-gradient(circle at 5% 42%, #fff 0 1.5px, transparent 2.5px),
+    radial-gradient(circle at 88% 10%, #fffbe0 0 2.5px, transparent 3.5px),
+    radial-gradient(circle at 78% 28%, #fff 0 2px, transparent 3px),
+    radial-gradient(circle at 95% 40%, #fff 0 1.5px, transparent 2.5px),
+    linear-gradient(160deg, #2c3474, #4b3f8f);
+  opacity: 0;
+  transition: opacity 2s;
+}
+.time-up.night::before { opacity: 1; }
+.time-up.night h1 { color: #fff; }
+.time-up.night p { color: #dfe3ff; }
+.time-up.night small { color: #b9bfe6; }
+
+.sleeper { width: min(28vh, 220px); }
+.sleeper .robot-slot { animation: bob 3.2s ease-in-out infinite; }
+.sleeper.drowsy .robot .eye { animation: drowsy-blink 2.4s ease-in-out infinite; }
+.sleeper.drowsy .robot .bulb { opacity: 0.55; }
+
+/* Asleep: eyes shut, bulb off, a little "o" of a mouth, slow breathing, and Zs floating up. */
+.sleeper.asleep .robot-slot { animation: breathe 3.6s ease-in-out infinite; }
+.sleeper.asleep .robot .eye { animation: eyes-shut 1.4s ease-in forwards; }
+.sleeper.asleep .robot .bulb { fill: #9aa0c8; opacity: 0.85; transition: fill 1.5s; }
+.sleeper.asleep .robot .mouth { animation: snore-mouth 3.6s ease-in-out infinite; }
+.sleeper.asleep .talking .robot .mouth { animation: chatter 0.22s ease-in-out infinite alternate; } /* talking in its sleep */
+@keyframes eyes-shut {
+  from { transform: scaleY(0.55) translateY(2px); }
+  to { transform: scaleY(0.1) translateY(4px); }
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50% { transform: scale(1.035, 1.02) translateY(2px); }
+}
+@keyframes snore-mouth {
+  0%, 100% { transform: scale(0.45, 1.4); }
+  50% { transform: scale(0.6, 2.4); }
+}
+.sleeper.stir .robot { animation: stir 0.5s ease-in-out; transform-origin: 50% 85%; }
+@keyframes stir {
+  0%, 100% { transform: rotate(0); }
+  30% { transform: rotate(-5deg); }
+  65% { transform: rotate(4deg); }
+}
+
+.zzz { position: absolute; top: -26%; right: -22%; width: 46%; height: 40%; pointer-events: none; } /* rising off its head */
+.zzz span {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  font-size: clamp(22px, 4vh, 40px);
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 3px 0 var(--robot-dark);
+  opacity: 0;
+}
+.asleep .zzz span { animation: float-z 3.6s ease-out infinite; }
+.asleep .zzz span:nth-child(2) { animation-delay: 1.2s; font-size: clamp(18px, 3.2vh, 32px); }
+.asleep .zzz span:nth-child(3) { animation-delay: 2.4s; font-size: clamp(14px, 2.6vh, 26px); }
+@keyframes float-z {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.6) rotate(-10deg); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(70%, -180%) scale(1.3) rotate(12deg); }
+}
+
+/* What it says in its sleep, in its own bubble beside it. */
+.sleep-talk {
+  position: absolute;
+  right: 92%;
+  top: 6%;
+  width: max-content;
+  max-width: min(36vw, 340px);
+  padding: 12px 18px;
+  border-radius: 22px;
+  border-bottom-right-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.25;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: 0 8px 24px #0004;
+  animation: pop-in 0.25s cubic-bezier(0.3, 1.5, 0.6, 1);
+}
 
 .panel {
   width: min(640px, 92vw);
