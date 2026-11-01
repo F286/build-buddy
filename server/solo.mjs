@@ -114,6 +114,29 @@ function sessionArgs() {
   return args;
 }
 
+// FIND/REPLACE edits in a reply, read on their own - the same way parseReply reads them.
+function editsIn(text) {
+  const re = /^<{5,9} ?FIND[^\n]*\n([\s\S]*?)\n?^={5,9}[ \t]*\n([\s\S]*?)\n?^>{5,9} ?REPLACE[^\n]*$/gm;
+  const unmark = t => t.split('\n').filter(l => !/^(={5,9}|<{5,9} ?FIND.*|>{5,9} ?REPLACE.*)[ \t]*$/.test(l)).join('\n');
+  return [...text.replace(/\r\n/g, '\n').matchAll(re)].map(m => ({ find: m[1], replace: unmark(m[2]) }));
+}
+
+// A reply as solo mode reads it: a page only if it really is one. Edits that happen to contain
+// "<!doctype html" and "</html>" (or edits in an html fence) are edits, not a page of edit lines.
+function readReply(text) {
+  const r = parseReply(text);
+  if (r.html && /^(<{5,9} ?FIND|>{5,9} ?REPLACE|={5,9}[ \t]*$)/m.test(r.html)) [r.html, r.edits] = [null, editsIn(text)];
+  return r;
+}
+
+// Was this version made by solo mode - itself, or an overwatch fix on top of one of its versions?
+// (Its checks and the rest of its passes stay with solo mode.)
+export function madeBySolo(p, version) {
+  let v = p.versions.find(x => x.n === version);
+  for (let i = 0; v && /overwatch/.test(v.backend || '') && i < 50; i++) v = p.versions.find(x => x.n === v.from);
+  return /^claude solo/.test(v?.backend || '');
+}
+
 // Which model answers: `first` writes something new while the kid waits (a quicker one), `main`
 // everything else - the passes, the kid's changes, repairs. Without a main model set, it never
 // switches.
@@ -188,7 +211,7 @@ class Session {
 
   // A turn of the kid's is being answered or waiting.
   get kidWaiting() {
-    return [this.current, ...this.queue].some(t => t && t.kind !== 'polish');
+    return [this.current, ...this.queue].some(t => t && t.kind !== 'polish'); // (a repair counts: the kid waits for it)
   }
 
   handle(line) {
@@ -359,8 +382,8 @@ export function stop() {
 // What the kid says comes first: a pass still at work stops, and any waiting to start are dropped
 // (they'd look at a page that's about to change).
 function makeWay(s) {
-  if (s.current?.kind === 'polish') s.interrupt();
-  for (const t of s.queue.filter(t => t.kind === 'polish')) {
+  if (s.current?.kind === 'polish' || s.current?.kind === 'repair') s.interrupt();
+  for (const t of s.queue.filter(t => t.kind === 'polish' || t.kind === 'repair')) {
     s.queue.splice(s.queue.indexOf(t), 1);
     t.finish(new Error('stale'));
   }
@@ -398,7 +421,7 @@ export async function build({ page, history, text, alt, fix, look = pickLook() }
       }
     },
   });
-  const r = parseReply(reply.text);
+  const r = readReply(reply.text);
   let html = r.html;
   let edited = false;
   if (!html && r.edits.length) {
@@ -416,7 +439,7 @@ export async function build({ page, history, text, alt, fix, look = pickLook() }
     if (problems.length) {
       log(`solo: page doesn't run (${problems.join('; ').slice(0, 160)}), asking it to fix that`);
       const fixed = await s.ask(`Before it's shown: the page doesn't run - ${problems.join('\n')}\nFix just that, with FIND/REPLACE edits.`, { priority: true }).catch(() => null);
-      const edits = fixed ? parseReply(fixed.text).edits : [];
+      const edits = fixed ? readReply(fixed.text).edits : [];
       try {
         html = applyEdits(html, edits);
       } catch {}
@@ -439,7 +462,7 @@ async function fitEdits(s, page, edits) {
   } catch (err) {
     log(`solo: an edit didn't fit (${err.message.slice(0, 80)}), asking again`);
     s.unsure = true;
-    const again = parseReply((await s.ask(`Your edits didn't fit: each FIND has to be copied exactly from the page, and match only once (${err.message}). Write the whole change again as FIND/REPLACE edits that fit the page as it was before them.`, { priority: true })).text);
+    const again = readReply((await s.ask(`Your edits didn't fit: each FIND has to be copied exactly from the page, and match only once (${err.message}). Write the whole change again as FIND/REPLACE edits that fit the page as it was before them.`, { priority: true })).text);
     if (again.html) return { html: again.html, whole: true };
     if (!again.edits.length) throw new Error("its edits didn't fit");
     return { html: applyEdits(page, again.edits) };
@@ -493,11 +516,12 @@ export async function check({ projectId, version, report, screenshot }) {
   if (!enabled() || !polishPasses()) return { skipped: 'off' };
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
-  if (!version || p.id !== projectId || p.current !== version || !/^claude solo/.test(v?.backend || '') || isBusy()) return { skipped: 'stale' };
+  if (!version || p.id !== projectId || p.current !== version || !madeBySolo(p, version) || isBusy()) return { skipped: 'stale' };
   // As many passes as asked for after each creation or change (a grow or beautifying pass that
-  // was lost happens again - within a couple of extra tries).
+  // was lost happens again - within a couple of extra tries). One pass at a time.
   const w = workFor(projectId);
-  if ((w.passes >= polishPasses() && !w.grow && !w.shine) || w.tries >= polishPasses() + 2) return { skipped: 'polished enough' };
+  if ((w.passes >= polishPasses() && !w.grow) || w.tries >= polishPasses() + 2) return { skipped: 'polished enough' };
+  if (w.checking) return { skipped: 'busy' };
   const s = sessionFor(projectId); // (a new one, handed the page, if the old one is gone)
   const page = store.html(p);
   const shot = saveScreenshot(screenshot);
@@ -507,6 +531,7 @@ export async function check({ projectId, version, report, screenshot }) {
     const now = store.currentProject();
     return now.id !== projectId || now.current !== version || isBusy();
   };
+  w.checking = true;
   try {
     // Growing it comes first - even after a change, if the kid's change interrupted it - then
     // making it beautiful, then looking again.
@@ -527,7 +552,7 @@ export async function check({ projectId, version, report, screenshot }) {
     // Until its edits are in (or it said OK), it's handed the page next time.
     s.unsure = true;
     const reply = await s.ask(prompt, { timeoutSec: 420, kind: 'polish' });
-    const r = parseReply(reply.text);
+    const r = readReply(reply.text);
     const why = field(reply.text, 'WHY') || 'made it better';
     const done = () => {
       w.passes++;
@@ -552,7 +577,7 @@ export async function check({ projectId, version, report, screenshot }) {
       } catch (err) {
         // Its own edits that don't fit: once more, copied exactly.
         try {
-          const again = parseReply((await s.ask(`Those edits didn't fit, so none of them are in: each FIND has to be copied exactly from the page and match only once (${err.message}). Write them all again so they fit.`, { timeoutSec: 180, kind: 'polish' })).text);
+          const again = readReply((await s.ask(`Those edits didn't fit, so none of them are in: each FIND has to be copied exactly from the page and match only once (${err.message}). Write them all again so they fit.`, { timeoutSec: 180, kind: 'polish' })).text);
           if (!again.html && !again.edits.length) throw new Error('no edits');
           html = again.html || applyEdits(page, again.edits);
         } catch {
@@ -572,7 +597,7 @@ export async function check({ projectId, version, report, screenshot }) {
       let fixed = null;
       try {
         if (stale()) throw new Error('stale');
-        const again = parseReply((await s.ask(`With those edits in, the page doesn't parse: ${errs.slice(0, 3).join(' | ')}\nReply with FIND/REPLACE edits on the page with your edits in that fix just that.`, { timeoutSec: 180, kind: 'polish' })).text);
+        const again = readReply((await s.ask(`With those edits in, the page doesn't parse: ${errs.slice(0, 3).join(' | ')}\nReply with FIND/REPLACE edits on the page with your edits in that fix just that.`, { timeoutSec: 180, kind: 'polish' })).text);
         if (again.edits.length) fixed = applyEdits(html, again.edits);
       } catch {}
       if (!fixed || (await unparsed(fixed))) {
@@ -583,21 +608,25 @@ export async function check({ projectId, version, report, screenshot }) {
     }
     // It re-reads what it just changed, as a tester would - a pass's own slips are the bugs it
     // misses most (a name used before it's made, a value that never resets) - and fixes them on top.
+    let reviewMissed = false; // its own review's fixes that didn't go in: it's handed the page next time
     if (!stale()) {
       try {
-        const again = parseReply((await s.ask(`With your edits in, re-read the code you just changed, as a tester: did they break anything - a name used before it's defined, something that no longer answers or never resets, something now hidden, cut off or overlapping? If so, reply with FIND/REPLACE edits on the page with your edits in that fix it. Otherwise reply with just: OK`, { timeoutSec: 180, kind: 'polish' })).text);
+        const again = readReply((await s.ask(`With your edits in, re-read the code you just changed, as a tester: did they break anything - a name used before it's defined, something that no longer answers or never resets, something now hidden, cut off or overlapping? If so, reply with FIND/REPLACE edits on the page with your edits in that fix it. Otherwise reply with just: OK`, { timeoutSec: 180, kind: 'polish' })).text);
         if (again.edits.length) {
           const fixed = applyEdits(html, again.edits);
           if (!(await unparsed(fixed))) html = fixed;
-        }
-      } catch {}
+          else reviewMissed = true;
+        } else if (again.html) reviewMissed = true;
+      } catch {
+        reviewMissed = true;
+      }
     }
     if (stale()) {
       log(`SOLO stale ${took()} ${why}`);
       return { skipped: 'stale' };
     }
     p = store.addVersion(store.currentProject(), html, { request: `(solo polish) ${why}`, backend: 'claude solo polish', continues: true });
-    [s.page, s.unsure] = [html, false];
+    [s.page, s.unsure] = [html, reviewMissed];
     w.lastPass = { version: p.current, grow, shine };
     done();
     log(`SOLO fix  ${took()} ${why} (${r.html ? 'a whole page' : `${r.edits.length} edits`}, pass ${w.passes}) → v${p.current}`);
@@ -606,6 +635,7 @@ export async function check({ projectId, version, report, screenshot }) {
     log(err.message === 'interrupted' ? `SOLO stop ${took()} (the kid asked for something)` : `SOLO fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
     return { skipped: err.message === 'interrupted' ? 'stale' : 'failed' };
   } finally {
+    w.checking = false;
     if (shot) fs.rmSync(shot, { force: true });
   }
 }
@@ -642,12 +672,13 @@ export async function repair({ version, errors, keep, accept = false }) {
   const v = p.versions.find(x => x.n === version);
   if (!enabled() || p.current !== version || v?.backend !== 'claude solo') return { skipped: 'stale' };
   if (accept) {
-    const html = proposals.get(`${p.id}:${version}`);
+    const { html, by } = proposals.get(`${p.id}:${version}`) || {};
     if (!html || isBusy()) return { skipped: 'stale' };
     proposals.delete(`${p.id}:${version}`);
     const { n, at, ...meta } = v;
     p = store.addVersion(store.dropVersion(p, version), html, meta);
-    if (session?.projectId === p.id) [session.page, session.unsure] = [html, false];
+    // (Only the session that wrote the repair knows it; a newer one is handed the page.)
+    if (by === session && by?.alive) [by.page, by.unsure] = [html, false];
     log(`SOLO repair taken → v${p.current}`);
     return { version: p.current };
   }
@@ -665,11 +696,11 @@ export async function repair({ version, errors, keep, accept = false }) {
           ? `It crashes when it starts with the kid's saved progress (KB.keep hands it back these values):\n${JSON.stringify(keep).slice(0, 1500)}\nThe error:\n${String(errors).slice(0, 1500)}\nMake it carry on from those values instead, with FIND/REPLACE edits, changing nothing else.`
           : `When it was tried, it crashed:\n${String(errors).slice(0, 2000)}\nFix just that, with FIND/REPLACE edits.`),
       // (The app waits about 30 s for it; what the kid asks for next goes first.)
-      { priority: true, timeoutSec: 120, kind: 'polish' },
+      { priority: true, timeoutSec: 120, kind: 'repair' },
     );
-    const html = applyEdits(page, parseReply(reply.text).edits);
+    const html = applyEdits(page, readReply(reply.text).edits);
     if (html === page || (await syntaxErrors(html)).length > (await syntaxErrors(page)).length) return { skipped: 'no fix' };
-    proposals.set(`${p.id}:${version}`, html);
+    proposals.set(`${p.id}:${version}`, { html, by: s });
     while (proposals.size > 5) proposals.delete(proposals.keys().next().value);
     log(`SOLO repair ${String(errors).split('\n')[0].slice(0, 100)}`);
     return { html };

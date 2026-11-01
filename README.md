@@ -155,9 +155,9 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
-| `solo.polish` | `3` | How many times it goes back to a creation while the kid plays (`false` for none): after something new, it grows it, makes it beautiful, then looks again; after a change, it looks again. |
+| `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
 | `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
-| `solo.firstModel` | `"sonnet"` | The quicker model that writes something new while the kid waits; the same session then switches to the main model (`solo.model`, or `claude.model`) for its passes, the kid's changes and repairs. `""` uses the main model for everything. |
+| `solo.firstModel` | `"sonnet"` | The quicker model that writes a new creation on a fresh page while the kid waits; the same session then switches to the main model (`solo.model`, or `claude.model`) for its passes, the kid's changes and repairs. `""` uses the main model for everything. |
 | `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
@@ -231,9 +231,9 @@ classic way and team mode stay exactly as they are.
   still talking and keeps running between requests, so it knows every line it wrote and what it
   meant each piece to do.
 - **The heart of it first, quickly.** Its first reply is the heart of the creation: the star, its
-  place, the main thing to do with its reward, and the controls, all working and in the look. A
-  quicker model (Sonnet) writes it while the kid waits; then the same session switches to the main
-  model (Opus) for everything else, still remembering every line.
+  place, the main thing to do with its reward, and the controls, all working and in the look. For a
+  new creation on a fresh page, a quicker model (Sonnet) writes it while the kid waits; then the
+  same session switches to the main model (Opus) for everything else, still remembering every line.
 - **Then it keeps working on it while the kid plays.** In the same session, it looks at a screenshot
   of it running (with its frame rate and any errors) three times (`solo.polish`):
   1. it grows it into its full version: about twice as much, with everything a kid pictures for

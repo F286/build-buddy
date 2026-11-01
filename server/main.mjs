@@ -130,8 +130,7 @@ function speechContext() {
 
 // Was this version built (or polished) by solo mode? Its checks and repairs go back to it.
 function builtSolo(version) {
-  const p = store.currentProject();
-  return /^claude solo/.test(p.versions.find(v => v.n === version)?.backend || '');
+  return solo.madeBySolo(store.currentProject(), version); // (an overwatch fix on top of one counts)
 }
 
 const routes = {
