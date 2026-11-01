@@ -302,6 +302,21 @@ function historyNote(history) {
   return lines.length ? `<conversation_so_far>\n${lines.join('\n')}\n</conversation_so_far>` : '';
 }
 
+// The names in a page's KB.keep({ ... }) (what the kid's progress is kept in).
+function keepNames(html) {
+  const body = /KB\.keep\(\s*\{([\s\S]*?)\}\s*\)/.exec(html || '')?.[1] || '';
+  return new Set([...body.matchAll(/(?:^|[,{\s])([A-Za-z_$][\w$]*)\s*:/g)].map(m => m[1]));
+}
+
+// A change to the same creation (it kept most of the kid's progress fields), even if the lead gave
+// it a new name: the kid carries on where they were.
+function sameCreation(before, after) {
+  const was = keepNames(before);
+  if (!was.size) return false;
+  const now = keepNames(after);
+  return [...was].filter(k => now.has(k)).length * 2 >= was.size;
+}
+
 // Does the page run? Problems found before it's shown go back to the lead once.
 async function problemsIn(built) {
   if (!built?.html) return ['there is no page.html'];
@@ -394,10 +409,11 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   }
   s.files = built.html;
   // Something new: it's grown into its full version in the next pass.
-  if (!page || (r.title && r.title !== p.title)) [w.grow, w.passes, w.tries] = [true, 0, 0];
+  if (!page || (r.title && r.title !== p.title && !sameCreation(page, built.html))) [w.grow, w.passes, w.tries] = [true, 0, 0];
   else [w.passes, w.tries] = [0, 0];
   log(`ok   claude agents ${secs()} ${team.helpers.size} helpers, ${built.html.length} chars, turn ${s.turns}`);
-  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built.html, edited: false, look: creationLook, backend: 'claude agents' };
+  const edited = Boolean(page) && sameCreation(page, built.html);
+  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built.html, edited, look: creationLook, backend: 'claude agents' };
 }
 
 // ---------------------------------------------------------------------------------------------
