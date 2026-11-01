@@ -42,21 +42,28 @@ kid's voice is understood and spoken on the computer itself, so their voice neve
 The aim of every creation is an interactive simulation with a spark of joy, not necessarily a game.
 Whatever a kid asks for becomes a little world that works:
 
-- **It works like the real thing,** simplified and playful. A garden's seeds need water and sun, a
-  volcano's pressure builds before it blows, and gears side by side turn opposite ways. Each
+- **It works like the real thing,** simplified, playful and quick. A garden's seeds need water and
+  sun, a volcano's pressure builds before it blows, and gears side by side turn opposite ways. Each
   creation is built on the 2 or 3 real rules that make it what it is.
+- **It's already going when it appears,** with everything they asked for in plain view, and the
+  first thing they try does what they asked for. The rules make it richer; they never stand in
+  the way.
 - **Poke it and watch what happens.** The kid acts on the things themselves (drag the watering can,
   tap the cloud, steer the car), not on a row of buttons, and each poke sets off the next thing:
-  water the seed, it sprouts, then it flowers. Amounts show as pictures (a water line, a growing
-  pile), never as words or numbers to read.
-- **It keeps going on its own.** Things grow, flow, get hungry and sleepy, machines hum, and
-  characters blink and breathe. Left alone, it's still worth watching.
+  water the seed, it sprouts, then it flowers. A tap or a drag can do anything the arrow keys do,
+  and amounts show as pictures (a water line, a growing pile), never as words or numbers to read.
+- **It keeps going on its own.** Things grow, flow, get hungry and sleepy, windmills turn,
+  characters blink and breathe, and the place sways, drifts and twinkles. Left alone, it's still
+  worth watching.
 - **There's something to discover** by trying "what happens if...?" (more, faster, two things mixed,
   a long wait), and a peek inside where the real thing has a hidden inside. Sparky never points them
   out: they're for finding.
-- **A spark of joy.** Silly but true results (too much soap and the bath foams over), characters with
-  personality, and kind truths only: nobody gets hurt, and needs never turn into suffering (a hungry
-  fish nibbles the plants by itself). Only extremes settle back; what the kid grew or built stays.
+- **A spark of joy.** Everyone in it notices what happens and reacts, whatever the kid taps answers
+  in its own way, and what they set going ends in one big happy moment. Results are silly but true
+  (too much soap and the bath foams over), and only kind truths are told: nobody gets hurt, and needs
+  never turn into suffering (a hungry fish nibbles the plants by itself). Only extremes settle back;
+  what the kid grew or built stays, and adds up to something new by the world's own rules (well-fed
+  hens lay an egg that hatches), never to a score.
 - **Not necessarily a game.** There's no score, goal or timer unless the kid asks for a game, and
   then the game is built on a world that works: the race car slows on the grass and drifts in
   tight turns.
@@ -67,7 +74,15 @@ Sparky adds. All three ways of building are told this. In team and solo mode, th
 creation appears also look for it: does poking its main things set something off, does it keep
 going on its own (team mode's checker and polisher, and solo mode's test pass), and is there
 something to find (team mode's tester and solo mode's test pass). They know what counts as asking
-for a game, so a car to drive doesn't quietly turn into a race.
+for a game, so a car to drive doesn't quietly turn into a race. Solo mode's test pass also plays
+it a few minutes ahead in its head, looking for anything that gets stuck, piles up or never stops.
+
+Asked for "a hamster with a little house and a running wheel", for example, it builds a hamster that
+runs in its wheel until it's tired, then naps in its house; seeds the kid drops get stuffed into its
+cheeks and carried home, and the stash grows sunflowers. Asked for "a beehive where the bees make
+honey", the bees drink flowers dry (they slowly fill back up), carry the nectar home and fill the
+cells, and a full hive brings a jar of honey and a new baby bee.
+
 
 
 ## What a session looks like
