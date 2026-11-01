@@ -27,7 +27,7 @@ import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
 import { findBin } from './bins.mjs';
 import * as store from './store.mjs';
-import { buddyIntro, talkingRules, worldRules, gameRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
+import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
 // Team mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
@@ -229,6 +229,8 @@ function checkerSystem() {
 
 ${gameRule()}
 
+${discoveryRule()}
+
 Check:
 0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys), and so is the look the page was given. In something new, the star of it is easy to recognize and big enough that the kid sees its face - but in proportion with its world (a car fits on its road). In a game, new levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
 1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
@@ -255,6 +257,8 @@ function polishSystem() {
   return `You give a web page for a ${c.kidAge}-year-old who can't read its finishing touches. It already works: a team built it from what the kid asked for, and it has been checked. Look at it (the screenshot first, if there is one, with the Read tool) as a demanding parent who designs kids' simulations and games: what would make it clearly better for this kid?
 
 ${gameRule()}
+
+${discoveryRule()}
 
 Make the 2 or 3 changes that matter most, for example:
 - What they asked for, or the look the page was given, isn't fully there or can't be seen (out of the camera's view, too faint, hidden) - watercolor that's just flat shapes, neon without a glow, paper cut-outs without soft shadows: make the look show, on the star first.
@@ -284,12 +288,14 @@ function testerSystem() {
 
 ${gameRule()}
 
+${discoveryRule()}
+
 Fix nothing and score nothing: list the most important flaws, most important first - at most 8, each in one or two sentences saying exactly what's wrong and where (the names in the code help). Look for:
 - what the kid asked for, or the look the page was given, not fully there or not visible
 - glitches you can see in the screenshot: something cut off, overlapping, muddy, floating, facing the wrong way, hidden
 - the star not recognizable at a glance, too small, without personality, or out of proportion with its world
 - controls that do nothing, answer weakly, or confuse a small kid (left that doesn't go left, a quick tap that barely does anything, a drag that does nothing special)
-- not a working world: tapping, dragging or steering its main things changes nothing else; nothing moves or changes when left alone; unlike the real thing where the kid didn't say otherwise (water running uphill); nothing to find by trying; in a game, no goal, one that can't be reached, or a thin reward
+- not a working world: tapping, dragging or steering its main things changes nothing else; nothing moves or changes when left alone; unlike the real thing where the kid never asked for it, now or earlier (water running uphill); nothing to find by trying; in a game, no goal, one that can't be reached, or a thin reward
 - a thin or empty scene where the place should be full
 - bugs you can see in the code (a count that's wrong, something that can never happen, work done twice)
 Only list what a few small edits can fix, and nothing big the kid didn't ask for.`;
@@ -1174,10 +1180,14 @@ function running(report, shot) {
 }
 
 // The tester's notes for a page (what it would mark down, most important first).
-export async function testPage({ page, asked, told, look, report, shot, change = false }) {
+// What the kid asked for earlier for this creation (a change's passes need it: a game asked for
+// then is still a game, and a river they made run uphill is theirs).
+const earlierAsks = list => (list.length ? `\nEarlier, for this creation, they asked for:\n${list.map(t => `- ${t}`).join('\n')}` : '');
+
+export async function testPage({ page, asked, earlier = [], told, look, report, shot, change = false }) {
   const reply = await ask('tester', {
     system: testerSystem(),
-    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${
+    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"${earlierAsks(earlier)}\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${
       change ? '\nThis was a change to a creation the kid already had: look at the change first, and at what it might have spoiled.' : ''
     }\n\n${running(report, shot)}`,
     tools: shot ? 'Read' : '',
@@ -1187,7 +1197,7 @@ export async function testPage({ page, asked, told, look, report, shot, change =
 }
 
 // Review a page; resolves with the fixed page (or null if nothing needs fixing) and why.
-export async function reviewPage({ page, asked, told, look, report, shot, notes = '', change = false, polish = false }) {
+export async function reviewPage({ page, asked, earlier = [], told, look, report, shot, notes = '', change = false, polish = false }) {
   const changed = !change
     ? ''
     : polish
@@ -1195,7 +1205,7 @@ export async function reviewPage({ page, asked, told, look, report, shot, notes 
       : '\nThis was a change to a creation the kid already had: check that the change is really there and that what they had still works, but don\'t resize, move or restyle what was already there.';
   const reply = await ask(polish ? 'polisher' : 'checker', {
     system: polish ? polishSystem() : checkerSystem(),
-    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${changed}\n\n${running(report, shot)}${
+    prompt: `<page>\n${page}\n</page>\n\nThe kid asked for: "${asked}"${earlierAsks(earlier)}\nThey were told: ${told || '(nothing)'}${look ? `\nThe look it was given: ${look}.` : ''}${changed}\n\n${running(report, shot)}${
       notes ? `\n\n<tester_notes>\nA careful tester played with it and noted, most important first:\n${notes}\n</tester_notes>\nFix as many of these as you can do well, most important first - not just 2 or 3.` : ''
     }`,
     tools: shot ? 'Read' : '',
@@ -1322,21 +1332,23 @@ export async function check({ projectId, version, report, screenshot, polish = f
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   try {
-    const asked = p.history.filter(h => h.role === 'kid').at(-1)?.text || '';
+    const kidSaid = p.history.filter(h => h.role === 'kid').map(h => h.text);
+    const asked = kidSaid.at(-1) || '';
     const told = p.history.filter(h => h.role === 'buddy').at(-1)?.text || '';
     const change = Boolean(v.continues);
+    const earlier = change ? kidSaid.slice(-6, -1) : [];
     // The look the creation was started with (a change keeps it).
     const look = p.versions.filter(x => x.n <= version && x.look).at(-1)?.look;
     // A polish pass starts with the tester's notes (team.tester: false skips it).
     let notes = '';
     if (polish && config().team.tester !== false) {
-      notes = await testPage({ page, asked, told, look, report, shot, change }).catch(err => {
+      notes = await testPage({ page, asked, earlier, told, look, report, shot, change }).catch(err => {
         log(`TEST fail ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`);
         return '';
       });
       if (notes) log(`TEST ${took()} ${notes.split('\n').filter(Boolean).length} notes`);
     }
-    const r = await reviewPage({ page, asked, told, look, report, shot, notes, change, polish });
+    const r = await reviewPage({ page, asked, earlier, told, look, report, shot, notes, change, polish });
     if (!r.html) {
       log(r.skipped ? `${what} skip ${took()} ${r.why} (${r.skipped})` : `${what} ok   ${took()}${shot ? ' (with a screenshot)' : ''}`);
       return r.skipped ? { skipped: r.skipped } : { ok: true };

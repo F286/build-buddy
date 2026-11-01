@@ -16,7 +16,7 @@ kid's voice is understood and spoken on the computer itself, so their voice neve
 
 | Hold space and talk | Sparky builds it |
 |---|---|
-| ![Welcome screen with Sparky the robot](docs/welcome.png) | ![A race car game on a road with trees and flowers](docs/car.png) |
+| ![Welcome screen with Sparky the robot](docs/welcome.png) | ![A red car to drive on a road with trees and flowers](docs/car.png) |
 | **Keep improving it** (the old version stays playable while the new one builds) | **Real 3D games, at full frame rate** |
 | ![The building card at the top of a race car game](docs/building.png) | ![A 3D kart racing game with a jungle track](docs/game-3d.png) |
 
@@ -61,9 +61,10 @@ Whatever a kid asks for becomes a little world that works:
 - **A spark of joy.** Everyone in it notices what happens and reacts, whatever the kid taps answers
   in its own way, and what they set going ends in one big happy moment. Results are silly but true
   (too much soap and the bath foams over), and only kind truths are told: nobody gets hurt, and needs
-  never turn into suffering (a hungry fish nibbles the plants by itself). Only extremes settle back;
-  what the kid grew or built stays, and adds up to something new by the world's own rules (well-fed
-  hens lay an egg that hatches), never to a score.
+  never turn into suffering (a hungry fish nibbles the plants by itself). Extremes settle back (an
+  overflowing bath drains, a too-hot pot cools), but what the kid grew or built stays, and adds up
+  to something new by the world's own rules (well-fed hens lay an egg that hatches), never to a
+  score.
 - **Not necessarily a game.** There's no score, goal or timer unless the kid asks for a game, and
   then the game is built on a world that works: the race car slows on the grass and drifts in
   tight turns.
@@ -71,11 +72,13 @@ Whatever a kid asks for becomes a little world that works:
 What the kid says always wins over realism (their flying car flies; it just runs low on fuel), and
 the ideas stay theirs: the world's rules come from what they asked for, never from big new things
 Sparky adds. All three ways of building are told this. In team and solo mode, the passes after a
-creation appears also look for it: does poking its main things set something off, does it keep
-going on its own (team mode's checker and polisher, and solo mode's test pass), and is there
+creation appears also look for it: does poking its main things set something off, does it keep going
+on its own (team mode's checker, tester and polisher, and solo mode's test pass), and is there
 something to find (team mode's tester and solo mode's test pass). They know what counts as asking
-for a game, so a car to drive doesn't quietly turn into a race. Solo mode's test pass also plays
-it a few minutes ahead in its head, looking for anything that gets stuck, piles up or never stops.
+for a game, so a car to drive doesn't quietly turn into a race; after a change, they're told what
+the kid asked for earlier, so a game stays a game and a river the kid made run uphill stays theirs.
+None of them gives away what's there to find. Solo mode's test pass also plays it a few minutes
+ahead in its head, looking for anything that gets stuck, piles up or never stops.
 
 Asked for "a hamster with a little house and a running wheel", for example, it builds a hamster that
 runs in its wheel until it's tired, then naps in its house; seeds the kid drops get stuffed into its
@@ -100,21 +103,20 @@ there is to discover, its spark of joy, whether it's what was asked, whether it'
   from 7.0 to 7.6, what they asked for from 7.8 to 8.4 and easy for a 5-year-old from 7.4 to 7.9;
   solid stayed level (7.4 and 7.3).
 - **The twelve test requests** the earlier prompts were tuned on: solo mode won 19 of 24, and a world
-  that works went from 5.4 to 6.8. Racing is where the earlier prompts still win: their 3D kart race,
-  with three animal rivals, gems and a rainbow, won both its judgments. Joy went from 7.5 to 7.0 and
-  solid from 7.5 to 6.8 there.
+  that works went from 5.4 to 6.8, though joy went from 7.5 to 7.0 and solid from 7.5 to 6.8.
+  Racing is where the earlier prompts still win: their 3D kart race, with three animal rivals, gems
+  and a rainbow, won both its judgments.
 - **On the general scale** used in the rest of this README (each creation scored alone, 10 = nothing
   noticeably wrong), solo mode's creations averaged 7.4 on the new requests, against 7.1 with the
   earlier prompts, and 7.3 on the twelve test requests, against 7.75.
 - **Just as quick:** the heart of a solo creation was on screen after 22.5 s on average (at most 28 s).
 
-Each part earns its place. A first version of these rules had the working world but not the parts
-that make it a delight (already going, everyone reacting, a big happy moment, things adding up, a
-finger doing what the arrow keys do) or the test pass's look a few minutes ahead. Its worlds worked
-but were thinner and less solid: on the new requests, today's version won all 16 judgments against
-it, 9 of them clearly.
-
-
+Together, these parts earn their place. A first version of these rules had the working world but
+not the parts that make it a delight (already going, everyone reacting, a big happy moment, things
+adding up, a finger doing what the arrow keys do) or the test pass's look a few minutes ahead. On
+the new requests its creations scored lower on every count, most of all on what was asked for (7.0
+against 8.5) and on being a world that works (5.9 against 7.3), and today's version won all 16
+judgments against it, 9 of them clearly.
 
 ## What a session looks like
 
@@ -124,11 +126,11 @@ it, 9 of them clearly.
 3. **It appears** with a ta-da sound, and Sparky explains how to play: *"Click anywhere to blast off!"*
 4. **The next idea is theirs.** Sparky never suggests what to add. At most it asks *"What's next?"*,
    so they learn to come up with ideas and put them into words, instead of just saying yes or no.
-5. **They keep building, without starting over.** Changes take a few seconds and slot into the
-   game they're playing: their score and where they were come back. If they don't like something,
+5. **They keep building, without starting over.** Changes take a few seconds and slot into what
+   they're playing: where they were and what they made come back. If they don't like something,
    the back button undoes it.
-6. **A careful helper keeps watch.** Once they've played for a bit, a stronger AI looks at the game
-   and quietly fixes it if it's broken or stuck.
+6. **A careful helper keeps watch.** Once they've played for a bit, a stronger AI looks at what they
+   made and quietly fixes it if it's broken or stuck.
 
 ## Install
 
@@ -327,9 +329,10 @@ classic way and team mode stay exactly as they are.
      every word of the look really on screen, and no bare corners;
   3. it tests it like a demanding parent: it follows every arrow key, tap and drag to what moves,
      traces every cause and effect (each poke, collision and timer) to check it really fires and
-     shows, checks it keeps going when left alone, checks a 3D scene's
+     shows, checks it keeps going when left alone, plays it a few minutes ahead in its head for
+     anything that gets stuck, piles up or never stops, checks a 3D scene's
      space (the star's face toward the camera, everything facing the way it moves), scores it the
-     way that parent would (what was asked for, a world that works, a spark of joy, easy for a
+     way that parent would (what was asked for, a world that works, delight, easy for a
      5-year-old, solid, its own), and fixes what keeps each score down. When it runs slowly, it lightens each frame
      without taking away anything the look asked for.
 

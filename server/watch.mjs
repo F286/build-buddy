@@ -33,6 +33,8 @@ then, only when fixing or polishing, the changed page. Make the smallest change 
 
 ${ai.PAGE_FORMAT}
 
+${ai.discoveryRule()}
+
 When fixing, follow the rules below, and keep the KB.keep names and their meaning so the kid keeps their progress.
 
 ${ai.buildingRules()}`;

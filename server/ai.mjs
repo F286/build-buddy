@@ -53,7 +53,12 @@ export function worldRules() {
 // When it's a game - the DNA's own line, for the passes that check and polish a creation without
 // reading the whole DNA (team mode's checker, tester and polisher).
 export function gameRule() {
-  return `It's a game only if the kid asked for one (they say game, ask to race, catch, win or beat something, or name a game - "a race car" alone is a car to drive). Otherwise it is a little world that works: no score, goal, timer or winning to add - the fun is poking it and watching what happens.`;
+  return `It's a game if the kid asked for one, now or earlier for this creation, or it already is one (they say game, ask to race, catch, win or beat something, or name a game - "a race car" alone is a car to drive). Otherwise it is a little world that works: no score, goal, timer or winning to add - the fun is poking it and watching what happens.`;
+}
+
+// What's there to be found - for the same passes, and the overwatch, so they don't give it away.
+export function discoveryRule() {
+  return `One or two things in it may be meant to be found by trying ("what happens if...?"), maybe a peek at a hidden inside: keep them unhinted - no glow, arrow or sparkle pointing at them, and no more than two. Something hidden on purpose to be found is not a glitch.`;
 }
 
 // How to build a page. Shared with the overwatch (watch.mjs), so its fixes follow the same rules.
