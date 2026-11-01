@@ -487,7 +487,7 @@ async function build(body) {
   // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
   // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
   state.fixing = false; // the server counted the fix's time back up to here; trying it is play time
-  if (result?.html && result.backend === 'claude team') result = await repairFirst(result);
+  if (result?.html && /^claude (team|solo)$/.test(result.backend)) result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -516,7 +516,7 @@ async function build(body) {
         sfx.tada();
         cheer();
       }
-      if (result.backend === 'claude team') checkTeamBuild(state.project.id, result.version);
+      if (/^claude (team|solo)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend === 'claude solo' });
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -698,10 +698,12 @@ setInterval(() => checkCreation(), 15000);
 // Something built meanwhile doesn't stop it: it waits. A newer team build does (that one gets its
 // own check).
 let checkRun = 0;
-async function checkTeamBuild(projectId, version) {
+// Solo mode's passes go on until the server says it's done (a pass the kid interrupted, or one
+// taken back, happens again), with a few extra calls at most.
+async function checkTeamBuild(projectId, version, { solo = false } = {}) {
   const run = ++checkRun;
   try {
-    for (const polish of [false, ...Array(state.config.polishPasses ?? 1).fill(true)]) {
+    for (const polish of [false, ...Array((state.config.polishPasses ?? 1) + (solo ? 3 : 0)).fill(true)]) {
       // Let it start up and draw for a moment, then send how it's running and a screenshot.
       await sleep(1500);
       // Something being built meanwhile (a crash fix, or what the kid said next): wait for it. If it
@@ -714,6 +716,7 @@ async function checkTeamBuild(projectId, version) {
       report.errors = [...new Set([...(report.errors || []), ...state.pageErrors])];
       const r = await api('/api/check', { projectId, version: v, report, screenshot, polish });
       if (r.fixed) await applyFix(projectId, r.base ?? v, r); // (base: a newer version it was carried over onto)
+      if (solo && /^(polished enough|off)$/.test(r.skipped || '')) return;
     }
   } catch (err) {
     console.warn('team check failed', err);
@@ -959,7 +962,7 @@ function pressTalk() {
 // the moment the request arrives (see server/team.mjs).
 // Also while something is building: what the kid says now is built next, by a team that's ready.
 function warmTeam() {
-  if (state.config.teamActive) api('/api/warm', {}).catch(() => {});
+  if (state.config.teamActive || state.config.soloActive) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {
@@ -1272,7 +1275,7 @@ async function openParent() {
   f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
-  f.building.value = c.team ? 'team' : '';
+  f.building.value = c.solo ? 'solo' : c.team ? 'team' : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
@@ -1311,7 +1314,7 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
-    (c.team && !c.teamActive ? 'Team building needs Claude as the first AI brain, so it builds the classic way. ' : '') +
+    ((c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude as the first AI brain, so it builds the classic way. ` : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
     (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
@@ -1325,7 +1328,7 @@ $('#parentForm').addEventListener('submit', async e => {
     backends: f.brains.value.split(','),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
-    ...(f.building.value !== state.buildingShown && { team: f.building.value === 'team' }),
+    ...(f.building.value !== state.buildingShown && { team: f.building.value === 'team', solo: f.building.value === 'solo' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     stt: f.stt.value,

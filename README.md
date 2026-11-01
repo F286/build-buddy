@@ -89,6 +89,7 @@ cd build-buddy
 ./start.sh --no-browser     # just the server; open http://127.0.0.1:4321 yourself
 ./start.sh --window --debug # also lets Chrome DevTools tools attach on port 9222
 ./start.sh --classic        # one AI writes each creation by itself, instead of a team (see Team mode)
+./start.sh --solo           # one Claude that remembers the creation and keeps improving it (see Solo mode)
 ```
 
 **Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, how Claude builds, voice, names), the
@@ -153,6 +154,11 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.check` | `true` | Right after a creation appears, the checker takes a careful look and its fixes slide in at a calm moment. |
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
+| `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
+| `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
+| `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
+| `solo.firstModel` | `"sonnet"` | The quicker model that writes a new creation on a fresh page while the kid waits; the same session then switches to the main model (`solo.model`, or `claude.model`) for its passes, the kid's changes and repairs. `""` uses the main model for everything. |
+| `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
@@ -213,6 +219,69 @@ Every role takes the same options, so you can tune how Claude Code runs:
 
 A team build uses more of your plan than a classic one (several AIs read the request, and the pages
 come out bigger and more detailed), and runs up to `helpers` + 2 `claude` programs at once.
+
+### Solo mode
+
+Solo mode is a third way of building, for Claude: one Claude builds the whole creation and keeps it
+in mind, with no team and no helpers. Pick it in the Ctrl+Shift+P panel (*How Claude builds*), set
+`"solo": { "enabled": true }` in `config.json`, or try it for one run with `./start.sh --solo`. The
+classic way and team mode stay exactly as they are.
+
+- **One Claude per creation, remembering it.** A single `claude` program is started while the kid is
+  still talking and keeps running between requests, so it knows every line it wrote and what it
+  meant each piece to do.
+- **The heart of it first, quickly.** Its first reply is the heart of the creation: the star, its
+  place, the main thing to do with its reward, and the controls, all working and in the look. For a
+  new creation on a fresh page, a quicker model (Sonnet) writes it while the kid waits; then the
+  same session switches to the main model (Opus) for everything else, still remembering every line.
+- **Then it keeps working on it while the kid plays.** In the same session, it looks at a screenshot
+  of it running (with its frame rate and any errors) three times (`solo.polish`):
+  1. it grows it into its full version: about twice as much, with everything a kid pictures for
+     that kind of thing (a race gets rivals to beat), more of its place, characters who
+     react, a goal that grows, surprises that come from exactly what the kid said, and one big idea
+     that makes it unlike any other (a sleepy cloud named Puff who wishes for a rainbow, painted
+     stripe by stripe as the kid plays the piano);
+  2. it makes it beautiful: the star readable at a glance, with a face whose expression changes,
+     every word of the look really on screen, and no bare corners;
+  3. it tests it like a demanding parent: it follows every arrow key, tap and drag to what moves,
+     traces every collision, timer and counter to check it really fires, checks a 3D scene's
+     space (the star's face toward the camera, everything facing the way it moves), scores it the
+     way that parent would (what was asked for, delight, alive, easy for a 5-year-old, solid, its
+     own), and fixes what keeps each score down. When it runs slowly, it lightens each frame
+     without taking away anything the look asked for.
+
+  After each pass it re-reads the code it just changed, as a tester, and fixes what it broke. Each
+  pass is tried out of sight first and slides in at a calm moment, keeping the kid's progress,
+  like team mode's polish. One that would crash is taken back, and Claude is told why (a lost grow
+  or beautifying pass happens again).
+- **Changes from memory.** It already knows the page, so a change is a few edits written straight
+  away (7 to 19 s in tests), and the kid's progress carries over.
+- **The kid comes first.** If they ask for something while a pass is still working, that pass stops,
+  their request is answered next, and the pass happens later.
+- **Thinks a little while the kid waits, a lot while they play:** `solo.thinking` gives the budgets.
+
+If the session runs into trouble, that request is built the classic way. After 24 turns, or 20
+minutes without one, the session is replaced by a fresh one, handed the page as it is and what the
+kid asked for lately; what it still had to do (growing it, making it beautiful) carries over.
+
+On the same eight test creations as team mode, judged blind side by side, each pair twice with the
+two shown in both orders, solo mode won all 16 judgments against the classic way, every one by a
+clear margin (its creations scored 8 to 9 out of 10 there, the classic way's 4 to 6), and 9 of the
+16 against team mode's creations, including all 4 won by a clear margin. Scored one at a time
+against fixed anchors (10 = nothing noticeably wrong), its creations averaged 7.8 out of 10 over
+seven rounds (7.6 to 7.9), level with team mode's in the same rounds (7.5 to 8.0; earlier tests put
+Opus at high effort with no time limit at 7.9) and ahead in four of the seven; in three of them,
+seven of its eight creations scored 8 ("very good"). Having Fable instead of Opus do the passes
+scored no higher (7.6). They were also judged the most original of the three ways of building (6.9
+to 7.4, against team mode's 6.0 to 6.8). What got it there, each measured the same way: a quicker
+model writing the heart (as good, and 10 s sooner), making it beautiful after growing it, a test
+pass that checks 3D space (its 3D creations went from 6.7 to 7.7), one big idea per creation
+(originality from 6.6 to 7.4), and each pass re-reading what it changed before it goes in (no pass
+crashed in the final round). The heart of each creation was on screen after 23 s on average (at most
+28 s), sooner than team mode's creations (27 s), and Sparky's first words came after about 1.1 s;
+the grown, beautiful and tested versions followed while the kid played, each pass taking about 45 s.
+In sessions in the real app, changes took 7 to 19 s and the kid's progress carried over each one.
+Solo mode runs one `claude` program at a time, where team mode runs up to eight.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
@@ -303,8 +372,8 @@ Buddy changes.
   anything, or touch the rest of the app. The only things they can load are the bundled Phaser and
   Three.js.
 - **What leaves your computer:** the text of each request and the current creation's code, sent to
-  Claude or ChatGPT. The overwatch (and in team mode the checker) also sends a small screenshot of
-  the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
+  Claude or ChatGPT. The overwatch (and in team mode the checker, in solo mode each pass) also
+  sends a small screenshot of the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
 - **Kid-friendly by instruction.** Sparky is told to keep everything friendly and age-appropriate,
@@ -330,6 +399,7 @@ but `setup.sh` needs WSL, or use `"stt": "browser", "tts": "browser"` with Chrom
 server/main.mjs      web server, API, full-screen browser launcher
 server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
 server/team.mjs      team mode: a lead and helpers that build a creation together, at the same time
+server/solo.mjs      solo mode: one Claude session per creation that remembers it and keeps improving it
 server/speech.mjs    whisper.cpp (listening), Kokoro and Piper (talking)
 server/watch.mjs     the overwatch: a stronger model that checks on games and fixes them
 server/store.mjs     creations and their versions, saved in data/projects/

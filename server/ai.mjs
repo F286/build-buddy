@@ -9,6 +9,7 @@ import { config, DATA, ROOT } from './config.mjs';
 import { findBin, run } from './bins.mjs';
 import * as store from './store.mjs';
 import * as team from './team.mjs';
+import * as solo from './solo.mjs';
 
 const WORK = path.join(DATA, 'tmp');
 fs.mkdirSync(WORK, { recursive: true });
@@ -428,8 +429,16 @@ export async function build({ text, alt, fix }, emit) {
     // Team mode (team.mjs): a lead and helpers build it together. If the team can't, the
     // classic way still answers.
     let r = null;
-    if (!team.enabled() && config().team?.enabled) log('team mode is on, but Claude is not the first brain: building the classic way');
-    if (team.enabled()) {
+    if ((!team.enabled() && config().team?.enabled) || (!solo.enabled() && config().solo?.enabled)) log(`${config().solo?.enabled ? 'solo' : 'team'} mode is on, but Claude is not the first brain: building the classic way`);
+    // Solo mode (solo.mjs): one Claude that remembers the creation. If it can't, the classic way.
+    if (solo.enabled()) {
+      try {
+        r = await solo.build({ page, history, text, alt, fix }, emit, state);
+      } catch (err) {
+        log(`FAIL claude solo ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
+        emit({ type: 'progress', chars: 0, note: 'building the classic way' });
+      }
+    } else if (team.enabled()) {
       try {
         r = await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
