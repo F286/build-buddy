@@ -86,7 +86,10 @@ function requestPrompt({ page, known, note, history, text, alt, fix, look }) {
 
 function running(report, shot) {
   const r = report || {};
-  return `<how_it_is_running>\nRunning at ${r.fps ?? '?'} frames per second${r.canvas ? ` on a ${r.canvas} canvas` : ''}.\nErrors while running: ${r.errors?.length ? r.errors.slice(-5).join(' | ') : 'none'}\n</how_it_is_running>\n\n${
+  // Slow: lighter frames, but never by taking away what the look asked for (that's what a kid -
+  // and a parent - sees first; a slow computer is better served by lighter drawing).
+  const slow = r.fps != null && r.fps < 30 ? '\nIf that feels slow, make each frame lighter (fewer separate meshes, lights or shadow-casters, nothing made every frame) - never by taking away what the look asked for, like its shadows, glow or smooth edges.' : '';
+  return `<how_it_is_running>\nRunning at ${r.fps ?? '?'} frames per second${r.canvas ? ` on a ${r.canvas} canvas` : ''}.${slow}\nErrors while running: ${r.errors?.length ? r.errors.slice(-5).join(' | ') : 'none'}\n</how_it_is_running>\n\n${
     shot ? `A screenshot of it right now is in the file ${shot} - look at it first (with the Read tool).` : 'There is no screenshot, so judge from the page.'
   }`;
 }
@@ -475,7 +478,8 @@ Then WHY: <what you improved, in one short sentence for the grown-ups' log>, and
 const LOOK = `Test it the way a demanding parent who is also a game designer would, before they play it with their kid - in the code and in the screenshot:
 1. Every control: follow each arrow key, a tap anywhere and a drag from its handler to what moves on screen. Does each one do something the kid sees right away, and does left go left? (A camera control that never listens to keys answers nothing.) Where one does nothing, give it an answer.
 2. Every goal and reward: trace each collision, overlap, distance check, timer and counter in the code - would it really fire (both things it checks exist, are in range, and have what the check needs)? Play it through more than once: does it reset, and does it happen again?
-3. Then score it 1 to 10 the way that parent would, on: what they asked for (all of it, in the look), delight (charming and polished, a full scene, characters with personality), alive (things move on their own, every input answers), easy for a 5-year-old (no reading, big targets, forgiving), solid (no bugs, glitches or anything cut off), and its own (touches that come from exactly what the kid said, not a generic version).
+3. In 3D, also: the camera shows the star's face, not its back; everything faces the way it moves (turn it with its direction of travel); gates, arches and finish lines stand across the path; sky, sun and clouds are where the camera can see them; nothing drives or flies through solid things.
+4. Then score it 1 to 10 the way that parent would, on: what they asked for (all of it, in the look), delight (charming and polished, a full scene, characters with personality), alive (things move on their own, every input answers), easy for a 5-year-old (no reading, big targets, forgiving), solid (no bugs, glitches or anything cut off), and its own (touches that come from exactly what the kid said, not a generic version).
 First write, under NOTES:, the scores and, for each below 9, what keeps it there - most important first. Then WHY: <what you fixed, in one short sentence for the grown-ups' log>, and the FIND/REPLACE edits that fix as much of it as you can do well. Only if everything is a 9 or 10, reply with just: OK`;
 
 // How long it may think: little while the kid waits, a lot when it looks its creation over.
