@@ -270,7 +270,7 @@ including all 4 won by a clear margin. Scored one at a time against fixed anchor
 noticeably wrong), its creations averaged 7.75 and 7.9 out of 10 in two rounds, against team mode's
 7.5 and 8.0 in the same rounds (earlier tests put Opus at high effort with no time limit at 7.9); in
 the second, seven of the eight scored 8 ("very good"). They were also judged the most original of
-the three ways of building (7.0 to 7.4, against team mode's 6.0 to 6.3). What got it there, each
+the three ways of building (6.9 to 7.4, against team mode's 6.0 to 6.8). What got it there, each
 measured the same way: a quicker model writing the heart (as good, and 10 s sooner), making it
 beautiful after growing it, a test pass that checks 3D space (its 3D creations went from 6.7 to
 7.7), one big idea per creation (originality from 6.6 to 7.4), and each pass re-reading what it
