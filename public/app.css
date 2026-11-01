@@ -399,12 +399,12 @@ button {
    (Listening perks it up.) */
 .sleepy:not(.listening) .robot .eye { animation: drowsy-blink 3.2s ease-in-out infinite; }
 .sleepier:not(.listening) .robot .eye { animation-duration: 2.2s; }
-.sleepy .robot .bulb { opacity: 0.55; }
+.sleepy:not(.listening) .robot .bulb { opacity: 0.55; }
 @keyframes drowsy-blink {
   0%, 70%, 100% { transform: scaleY(0.55) translateY(2px); }
   80%, 86% { transform: scaleY(0.1) translateY(3px); }
 }
-.sleepier .robot { animation: nod 4.5s ease-in-out infinite; transform-origin: 50% 85%; }
+.sleepier:not(.listening) .robot { animation: nod 4.5s ease-in-out infinite; transform-origin: 50% 85%; }
 @keyframes nod {
   0%, 45% { transform: rotate(0) translateY(0); }
   74% { transform: rotate(8deg) translateY(6px); } /* drifting off... */
@@ -413,7 +413,7 @@ button {
 }
 
 /* A big yawn: mouth wide open, eyes squeezed shut, head tipped back. */
-.yawn .robot { animation: yawn-tilt 2s ease-in-out; transform-origin: 50% 85%; }
+.yawn:not(.listening) .robot { animation: yawn-tilt 2s ease-in-out; transform-origin: 50% 85%; }
 .yawn:not(.listening) .robot .eye { animation: none; transform: scaleY(0.1) translateY(3px); }
 .yawn .robot .mouth { animation: yawn-mouth 2s ease-in-out; }
 @keyframes yawn-tilt {
@@ -540,7 +540,7 @@ button {
 
 .sleeper { width: min(28vh, 220px); }
 .sleeper .robot-slot { animation: bob 3.2s ease-in-out infinite; }
-.sleeper.drowsy .robot .eye { animation: drowsy-blink 2.4s ease-in-out infinite; }
+.sleeper.drowsy:not(.yawn) .robot .eye { animation: drowsy-blink 2.4s ease-in-out infinite; }
 .sleeper.drowsy .robot .bulb { opacity: 0.55; }
 
 /* Asleep: eyes shut, bulb off, a little "o" of a mouth, slow breathing, and Zs floating up. */

@@ -51,6 +51,9 @@ function cheer() {
     void el.offsetWidth;
     el.classList.add('happy');
   }
+  // One hop only: left on, it would come back whenever another animation (a yawn) ends.
+  clearTimeout(cheer.done);
+  cheer.done = setTimeout(() => buddyEls.forEach(el => el.classList.remove('happy')), 1100);
 }
 
 // ------------------------------------------------------------------------------------- sounds
@@ -840,6 +843,7 @@ function stopAsking() {
 
 function overtime() {
   timer.overtime = 'building';
+  setSleepy(0); // awake to finish it; the extra minute after it gets sleepy afresh
   // What's building now is the last thing; if nothing is, what they're saying (or what's being
   // heard) is, and it can still be built - once. Requests waiting their turn are dropped.
   timer.graceUsed = state.busy;
