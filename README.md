@@ -109,14 +109,20 @@ there is to discover, its spark of joy, whether it's what was asked, whether it'
 - **On the general scale** used in the rest of this README (each creation scored alone, 10 = nothing
   noticeably wrong), solo mode's creations averaged 7.4 on the new requests, against 7.1 with the
   earlier prompts, and 7.3 on the twelve test requests, against 7.75.
-- **Just as quick:** the heart of a solo creation was on screen after 22.5 s on average (at most 28 s).
+- **Team mode, on the same eight new requests:** its little worlds won 14 of 16 judgments, 11 of
+  them clearly. A world that works went from 5.1 to 7.4, something to discover from 4.8 to 6.9, joy
+  from 7.0 to 7.2, what they asked for from 7.7 to 8.1 and solid from 7.6 to 7.8; easy for a
+  5-year-old went from 8.1 to 7.6. On that general scale they averaged 7.6, against 7.5 with the
+  earlier prompts.
+- **Just as quick:** the heart of a solo creation was on screen after 22.5 s on average, and after
+  28 s at most.
 
-Together, these parts earn their place. A first version of these rules had the working world but
-not the parts that make it a delight (already going, everyone reacting, a big happy moment, things
+Together, these parts earn their place. A first version of these rules had the working world but not
+the parts that make it a delight (already going, everyone reacting, a big happy moment, things
 adding up, a finger doing what the arrow keys do) or the test pass's look a few minutes ahead. On
-the new requests its creations scored lower on every count, most of all on what was asked for (7.0
-against 8.5) and on being a world that works (5.9 against 7.3), and today's version won all 16
-judgments against it, 9 of them clearly.
+the new requests, in solo mode, its creations scored lower on every count, most of all on what was
+asked for (7.0 against 8.5) and on being a world that works (5.9 against 7.3), and today's version
+won all 16 judgments against it, 9 of them clearly.
 
 ## What a session looks like
 
