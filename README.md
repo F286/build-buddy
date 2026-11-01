@@ -83,6 +83,37 @@ cheeks and carried home, and the stash grows sunflowers. Asked for "a beehive wh
 honey", the bees drink flowers dry (they slowly fill back up), carry the nectar home and fill the
 cells, and a full hive brings a jar of honey and a new baby bee.
 
+### How it measured
+
+Creations made this way were compared, blind, with ones made from the same requests by the earlier
+prompts, which planned a game: one clear thing to do, a reward every time and a goal that grows.
+Claude, judging as a demanding parent who loves toys that show kids how the world works, looked at
+each pair side by side (two screenshots, the code and its errors), each pair twice with the two
+shown in both orders, and scored both out of 10 on how much it is a little world that works, what
+there is to discover, its spark of joy, whether it's what was asked, whether it's easy for a
+5-year-old, and how solid it is.
+
+- **Requests no example in the prompts mentions** (a beehive, a marble run, a hamster with a wheel,
+  a pirate ship, a caterpillar that turns into a butterfly, a treehouse with a slide, a basketball
+  game and a bubble machine): solo mode's little worlds won 15 of 16 judgments, 10 of them clearly.
+  A world that works went from 5.3 to 7.6, something to discover from 5.5 to 7.3, the spark of joy
+  from 7.0 to 7.6, what they asked for from 7.8 to 8.4 and easy for a 5-year-old from 7.4 to 7.9;
+  solid stayed level (7.4 and 7.3).
+- **The twelve test requests** the earlier prompts were tuned on: solo mode won 19 of 24, and a world
+  that works went from 5.4 to 6.8. Racing is where the earlier prompts still win: their 3D kart race,
+  with three animal rivals, gems and a rainbow, won both its judgments. Joy went from 7.5 to 7.0 and
+  solid from 7.5 to 6.8 there.
+- **On the general scale** used in the rest of this README (each creation scored alone, 10 = nothing
+  noticeably wrong), solo mode's creations averaged 7.4 on the new requests, against 7.1 with the
+  earlier prompts, and 7.3 on the twelve test requests, against 7.75.
+- **Just as quick:** the heart of a solo creation was on screen after 22.5 s on average (at most 28 s).
+
+Each part earns its place. A first version of these rules had the working world but not the parts
+that make it a delight (already going, everyone reacting, a big happy moment, things adding up, a
+finger doing what the arrow keys do) or the test pass's look a few minutes ahead. Its worlds worked
+but were thinner and less solid: on the new requests, today's version won all 16 judgments against
+it, 9 of them clearly.
+
 
 
 ## What a session looks like
@@ -333,7 +364,9 @@ crashed in the final round). The heart of each creation was on screen after 23 s
 28 s), sooner than team mode's creations (27 s), and Sparky's first words came after about 1.1 s;
 the grown, beautiful and tested versions followed while the kid played, each pass taking about 45 s.
 In sessions in the real app, changes took 7 to 19 s and the kid's progress carried over each one.
-Solo mode runs one `claude` program at a time, where team mode runs up to eight.
+Solo mode runs one `claude` program at a time, where team mode runs up to eight. (These scores were
+measured with the earlier prompts, which planned a game; how today's little worlds score is in
+[How it measured](#how-it-measured).)
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
@@ -395,7 +428,9 @@ Buddy changes.
   team's got that top score, against none of the classic way's; more polish passes didn't raise it,
   but a tester's list did: on eight fresh creations, polish passes guided by the tester brought
   every one to 8 (8.0 on average against 7.75 without it, with every part of the score up). It
-  writes about twice as much, so it uses more of your plan.
+  writes about twice as much, so it uses more of your plan. (These scores were measured with the
+  earlier prompts, which planned a game; how today's little worlds score is in
+  [How it measured](#how-it-measured).)
 - **It fixes its own mistakes.** If a creation crashes, Sparky says *"Oops! Let me fix a wobbly bit"*
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
