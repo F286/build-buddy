@@ -460,7 +460,7 @@ function saveScreenshot(dataUrl) {
 
 // After something new appears: grow it into its full version (FIND/REPLACE edits, adding to it).
 const GROW = `Now grow it into its full, excellent version - about twice as much as there is now - adding to what's there with FIND/REPLACE edits (big REPLACE blocks are fine: whole new functions and scenery, next to the code they belong with):
-- First fix anything you can see isn't working or showing yet.
+- First fix anything you can see isn't working or showing yet, and make every word of what the kid said, and of the look, unmistakably there - the center of it, not a detail.
 - Then add what it still lacks to be a delight: everything a kid pictures for this kind of thing (a race has rivals to beat), more of its place near and far (made in loops), characters with faces and personality who react to the kid, a reward that feels great and a goal that grows (after a few, something new appears), and two or three surprises that come from exactly what the kid said.
 - Give it one big idea that makes it unlike any other version of this kind of thing, built from exactly what the kid said: a twist, a place with a story, a character with a name and a wish. Not the standard template.
 - Every arrow key, a tap anywhere and a drag each get an answer the kid sees.
@@ -580,6 +580,17 @@ export async function check({ projectId, version, report, screenshot }) {
         return { skipped: "the change didn't parse" };
       }
       html = fixed;
+    }
+    // It re-reads what it just changed, as a tester would - a pass's own slips are the bugs it
+    // misses most (a name used before it's made, a value that never resets) - and fixes them on top.
+    if (!stale()) {
+      try {
+        const again = parseReply((await s.ask(`With your edits in, re-read the code you just changed, as a tester: did they break anything - a name used before it's defined, something that no longer answers or never resets, something now hidden, cut off or overlapping? If so, reply with FIND/REPLACE edits on the page with your edits in that fix it. Otherwise reply with just: OK`, { timeoutSec: 180, kind: 'polish' })).text);
+        if (again.edits.length) {
+          const fixed = applyEdits(html, again.edits);
+          if (!(await unparsed(fixed))) html = fixed;
+        }
+      } catch {}
     }
     if (stale()) {
       log(`SOLO stale ${took()} ${why}`);
