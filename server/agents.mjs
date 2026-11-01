@@ -96,18 +96,20 @@ ${buildingRules()}`;
 }
 
 // What every helper follows (the lead's jobs point to it).
-function helperRules({ asked, latest = '', look, freshLook = '' }) {
+// quick: the kid is waiting for this (something new or a change) - small parts; otherwise (the
+// passes while the kid plays) fuller ones.
+function helperRules({ asked, latest = '', look, freshLook = '', quick = true }) {
   return `# How to write your part
 
 You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. The team lead wrote page.html: the shared code at the top, a \`// @part <name>\` line where each part goes, and MAIN at the bottom, which calls your part exactly as your job says. The comments in the shared code tell you how the parts fit together (the coordinates, how they talk to each other) - follow them. Other helpers write the other parts at the same time.
 
-- Read rules.md and page.html together (both Reads at once), then write only the file your job names, in one go with the Write tool (or Edit, if your job is to change a part that's there) - the lead checks every part afterwards, so don't polish it with more edits. Then reply with one short line: what you defined.
+- Read rules.md and page.html together (both Reads at once), then write only the file your job names, with the Write tool (or Edit, if your job is to change a part that's there)${quick ? " - in one go: the lead checks every part afterwards, so don't polish it with more edits" : ''}. Then reply with one short line: what you defined.
 - Define exactly what your job says (the same names and parameters, returning the same things): MAIN depends on it. Use the shared code's names as they are.
 - Only define things at the top level: nothing runs until MAIN calls your part. No imports and no <script> tags (the shared code has every import). Extra top-level names you add start with your part's name and an underscore, so they can't clash. Whatever your piece needs before its first frame happens in the function MAIN calls first.
 - Time is in seconds: use dt and t exactly as passed (never divide them by 1000). Read the arrow keys and the pointer from the shared input object, unless your job says otherwise.
 - The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules your job doesn't ask for.
 - No words on the page - pictures instead. Draw everything in the look, so it's all one picture - shapes, not emoji.
-- About 25-40 short lines, never more than 2,500 characters - a hard limit: the kid is waiting for the slowest helper. Write the heart of your part well and leave the extras out; the lead grows the creation after it appears. Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
+${quick ? '- About 25-40 short lines, never more than 2,500 characters - a hard limit: the kid is waiting for the slowest helper. Write the heart of your part well and leave the extras out; the lead grows the creation after it appears.' : '- About 30-60 short lines: the kid is playing with it, not waiting, so make your part rich and complete - what it does when poked, how it reacts to what happens, the little things to find.'} Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
 - What the kid would miss when the page changes lives in the fields of page.html's \`KB.keep({ ... })\` (only those carry over): put it back from there when your piece starts, and update it as it changes. Use the keep fields your job names; never call KB.keep yourself.
 - If your piece is the star, make it easy to recognize at a glance, with a face, big enough to see - in proportion with its world. If it's the place, make it full and unmistakable: a few kinds of things, each made in a loop with varied sizes, colors and spots.
 - Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen.
@@ -516,6 +518,7 @@ export async function check({ projectId, version, report, screenshot }) {
   try {
     const note = [sync(s, page), w.note].filter(Boolean).join(' ');
     before = snapshot(s.dir);
+    fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '', quick: false }));
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
