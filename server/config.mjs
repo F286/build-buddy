@@ -64,6 +64,14 @@ export const DEFAULTS = {
     checker: { model: '', effort: 'medium' },
     polisher: { model: '', effort: 'high' },
     tester: { model: '', effort: 'medium' },
+    // agents: true builds team mode the agent way (server/agents.mjs): one lead Claude that keeps the
+    // creation in mind and hands its parts to helpers (subagents), then makes them fit. agentLead is
+    // the lead (model, effort and args as for a role; thinking: how long it may think while the kid
+    // waits, and when it looks its creation over); agentHelper.model is the helpers' model, as an alias
+    // (sonnet, opus, haiku or fable: the Agent tool takes no full model names).
+    agents: false,
+    agentLead: { model: '', effort: '', thinking: { build: 3000, look: 10000 } },
+    agentHelper: { model: 'sonnet' },
   },
   // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
   // in mind - no team. Its first reply is the heart of it, on screen quickly; then, while the kid
@@ -139,17 +147,20 @@ function readUserConfig() {
 }
 
 // The way of building for this run only, without changing config.json: `./start.sh --solo`,
-// `--team` or `--classic` (or KIDBUILD_SOLO=1, KIDBUILD_TEAM=1 or 0). Picking a way of building in
-// the panel replaces it.
+// `--agents`, `--team` or `--classic` (or KIDBUILD_SOLO=1, KIDBUILD_AGENTS=1, KIDBUILD_TEAM=1 or 0).
+// Picking a way of building in the panel replaces it.
 let runMode =
   process.argv.includes('--solo') || process.env.KIDBUILD_SOLO === '1'
     ? 'solo'
-    : process.argv.includes('--team') || process.env.KIDBUILD_TEAM === '1'
-      ? 'team'
-      : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
-        ? 'classic'
-        : null;
-const withRunTeam = c => (runMode === null ? c : { ...c, team: { ...c.team, enabled: runMode === 'team' }, solo: { ...c.solo, enabled: runMode === 'solo' } });
+    : process.argv.includes('--agents') || process.env.KIDBUILD_AGENTS === '1'
+      ? 'agents'
+      : process.argv.includes('--team') || process.env.KIDBUILD_TEAM === '1'
+        ? 'team'
+        : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
+          ? 'classic'
+          : null;
+const withRunTeam = c =>
+  runMode === null ? c : { ...c, team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' }, solo: { ...c.solo, enabled: runMode === 'solo' } };
 
 let current = withRunTeam(merge(DEFAULTS, readUserConfig()));
 if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());

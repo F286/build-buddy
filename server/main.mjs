@@ -15,6 +15,7 @@ import * as speech from './speech.mjs';
 import * as watch from './watch.mjs';
 import * as team from './team.mjs';
 import * as solo from './solo.mjs';
+import * as agents from './agents.mjs';
 import { findBin } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
@@ -68,10 +69,13 @@ function publicConfig() {
     claudeFast: Boolean(c.claude.fast),
     team: Boolean(c.team.enabled),
     solo: Boolean(c.solo?.enabled),
+    agents: Boolean(c.team.agents),
     teamActive: team.enabled() && !solo.enabled(),
     soloActive: solo.enabled(),
-    // How many polish passes the app asks for after the first check (in solo mode every look counts).
-    polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : team.polishPasses(),
+    agentsActive: agents.enabled(),
+    // How many polish passes the app asks for after the first check (in solo mode and the agent way
+    // every look counts).
+    polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : agents.enabled() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
     creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
@@ -133,6 +137,11 @@ function builtSolo(version) {
   return solo.madeBySolo(store.currentProject(), version); // (an overwatch fix on top of one counts)
 }
 
+// ... or by team mode's agent way (agents.mjs)?
+function builtAgents(version) {
+  return agents.madeByAgents(store.currentProject(), version);
+}
+
 const routes = {
   'GET /api/state': () => {
     const p = store.currentProject();
@@ -175,18 +184,18 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => (solo.enabled() ? solo.warm() : team.warm()),
+  'POST /api/warm': () => (solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : team.warm()),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
   'POST /api/repair': async req => {
     const b = await readJson(req);
-    return builtSolo(b.version) ? solo.repair(b) : team.repair(b);
+    return builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? agents.repair(b) : team.repair(b);
   },
 
   // A team-built creation just appeared: take a careful look and fix what would spoil it.
   'POST /api/check': async req => {
     const b = await readJson(req);
-    return builtSolo(b.version) ? solo.check(b) : team.check(b);
+    return builtSolo(b.version) ? solo.check(b) : builtAgents(b.version) ? agents.check(b) : team.check(b);
   },
 
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
@@ -227,6 +236,7 @@ const routes = {
     store.dropVersion(p, version);
     ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
     if (/^claude solo/.test(v.backend)) solo.takenBack({ projectId, version, error });
+    if (/^claude agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
     return { dropped: true };
   },
 
@@ -253,6 +263,7 @@ const routes = {
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
     if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
+    if (typeof b.agents === 'boolean') patch.team = { ...patch.team, agents: b.agents };
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
@@ -262,6 +273,7 @@ const routes = {
     if (speech.KOKORO_VOICES.includes(b.voice)) patch.kokoro = { voice: b.voice };
     saveConfig(patch);
     if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
+    if (!agents.enabled()) agents.stop();
     return publicConfig();
   },
 
@@ -455,7 +467,9 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`Build Buddy is running at http://127.0.0.1:${port}`);
   const building = solo.enabled()
     ? 'solo (one Claude that remembers the creation)'
-    : team.enabled()
+    : agents.enabled()
+      ? 'a team, the agent way (a lead that remembers the creation, with helpers)'
+      : team.enabled()
       ? `a team (lead + up to ${team.maxHelpers()} helpers)`
       : config().team.enabled || config().solo?.enabled
         ? 'classic (solo and team mode need claude first in backends)'

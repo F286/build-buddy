@@ -145,10 +145,12 @@ function models() {
   return { main, first: main ? config().solo?.firstModel || main : '' };
 }
 
-class Session {
-  constructor(projectId) {
-    const args = sessionArgs();
+// (Team mode's agent way - agents.mjs - runs its lead in one of these too: its own command line,
+// its own working folder and name.)
+export class Session {
+  constructor(projectId, { args = sessionArgs(), cwd = WORK_DIR, label = 'solo', env = null } = {}) {
     const bin = findBin('claude', config().claude.bin);
+    this.label = label;
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
     this.key = JSON.stringify(args);
     this.fast = args.includes('--settings');
@@ -160,7 +162,7 @@ class Session {
     this.current = null; // the turn being answered
     this.queue = [];
     this.err = '';
-    this.child = spawn(bin, args, { cwd: WORK_DIR, stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' && /\.cmd$/i.test(bin) });
+    this.child = spawn(bin, args, { cwd, ...(env && { env: { ...process.env, ...env } }), stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' && /\.cmd$/i.test(bin) });
     let buf = '';
     this.child.stdout.setEncoding('utf8');
     this.child.stdout.on('data', d => {
@@ -173,7 +175,7 @@ class Session {
     });
     this.child.stderr.setEncoding('utf8');
     this.child.stderr.on('data', d => (this.err = (this.err + d).slice(-2000)));
-    this.child.on('close', code => this.close(new Error(`claude solo ended${code ? ` (exit ${code}: ${this.err.trim().slice(-200)})` : ''}`)));
+    this.child.on('close', code => this.close(new Error(`claude ${this.label} ended${code ? ` (exit ${code}: ${this.err.trim().slice(-200)})` : ''}`)));
     this.child.on('error', err => this.close(err));
     this.child.stdin.on('error', () => {});
     this.touch();
@@ -232,6 +234,7 @@ class Session {
     const t = this.current;
     if (!t) return;
     t.quietSince = Date.now();
+    t.onEvent?.(ev);
     const se = ev.type === 'stream_event' && !ev.parent_tool_use_id ? ev.event : null;
     if (se?.type === 'message_start') {
       // A message that started again without ending (its stream was retried): drop what it wrote.
@@ -247,7 +250,7 @@ class Session {
       if ((t.stop === 'end_turn' || t.stop === 'stop_sequence') && !t.interrupted) t.finish(null);
     } else if (ev.type === 'result') {
       // An interrupted turn never counts, whatever it had written so far; nor does one that failed.
-      t.finish(t.interrupted ? new Error('interrupted') : ev.is_error ? new Error(ev.result || ev.subtype || 'claude solo error') : null, ev.result);
+      t.finish(t.interrupted ? new Error('interrupted') : ev.is_error ? new Error(ev.result || ev.subtype || `claude ${this.label} error`) : null, ev.result);
       this.current = null;
       this.next();
     }
@@ -255,12 +258,13 @@ class Session {
 
   // Ask it something; resolves with its reply. Turns are answered one after another.
   // kind: 'build' (what the kid asked for) or 'polish' (which a build interrupts).
-  ask(prompt, { onText = () => {}, timeoutSec = config().timeoutSec, stallSec = 40, priority = false, kind = 'build' } = {}) {
+  ask(prompt, { onText = () => {}, onEvent = null, timeoutSec = config().timeoutSec, stallSec = 40, priority = false, kind = 'build' } = {}) {
     this.touch();
     return new Promise((resolve, reject) => {
       const t = {
         prompt,
         kind,
+        onEvent,
         timeoutSec,
         stallSec,
         text: '',
@@ -276,7 +280,7 @@ class Session {
           else resolve({ text: t.text || result || '' });
         },
       };
-      if (this.closed) return reject(new Error('claude solo ended'));
+      if (this.closed) return reject(new Error(`claude ${this.label} ended`));
       if (priority) this.queue.unshift(t);
       else this.queue.push(t);
       this.next();
@@ -296,7 +300,7 @@ class Session {
 
   // A turn that's stuck: the session can't be trusted any more.
   fail(t, why) {
-    t.finish(new Error(`claude solo ${why}`));
+    t.finish(new Error(`claude ${this.label} ${why}`));
     this.end();
   }
 

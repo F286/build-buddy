@@ -398,6 +398,30 @@ export function warm() {
   return { warm: keepWarm('voice', voiceSystem(), 1) + keepWarm('lead', leadSystem(), leads) + sketch };
 }
 
+// The voice: one short line said out loud right away while others build (team mode's agent way,
+// agents.mjs, uses it too). sayNow(text) gets the line the moment it's written.
+export function speakFirst({ history, text, alt, title }, sayNow, { signal, tally } = {}) {
+  let said = '';
+  return ask('voice', {
+    system: voiceSystem(),
+    prompt: voicePrompt({ history, text, alt, title }),
+    timeoutSec: 60,
+    signal,
+    tally,
+    onText: chunk => {
+      said += chunk;
+      const m = said.match(/^[ \t>*_]*SAY:[*_]*\s*(.+)\n/m);
+      if (m) sayNow(m[1].replace(/[*_]+$/, '').trim());
+    },
+  }).then(r => {
+    const line = field(r.text, 'SAY');
+    if (line) sayNow(line);
+  });
+}
+
+// Have the voice's program started and waiting (for the agent way's warm-up).
+export const warmVoice = () => keepWarm('voice', voiceSystem(), 1);
+
 // Ask one member of the team. onText(chunk) gets the reply as it's written. Resolves with the
 // whole reply; the AbortSignal stops it. stallSec: once it has started writing, a reply that goes
 // quiet that long has stalled (a dropped stream) - it's stopped, so it can be asked again.
@@ -843,27 +867,7 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
   };
   const voice = crash
     ? Promise.resolve()
-    : ask('voice', {
-        system: voiceSystem(),
-        prompt: voicePrompt({ history, text, alt, title }),
-        timeoutSec: 60,
-        signal,
-        tally: spent,
-        onText: (() => {
-          let said = '';
-          return chunk => {
-            said += chunk;
-            const m = said.match(/^[ \t>*_]*SAY:[*_]*\s*(.+)\n/m);
-            if (m) sayNow(m[1].replace(/[*_]+$/, '').trim());
-          };
-        })(),
-      }).then(
-        r => {
-          const text = field(r.text, 'SAY');
-          if (text) sayNow(text);
-        },
-        err => log(`team voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`),
-      );
+    : speakFirst({ history, text, alt, title }, sayNow, { signal, tally: spent }).catch(err => log(`team voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`));
 
   // Helpers start as their jobs are written.
   const prompt = userPrompt({ page, history, text, alt, fix: crash, look });
