@@ -249,7 +249,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `team.agents` | `false` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers (subagents) and makes them fit. Slower to build, richer to play. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents`. |
-| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 3000, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). |
+| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
 | `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable` (the Agent tool takes no full model names). |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
 | `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
@@ -396,9 +396,11 @@ panel, set `"team": { "agents": true }` in `config.json`, or try it for one run 
   talking and keeps running between requests, like solo mode's. Sparky's first words still come
   from team mode's quick voice while it works.
 - **Helpers that write at the same time.** The lead plans the page and hands every part to a helper:
-  Claude Code subagents (Sonnet by default) that all write at once. Then it reads what they wrote
-  and makes it one creation that works - a name that doesn't match, a call that's missing, a part
-  that doesn't fit the plan - before the kid sees it.
+  Claude Code subagents (Sonnet by default) that all write at once. The kid waits for the slowest
+  one, so parts are small (25 to 40 lines - extras come when it's grown) and the biggest goes out
+  first; a helper that goes silent for 90 s is stopped, and the lead does its job itself. Then it
+  reads what they wrote and makes it one creation that works - a name that doesn't match, a call
+  that's missing, a part that doesn't fit the plan - before the kid sees it.
 - **The creation lives in files**, in its own folder: `page.html`, with a `// @part <name>` line
   where each part goes, and `parts/<name>.js` for each part. Build Buddy puts them together after
   each turn. `rules.md` holds the rules every helper follows (Build Buddy writes it); `plan.md` is
