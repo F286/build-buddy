@@ -403,10 +403,9 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // What the creation was asked for (kept across turns; the first request after a restart).
   const first = page ? w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '' : text;
   const rules = path.join(s.dir, 'rules.md');
-  if (!fix || !fs.existsSync(rules)) {
-    w.rules = { asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' };
-    fs.writeFileSync(rules, helperRules(w.rules));
-  }
+  // (Kept for its passes only once the page changes: a turn that only talked leaves them as they were.)
+  const asks = !fix || !fs.existsSync(rules) ? { asked: first, latest: page && !fix && text !== first ? text : '', look: creationLook, freshLook: page && !fix && look !== creationLook ? look : '' } : null;
+  if (asks) fs.writeFileSync(rules, helperRules(asks));
 
   let chars = 0;
   let heard = ''; // the lead's own words this build (an interrupted turn's TITLE line among them)
@@ -470,6 +469,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     // It only talked (or changed nothing): the files stay as they were. Only its own SAY means
     // there was nothing to build - otherwise the classic way builds it.
     if (page) sync(s, page);
+    if (asks && w.rules) fs.writeFileSync(rules, helperRules(w.rules));
     if (fix || !r.say) throw new Error(fix ? 'the fix changed nothing' : page ? 'it changed nothing' : "it didn't build anything");
     log(`ok   claude agents ${secs()} only talked, turn ${s.turns}`);
     // (When the quick voice spoke first, the lead's answer is said too, as in team mode.)
@@ -486,6 +486,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (problems.length) log(`agents: still doesn't run (${problems.join('; ').slice(0, 160)})`);
   }
   s.files = built.html;
+  if (asks) w.rules = asks;
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (r.title && r.title !== p.title && !sameCreation(page, built.html));
   if (fresh) {
