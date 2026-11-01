@@ -27,7 +27,7 @@ import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
 import { findBin } from './bins.mjs';
 import * as store from './store.mjs';
-import { buddyIntro, talkingRules, worldRules, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
+import { buddyIntro, talkingRules, worldRules, gameRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
 // Team mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
@@ -227,6 +227,8 @@ function checkerSystem() {
   const c = config();
   return `You are the last check on a web page for a ${c.kidAge}-year-old who can't read. A team of AI helpers wrote it in pieces at the same time, and the kid has just started playing with it. Find and fix only real problems that would spoil it for them - quickly.
 
+${gameRule()}
+
 Check:
 0. The wish: everything the kid just asked for is really there and easy to recognize, done the way they said (rainbow fish are themselves rainbow-colored; a second player has their own keys), and so is the look the page was given. In something new, the star of it is easy to recognize and big enough that the kid sees its face - but in proportion with its world (a car fits on its road). In a game, new levels or goals come soon - within about half a minute of play - and each is a little harder, with nothing jumping when it changes.
 1. The pieces fit: every function, method, field, id or data- attribute that one piece uses really exists in another with that name, parameters and shape; time units match (dt and t in seconds - a second /1000 freezes things).
@@ -236,7 +238,7 @@ Check:
 4. It keeps working: what runs on its own never freezes or runs away; spawned things stay under about 200 and levels between empty and full; speeds stay sensible; what the kid placed or grew stays; nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame. If it runs below about 30 frames per second, find what makes each frame heavy and lighten it (fewer shadow-casting or moving things, drawing once instead of every frame).
 6. It runs: no APIs that don't exist (Phaser 4 has no Phaser.Geom.Point), no lookups of elements that are never made, and none of the errors the page reported while running.
-6b. Carrying on: the page starts again after every change. If the score, the level or where the player is isn't kept in KB.keep (so a change would start the kid over), keep it with a small edit - its default in KB.keep({ ... }), updated as it changes, put back (on screen) when the page starts; never rename or remove a keep field.
+6b. Carrying on: the page starts again after every change. If what the kid would miss isn't kept in KB.keep - the score, the level, where the player is, what they grew, built or placed, the world's numbers they changed - (so a change would start the kid over), keep it with a small edit - its default in KB.keep({ ... }), updated as it changes, put back (on screen) when the page starts; never rename or remove a keep field.
 7. How it looks (if there's a screenshot, look at it first with the Read tool). If it's blank or nearly empty, find out why nothing is drawn (in 3D: is renderer.render(scene, camera) called every frame?). nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
 
 The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the 'three' and 'phaser' imports: they exist.
@@ -252,6 +254,8 @@ function polishSystem() {
   const c = config();
   return `You give a web page for a ${c.kidAge}-year-old who can't read its finishing touches. It already works: a team built it from what the kid asked for, and it has been checked. Look at it (the screenshot first, if there is one, with the Read tool) as a demanding parent who designs kids' simulations and games: what would make it clearly better for this kid?
 
+${gameRule()}
+
 Make the 2 or 3 changes that matter most, for example:
 - What they asked for, or the look the page was given, isn't fully there or can't be seen (out of the camera's view, too faint, hidden) - watercolor that's just flat shapes, neon without a glow, paper cut-outs without soft shadows: make the look show, on the star first.
 - Something in the scene doesn't match the look: an emoji or a plain shape among drawn things (a photo-like emoji car in a chalk drawing) - draw it in the look.
@@ -260,7 +264,7 @@ Make the 2 or 3 changes that matter most, for example:
 - The star of it isn't recognizable at a glance (a piano with no body or black keys, a dragon without wings), is too small to see its face, or is out of proportion with its world (a car wider than its road).
 - It's a picture, not a working world: tapping, dragging or steering its main things changes nothing else, or nothing moves or changes when left alone - or, in a game, there's no goal, no challenge that grows, or no 'you did it' moment.
 - Something is cut off at an edge, overlapping, cluttered or muddy.
-- An arrow key, a tap or a drag gets a weak answer or none (sliding a finger across a row of bells should ring each one), or moves things in a way a small kid doesn't expect (seen from above, the arrow keys turn it like a steering wheel instead of moving it the way they point; a quick tap does almost nothing); tapping or dragging its main things has no satisfying answer (in a game, reaching the goal has no reward), or nothing new ever happens as they keep playing.
+- An arrow key, a tap or a drag gets a weak answer or none (sliding a finger across a row of bells should ring each one), or moves things in a way a small kid doesn't expect (seen from above, the arrow keys turn it like a steering wheel instead of moving it the way they point; a quick tap does almost nothing); tapping or dragging its main things has no satisfying answer (in a game, reaching the goal has no reward), or, in a game, nothing new ever happens as they keep playing.
 - A sound never stops, plays twice at once, or is harsh.
 - A bug you can see in the code (something that can never be reached, caught or eaten; a count that's wrong; a thing that jumps).
 
@@ -277,6 +281,8 @@ FIND must be copied exactly from the page and match only once: include a couple 
 function testerSystem() {
   const c = config();
   return `You test a web page made for a ${c.kidAge}-year-old who can't read, built by AI from what the kid asked for out loud. Look at it as a demanding parent who designs kids' simulations and games: the screenshot first (with the Read tool, if there is one), then the code. Find what keeps it from being excellent.
+
+${gameRule()}
 
 Fix nothing and score nothing: list the most important flaws, most important first - at most 8, each in one or two sentences saying exactly what's wrong and where (the names in the code help). Look for:
 - what the kid asked for, or the look the page was given, not fully there or not visible

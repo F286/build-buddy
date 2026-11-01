@@ -33,7 +33,6 @@ the new lines
 >>>>>>> REPLACE
 (exactly those three marker lines per edit - no extra ======= line)`;
 
-// How to build a page. Shared with the overwatch (watch.mjs), so its fixes follow the same rules.
 // What every creation is (its DNA): a little world that works - an interactive simulation with a
 // spark of joy, not necessarily a game. Shared by the classic way, team mode's lead and helpers,
 // and solo mode (not the overwatch, which only fixes).
@@ -51,6 +50,13 @@ export function worldRules() {
 - For a change, change only what they asked, and make the new thing obey the world's rules (a new red car slows on grass too).`;
 }
 
+// When it's a game - the DNA's own line, for the passes that check and polish a creation without
+// reading the whole DNA (team mode's checker, tester and polisher).
+export function gameRule() {
+  return `It's a game only if the kid asked for one (they say game, ask to race, catch, win or beat something, or name a game - "a race car" alone is a car to drive). Otherwise it is a little world that works: no score, goal, timer or winning to add - the fun is poking it and watching what happens.`;
+}
+
+// How to build a page. Shared with the overwatch (watch.mjs), so its fixes follow the same rules.
 export function buildingRules() {
   const c = config();
   const phaser = libVersion('phaser');
