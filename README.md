@@ -413,6 +413,28 @@ panel, set `"team": { "agents": true }` in `config.json`, or try it for one run 
   files are put back; and a change that keeps the creation's progress fields carries the kid's
   progress over, whatever the lead calls it.
 
+Measured blind on eight requests no prompt example mentions (a beehive, a marble run, a hamster with
+a wheel, a pirate ship, a caterpillar that turns into a butterfly, a treehouse with a slide, a
+basketball game and a bubble machine), each pair judged twice with the two shown in both orders:
+
+- **Against team mode's usual way**, its creations won 14 of 16 judgments, 10 of them clearly. A
+  world that works went from 6.4 to 7.9, something to discover from 5.5 to 8.1 and the spark of joy
+  from 6.6 to 8.1. Against solo mode they won 15 of 16.
+- **On the general scale** (each creation scored alone), they averaged 7.9, the same as team mode's
+  usual way and above solo mode (7.6), and they were the most original of the three (7.8 against
+  7.0 and 7.4).
+- **Richer, not more of one piece.** Judges found them a little less coherent than team mode's usual
+  way (7.4 against 7.9 - its grow pass adds side pieces that sit beside the main idea, like a ladybug
+  next to a beehive) but more than solo mode's (7.4 against 6.8). A prompt asking it to wire every
+  addition into the main idea made its creations worse (7.4 against 7.9 scored alone, with more
+  wiring bugs), so it was taken back.
+- **The price is waiting.** Something new took about 80 s to appear, against about 37 s for team
+  mode's usual way in the same test runs (two at once on one computer); its three passes then take
+  1 to 3 minutes each while the kid plays.
+
+(Measured just before a last round of review fixes, which changed how its files are kept in step
+with the page and a few lines of its prompts, not how it builds.)
+
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
 Buddy changes.
