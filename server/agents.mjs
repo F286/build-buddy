@@ -101,6 +101,10 @@ const QUICK_SIZE = { shared: 6, jobWords: 15, main: '15-25', partLines: 15, part
 // (Each waiting one is a claude program, about 170 MB.)
 const QUICK_HELPERS = 8;
 const WARM_HELPERS = QUICK_HELPERS + 2;
+// They wait a while: starting ten at once takes the computer's attention just when the kid asks, so
+// they're kept through the minutes the kid plays.
+const WARM_MS = 15 * 60000;
+const keepHelpersWarm = () => warmHelpers(WARM_HELPERS, WARM_MS);
 
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
@@ -361,7 +365,7 @@ export function warm() {
   try {
     const s = sessionFor(store.currentProject().id, { renew: true });
     // (Its helpers too: while the kid waits, they start on each job the moment it's written.)
-    return { warm: (s === before ? 0 : 1) + (config().team?.warm === false ? 0 : warmVoice() + warmHelpers(WARM_HELPERS)) };
+    return { warm: (s === before ? 0 : 1) + (config().team?.warm === false ? 0 : warmVoice() + keepHelpersWarm()) };
   } catch {
     return { warm: 0 };
   }
@@ -458,6 +462,23 @@ function addParts(html, parts) {
   return end < 0 ? html : `${html.slice(0, end)}\n${code}${html.slice(end)}`;
 }
 
+// Methods one part calls on another (track.loopAt(x)) that the other never defines: the parts were
+// written apart, and on the kit each is one object. (A field that isn't there is only undefined; a
+// call is a crash.)
+function missingMethods(html) {
+  const pieces = html.split(/^\/\/ ---- ([\w-]+)[ \t]*$/m); // text, name, code, name, code, ...
+  const code = pieces.join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1'); // (calls, not comments)
+  const missing = [];
+  for (let i = 1; i < pieces.length; i += 2) {
+    const name = pieces[i];
+    const own = pieces[i + 1];
+    if (!new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*\\{`).test(own)) continue; // (an object of its own)
+    const called = new Set([...code.matchAll(new RegExp(`(?<![\\w$.])${name}\\.([A-Za-z_$][\\w$]*)\\s*\\(`, 'g'))].map(m => m[1]));
+    for (const m of called) if (!new RegExp(`(?:^|[\\s,{;])(?:async\\s+)?${m.replace(/\$/g, '\\$')}\\s*(?:\\(|:)|\\.${m.replace(/\$/g, '\\$')}\\s*=(?!=)|\\[\\s*['"]${m}['"]\\s*\\]\\s*=(?!=)`, 'm').test(own)) missing.push(`${name}.${m}()`);
+  }
+  return missing.length ? [`The parts call ${missing.join(', ')}, but ${missing.length > 1 ? 'those parts never define them' : 'that part never defines it'} (they were written apart): add ${missing.length > 1 ? 'them' : 'it'} to the part, or call what it has.`] : [];
+}
+
 // Does the page run? Problems found before it's shown go back to the lead once.
 async function problemsIn(built) {
   if (!built?.html) return ['there is no page.html'];
@@ -468,6 +489,8 @@ async function problemsIn(built) {
 // One build. Resolves like the classic way: { say, done, title, emoji, html, edited, backend }.
 // Throws if it couldn't (the classic way takes over).
 
+export { missingMethods }; // (for tests)
+
 export async function build({ page, history, text, alt, fix, title = '', look = pickLook() }, emit, state) {
   const t0 = Date.now();
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
@@ -477,7 +500,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   makeWay(s);
   await settled(w);
   // (Normally they're warm already: the app warms the team up while the kid talks.)
-  warmHelpers(WARM_HELPERS);
+  keepHelpersWarm();
   await s.use(page ? lead().model : lead().firstModel || lead().model);
   await s.think(lead().thinking.build);
   makeWay(s); // (one that started meanwhile)
@@ -662,7 +685,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   html = await renameClashes(html);
   const named = repairNames(html);
   html = named.html;
-  let problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems];
+  let problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems, ...missingMethods(html)];
   let mine = !crew.jobs.length; // (did it write every line of the change itself?)
   if (problems.length) {
     log(`agents: page doesn't run (${problems.join('; ').slice(0, 160)}), asking it to fix that`);
@@ -671,7 +694,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       .catch(() => null);
     const fixed = fixReply && parseReply(fixReply.text).edits.length ? await applyEditsWithFixer(html, parseReply(fixReply.text).edits, signal, spent).catch(() => null) : null;
     if (fixed) {
-      const left = [...(await syntaxErrors(fixed.html)), ...blankProblems(fixed.html), ...repairNames(fixed.html).problems];
+      const left = [...(await syntaxErrors(fixed.html)), ...blankProblems(fixed.html), ...repairNames(fixed.html).problems, ...missingMethods(fixed.html)];
       log(`agents: ${left.length ? `still doesn't run (${left[0].slice(0, 120)})` : 'fixed'} at ${secs()}`);
       if (left.length < problems.length) [html, problems] = [fixed.html, left];
     }
@@ -693,7 +716,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   } else [w.passes, w.tries] = [0, 0];
   // (Starting programs takes the computer's attention: the helpers taken are replaced once the page is
   // ready, for the kid's next turn.)
-  warmHelpers(WARM_HELPERS);
+  keepHelpersWarm();
   log(`ok   claude agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, turn ${s.turns}`);
   const sameOne = Boolean(page) && (edited || sameCreation(page, built));
   return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: 'claude agents' };

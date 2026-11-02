@@ -373,8 +373,9 @@ function take(key) {
   return w.proc;
 }
 
-// Have `count` programs for this role started and waiting. Returns how many were started.
-function keepWarm(name, system, count) {
+// Have `count` programs for this role started and waiting (each for ms, then closed). Returns how
+// many were started.
+function keepWarm(name, system, count, ms = WARM_MS) {
   if (config().team?.warm === false) return 0;
   warmPool = warmPool.filter(w => !w.proc.closed);
   const args = claudeArgs(name, system);
@@ -391,7 +392,7 @@ function keepWarm(name, system, count) {
     w.timer = setTimeout(() => {
       warmPool = warmPool.filter(x => x !== w);
       proc.child.kill();
-    }, WARM_MS);
+    }, ms);
     warmPool.push(w);
     started++;
   }
@@ -951,7 +952,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
 }
 
 // Have the helpers' programs started and waiting (the agent way warms them while the kid talks).
-export const warmHelpers = (count = maxHelpers()) => keepWarm('helper', helperSystem(), count);
+export const warmHelpers = (count = maxHelpers(), ms = WARM_MS) => keepWarm('helper', helperSystem(), count, ms);
 
 export { PlanReader, codeOf, applyEditsWithFixer, fix as fixPage, EDIT_FORMAT };
 
