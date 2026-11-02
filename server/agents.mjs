@@ -20,7 +20,7 @@ import { config } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
 import { Session } from './solo.mjs';
-import { kitApi, kitPage } from './kit.mjs';
+import { kitApi, kitPage, KIT_NAMES } from './kit.mjs';
 import { syntaxErrors, blankProblems, speakFirst, warmVoice, warmHelpers, maxHelpers, polishPasses as teamPolish, EDIT_FORMAT, PlanReader, helperCrew, applyEditsWithFixer, assemble as teamAssemble, repairNames, renameClashes } from './team.mjs';
 
 // The agent way is team mode with team.agents on (Claude only; solo mode comes first).
@@ -147,7 +147,7 @@ The page is Build Buddy's kit, your shared code, each part, then run([...]) in y
 - Everything they'd be sad to lose when the page changes (where the player is, the level, the score, what they collected, placed or chose) lives in keep - every field in its defaults there, since only those carry over - and each job says which keep fields its part puts back when it starts and updates.
 - Give it everything a kid pictures for that kind of thing (a soccer game has a goalie to beat, a train has tracks and a station), each in a job. Everything is drawn in the look - shapes, not emoji.
 - The kid's main action works end to end, with the arrow keys and the pointer: the star's job says what its key() and tap()/drag() do. Arrow keys move things the way they point on the screen (left goes left; seen from above, never steering-wheel turns), and a quick tap gets a clear answer right away (a hop, a sparkle and a sound where they tapped) - the front part that wants a tap takes it; the background's tap() can answer taps anywhere else.
-- <name> is one lowercase word (not kit, main or run). The kid waits for the slowest helper: ${n - 2}-${n} small parts of about ${z.partLines} short lines each (about ${z.partChars.toLocaleString('en')} characters), similar in size - for example the sky, the ground, the star's look, the star's moves and pokes, the other characters, the effects. The star is always two parts (how it looks; how it moves and answers pokes), and anything else big (a whole world, a game's rules) is split too.
+- <name> is one lowercase word, and the part's object has that name (never kit, main, or a name the kit gives: ${KIT_NAMES.join(', ')}). The kid waits for the slowest helper: ${n - 2}-${n} small parts of about ${z.partLines} short lines each (about ${z.partChars.toLocaleString('en')} characters), similar in size - for example the sky, the ground, the star's look, the star's moves and pokes, the other characters, the effects. The star is always two parts (how it looks; how it moves and answers pokes), and anything else big (a whole world, a game's rules) is split too.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.`;
 }
 
@@ -479,6 +479,14 @@ function missingMethods(html) {
   return missing.length ? [`The parts call ${missing.join(', ')}, but ${missing.length > 1 ? 'those parts never define them' : 'that part never defines it'} (they were written apart): add ${missing.length > 1 ? 'them' : 'it'} to the part, or call what it has.`] : [];
 }
 
+// Parts in the kit's run([...]) that their part never declares (it named its object differently).
+function missingParts(html) {
+  const main = html.split(/^\/\/ ---- main[ \t]*$/m)[1] || '';
+  const named = [...main.matchAll(/typeof ([A-Za-z_$][\w$]*) === 'undefined'/g)].map(m => m[1]);
+  const gone = named.filter(id => !new RegExp(`^[ \\t]*(?:const|let|var|class|function)\\s+${id.replace(/\$/g, '\\$')}\\b`, 'm').test(html));
+  return gone.length ? [`run([...]) runs ${gone.join(', ')}, but nothing declares ${gone.length > 1 ? 'them' : 'it'}: the part${gone.length > 1 ? 's' : ''} named ${gone.length > 1 ? 'their objects' : 'its object'} differently - use one name.`] : [];
+}
+
 // Does the page run? Problems found before it's shown go back to the lead once.
 async function problemsIn(built) {
   if (!built?.html) return ['there is no page.html'];
@@ -489,7 +497,7 @@ async function problemsIn(built) {
 // One build. Resolves like the classic way: { say, done, title, emoji, html, edited, backend }.
 // Throws if it couldn't (the classic way takes over).
 
-export { missingMethods }; // (for tests)
+export { missingMethods, missingParts }; // (for tests)
 
 export async function build({ page, history, text, alt, fix, title = '', look = pickLook() }, emit, state) {
   const t0 = Date.now();
@@ -540,16 +548,25 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
+  const started = new Map(); // name → its job, as handed out
   const reader = new PlanReader(
-    job => crew.start(job, reader),
+    job => {
+      // (A job read again - its stream started over - keeps the helper already on it.)
+      if (started.get(job.name) === job.job) return;
+      started.set(job.name, job.job);
+      crew.start(job, reader);
+    },
     () => {
       if (reader.shared != null) [own, reader.shared] = [reader.shared, `/* ${kitApi(kind())} */\n${reader.shared}`];
       return true;
     },
+    { add: true },
   );
   progress();
   // It sees the code it may change: the page as it is, unless it's the page it last saw.
   const sees = Boolean(page) && s.shown !== page;
+  const sawPage = s.shown; // (set again once this turn's outcome is known; a failed turn leaves it unknown)
+  s.shown = null;
   const prompt = [
     !page ? 'The screen is blank - nothing has been built yet.' : sees ? `<current_page>\n${page}\n</current_page>` : 'The page is as you last saw it (with your last edits in).',
     told,
@@ -560,6 +577,9 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     'The kid is waiting: reply in text only, no tools.',
   ].filter(Boolean).join('\n\n');
   let heard = ''; // the lead's own words this build (an interrupted turn's TITLE line among them)
+  let open = false; // a message of its own being written, and where its text began
+  let from = 0;
+  let heardFrom = 0;
   let planAt = null;
   let firstAt = null;
   let thought = 0;
@@ -575,6 +595,16 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       progress(chunk.length);
     },
     onEvent: ev => {
+      // A message that starts again without ending (its stream was retried): what it wrote is taken
+      // back (the session drops it too), and the plan is read again from there.
+      const se = ev.type === 'stream_event' && !ev.parent_tool_use_id ? ev.event : null;
+      if (se?.type === 'message_start') {
+        if (open) {
+          reader.rewind(from);
+          heard = heard.slice(0, heardFrom);
+        }
+        [open, from, heardFrom] = [true, reader.text.length, heard.length];
+      } else if (se?.type === 'message_stop') open = false;
       team.onEvent(ev);
       if (!ev.parent_tool_use_id && ev.event?.delta?.type === 'thinking_delta') thought += ev.event.delta.thinking.length;
       // (The helpers' writing keeps the building blocks coming too.)
@@ -597,6 +627,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   let edited = false;
   let how = '';
   let r;
+  let exact = true; // (the page holds every line it wrote, as it wrote it)
   try {
     try {
       reply = await s.ask(prompt, turn).catch(err => {
@@ -609,6 +640,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     } finally {
       clearInterval(watch);
     }
+    // (Anything of its reply that didn't stream is read too.)
+    if (reply.text.length > reader.text.length && reply.text.startsWith(reader.text)) reader.push(reply.text.slice(reader.text.length));
     reader.push('\n');
     const leadAt = Date.now();
     r = parseReply(reply.text);
@@ -616,6 +649,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     // Edits that don't fit after the fixer: a few are left out (the app tries the page first);
     // more, and the classic way takes over.
     const fitOrThrow = async (fitted, all) => {
+      if (fitted.failed.length || fitted.fixed) exact = false;
       if (!fitted.failed.length) return fitted.html;
       if (fitted.failed.length > 2 || fitted.failed.length * 3 > all.length || (await syntaxErrors(fitted.html)).length) throw new Error(`edits didn't fit: ${fitted.failed[0].find.trim().split('\n')[0].slice(0, 60)}`);
       log(`agents: ${fitted.failed.length} of ${all.length} edits still didn't fit, shown without ${fitted.failed.length > 1 ? 'them' : 'it'}`);
@@ -628,7 +662,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       const main = reader.main();
       const order = (/^[ \t>*_#]*RUN[*_]*:[ \t]*(.+)$/im.exec(reply.text)?.[1] || '').split(/[^\w-]+/).map(x => x.toLowerCase()).filter(Boolean);
       // (Its own main code, if it wrote one; otherwise the kit runs the parts.)
-      html = main != null && !order.length ? teamAssemble(own, parts, main) : kitPage(kind(), kind() === '3d' ? own.replace(/^\s*import\s+\*\s+as\s+THREE\s+from\s+['"]three['"];?\s*$/m, '') : own, parts, order);
+      html = main != null && !order.length ? teamAssemble(own, parts, main) : kitPage(kind(), own, parts, order);
       how = `${thought ? `thought ${thought}c, ` : ''}first word ${secs(firstAt)}, shared code ${secs(planAt)}, lead done ${secs(leadAt)} (${reply.text.length}c), ${parts.length} helpers${slowest(parts)}`;
     } else if (reader.adding && reader.jobs.length) {
       if (!page) throw new Error('new parts on a blank page');
@@ -675,6 +709,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (page) sync(s, page);
     if (asks && w.rules) fs.writeFileSync(rules, helperRules(w.rules));
     if (fix || !r.say) throw new Error(fix ? 'the fix changed nothing' : page ? 'it changed nothing' : "it didn't build anything");
+    s.shown = sawPage === page || sees ? page : null; // (it saw the page, now or before, and changed nothing)
     log(`ok   claude agents ${secs()} only talked, turn ${s.turns}`);
     // (When the quick voice spoke first, the lead's answer is said too, as in team mode.)
     return { say: state.said || r.say, done: state.said && state.said !== r.say ? r.say : '', title: r.title, emoji: r.emoji, html: null, edited: false, look, backend: 'claude agents' };
@@ -682,11 +717,13 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
 
   // Every script should parse before it's shown: what can be put right here is, the rest goes back
   // to the lead once (as edits, in text).
+  const raw = html;
   html = await renameClashes(html);
   const named = repairNames(html);
   html = named.html;
-  let problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems, ...missingMethods(html)];
-  let mine = !crew.jobs.length; // (did it write every line of the change itself?)
+  let problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems, ...missingMethods(html), ...missingParts(html)];
+  // (Did it write every line of the change itself, and is each in as it wrote it?)
+  let mine = exact && html === raw && !crew.jobs.length && !team.helpers.size;
   if (problems.length) {
     log(`agents: page doesn't run (${problems.join('; ').slice(0, 160)}), asking it to fix that`);
     const fixReply = await s
@@ -694,7 +731,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       .catch(() => null);
     const fixed = fixReply && parseReply(fixReply.text).edits.length ? await applyEditsWithFixer(html, parseReply(fixReply.text).edits, signal, spent).catch(() => null) : null;
     if (fixed) {
-      const left = [...(await syntaxErrors(fixed.html)), ...blankProblems(fixed.html), ...repairNames(fixed.html).problems, ...missingMethods(fixed.html)];
+      const left = [...(await syntaxErrors(fixed.html)), ...blankProblems(fixed.html), ...repairNames(fixed.html).problems, ...missingMethods(fixed.html), ...missingParts(fixed.html)];
       log(`agents: ${left.length ? `still doesn't run (${left[0].slice(0, 120)})` : 'fixed'} at ${secs()}`);
       if (left.length < problems.length) [html, problems] = [fixed.html, left];
     }
@@ -708,7 +745,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   s.shown = mine ? built : null; // (its helpers' code it hasn't seen yet)
   if (asks) w.rules = asks;
   // Something new: it's grown into its full version in the next pass.
-  const fresh = !page || (r.title && r.title !== p.title && !sameCreation(page, built));
+  const fresh = !page || (!edited && r.title && r.title !== p.title && !sameCreation(page, built));
   if (fresh) {
     [w.grow, w.passes, w.tries, w.asked] = [true, 0, 0, text || w.asked];
     // (Its grow pass's helpers go by the new creation's request and look.)
@@ -907,7 +944,7 @@ export async function repair({ version, errors, keep, accept = false }) {
       return { skipped: 'no fix' };
     }
     const built = { html: keepAsFiles(s.dir, html) };
-    s.shown = fitted ? built.html : null;
+    s.shown = fitted && !fitted.failed.length && !fitted.fixed ? built.html : null;
     // (Until it's taken, the files are ahead of the page: the next turn sees that and catches up.)
     proposals.set(key, { html: built.html, by: s });
     while (proposals.size > 5) proposals.delete(proposals.keys().next().value);

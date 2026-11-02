@@ -194,7 +194,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - pictures instead.
 - Draw everything in your piece in the look you're given (its colors, shapes and outlines), so it looks like part of one picture - not emoji, which clash with a drawn look.
-- Keep to the size your request gives (about 25 short lines when it doesn't say): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
+- About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen (left goes left; seen from above, not steering-wheel turns). In a game, reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
 - Anything in your piece the kid would be sad to lose when the page changes - where the player is, a level, things collected, placed or unlocked - lives in the shared keep object - in the fields of the shared code's KB.keep({ ... }) (only those carry over): put it back from there when your piece starts (on screen) and update it as it changes, not only in variables of your own.
 - If your piece is the star (the thing the kid asked for), make it easy to recognize at a glance (a piano has its body and black keys, a dragon has wings) and big enough that its face and eyes are clear from where the camera looks - but in proportion with its world (a car fits on its road).
@@ -228,7 +228,7 @@ function helperPrompt({ page, text, alt, look, done, shared, jobs, job, size = P
     done ? `How they'll play with it: ${done}` : '',
     shared ? `<shared_code>\n${shared}\n</shared_code>` : '',
     `<jobs>\n${jobs.map(j => `//@part ${j.name}: ${j.job}`).join('\n')}\n</jobs>`,
-    `Write the code for the ${job.name} part${shared ? '' : " (a new part, added to the page above just before the main code; the page's own names are yours to use)"} - about ${size.partLines} short lines, never more than ${size.maxChars.toLocaleString('en')} characters (the kid is waiting for the slowest piece):\n//@part ${job.name}: ${job.job}`,
+    `Write the code for the ${job.name} part${shared ? '' : " (a new part, added to the page above just before the main code; the page's own names are yours to use)"} - about ${size.partLines} short lines${size === PLAN_SIZE ? '' : ` (about ${size.partChars.toLocaleString('en')} characters)`}, never more than ${size.maxChars.toLocaleString('en')} characters (the kid is waiting for the slowest piece):\n//@part ${job.name}: ${job.job}`,
   ].filter(Boolean).join('\n\n');
 }
 
@@ -550,9 +550,11 @@ const MAIN_BLOCK = new RegExp(`^[ \\t>*_#]*${MAIN_WORD}[^\\n]*\\n+[ \\t]*\`\`\`[
 // CHANGES (//@change jobs). Each job is handed to onJob the moment its line is complete. When
 // several leads race, onPlan() says whether this one's plan is the one used.
 class PlanReader {
-  constructor(onJob, onPlan = () => true) {
+  // add: the agent way's ADD: (new parts for a change) is read too.
+  constructor(onJob, onPlan = () => true, { add = false } = {}) {
     this.onJob = onJob;
     this.onPlan = onPlan;
+    this.addMode = add;
     this.lost = false;
     this.text = '';
     this.shared = null; // set once the plan's shared code is written
@@ -568,8 +570,8 @@ class PlanReader {
     if (this.shared == null && !this.changes && !this.adding) {
       const plan = SHARED_BLOCK.exec(this.text);
       const changes = CHANGES_HEAD.exec(this.text);
-      const add = ADD_HEAD.exec(this.text);
-      if (add && !plan && !changes) {
+      const add = this.addMode ? ADD_HEAD.exec(this.text) : null;
+      if (add && !plan && !changes && !/```|<<<<<<< FIND/.test(this.text.slice(0, add.index))) {
         this.adding = true;
         this.lost = !this.onPlan();
         this.scanned = add.index + add[0].length;
@@ -596,7 +598,7 @@ class PlanReader {
 
   line(l) {
     if (this.lost) return;
-    if (MAIN_HEAD.test(l) || /^[ \t>*_#]*<<<<<<< FIND/.test(l)) this.inMain = true;
+    if (MAIN_HEAD.test(l) || (this.adding && /^[ \t>*_#]*<<<<<<< FIND/.test(l))) this.inMain = true;
     const m = !this.inMain && JOB_LINE.exec(l);
     if (!m || m[1] !== (this.changes ? 'change' : 'part')) return;
     let name = m[2].toLowerCase();
@@ -604,6 +606,14 @@ class PlanReader {
     const job = { kind: m[1], name, job: m[3].trim() };
     this.jobs.push(job);
     this.onJob(job);
+  }
+
+  // The reply's text was taken back to its first len characters (its stream started again): it's
+  // read again from there. Jobs it sees again go to onJob again.
+  rewind(len) {
+    const kept = this.text.slice(0, len);
+    Object.assign(this, { text: '', shared: null, changes: false, adding: false, jobs: [], scanned: 0, inMain: false, lost: false });
+    this.push(kept);
   }
 
   // After the lead has finished: the code that puts the plan together.
@@ -837,14 +847,15 @@ async function applyEditsWithFixer(page, edits, signal, tally) {
   const r = parseReply(reply.text);
   const scripts = h => (h.match(/<script\b/gi) || []).length;
   // The whole page, written again with the changes in: used only if it is one, and parses.
+  // (fixed: the fixer's answer is in, so the page isn't exactly the edits as written.)
   if (r.html && /^\s*<(!doctype|html)/i.test(r.html) && /<\/html>\s*$/i.test(r.html) && !/^(<<<<<<<|>>>>>>>)/m.test(r.html) && scripts(r.html) === scripts(first.html) && !(await syntaxErrors(r.html)).length) {
-    return { html: r.html, failed: [] };
+    return { html: r.html, failed: [], fixed: true };
   }
-  if (!r.edits.length) return { html: first.html, failed: /^\s*DONE\b/.test(reply.text) ? [] : first.failed };
+  if (!r.edits.length) return { html: first.html, failed: /^\s*DONE\b/.test(reply.text) ? [] : first.failed, fixed: true };
   // Written again, and every one fits: done. If any still doesn't, all of the first misfits count as
   // missing (which rewritten edit stands for which original can't be told).
   const second = applySome(first.html, r.edits);
-  return { html: second.html, failed: second.failed.length ? first.failed : [] };
+  return { html: second.html, failed: second.failed.length ? first.failed : [], fixed: true };
 }
 
 async function fix(html, problem, signal, tally) {

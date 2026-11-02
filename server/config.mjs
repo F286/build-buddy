@@ -70,7 +70,7 @@ export const DEFAULTS = {
     // waits, and when it looks its creation over); agentHelper.model is the helpers' model, as an alias
     // (sonnet, opus, haiku or fable: the Agent tool takes no full model names).
     agents: false,
-    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, look: 10000 } },
+    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 0, look: 10000 } },
     agentHelper: { model: 'sonnet' },
   },
   // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
