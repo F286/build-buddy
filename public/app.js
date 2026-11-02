@@ -574,7 +574,10 @@ async function build(body) {
 // there; if that doesn't work out, it starts fresh when shown (see pageError).
 async function repairFirst(result) {
   const keep = result.continues && state.kept?.projectId === state.project?.id ? state.kept.keep : null;
-  let errors = await tryPage(result.html, keep, 1500);
+  // (The agent way's pages run on its kit, where a part that throws doesn't stop the rest: a
+  // shorter look is enough.)
+  const look = result.backend === 'claude agents' ? 1000 : 1500;
+  let errors = await tryPage(result.html, keep, look);
   let withKeep = false;
   if (errors.length && keep) {
     const fresh = await tryPage(result.html, null, 1500);

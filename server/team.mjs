@@ -109,20 +109,13 @@ function voicePrompt({ history, text, alt, title }) {
   ].filter(Boolean).join('\n\n');
 }
 
-function leadSystem() {
-  const n = maxHelpers();
-  return withAdvisor('lead', `${buddyIntro()}
-
-# Reply format (always exactly this)
-
-TITLE: <one emoji> <2-4 word name>   (only when you start something new or it changes a lot)
-DONE: <1-2 short sentences said when it appears: how to play with it. You may end with an open question like "What's next?" - never with a suggestion>
-then the edits or the plan (below).
-
-Someone else has already answered the kid out loud, so don't write SAY - unless there is nothing to build (you didn't understand, or they asked you something): then write only SAY: <what to say> and nothing else.
-
-# You lead a building team
-You have up to ${n} helpers who write code at the same time as each other, so the kid gets it much sooner. Hand out the work rather than writing it all yourself.
+// How a lead hands out the work: the plan for something new, edits or changes for the rest (the
+// agent way's lead, agents.mjs, follows the same rules while the kid waits).
+// size: how big each piece of the plan is (the agent way's are smaller: the kid sees it sooner,
+// and it grows it while they play).
+export const PLAN_SIZE = { shared: 15, jobWords: 25, main: '20-40', partLines: 25, partChars: 1800, maxChars: 2500 };
+export function planRules(n = maxHelpers(), size = PLAN_SIZE) {
+  return `You have up to ${n} helpers who write code at the same time as each other, so the kid gets it much sooner. Hand out the work rather than writing it all yourself.
 
 For a change to the current page that is one thing - a color or a speed, or even something bigger like a second player or levels - write the edits yourself, so it all fits together, each as:
 ${EDIT_FORMAT}
@@ -147,10 +140,10 @@ MAIN:
 \`\`\`
 
 - The page is one module script: your shared code, then each part's code, then MAIN. Its body starts empty: every element is made by the code before anything uses it.
-- The shared code (at most about 15 short lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
+- The shared code (at most about ${size.shared} short lines) has every import any part needs, the palette and sizes, the shared state, KB.keep, and anything all the parts use (for 3D: the renderer, scene, camera and lights; for a 2D canvas: the canvas and its context).
 - Each helper starts the moment its line is written, seeing your shared code and the jobs before it - so write all the jobs before MAIN, biggest first.
-- Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under 25 words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
-- Parts only define things: nothing runs until MAIN calls it. MAIN (about 20-40 lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop (in 3D it calls renderer.render(scene, camera) every frame) and handles input.
+- Each job starts with exactly what the part defines, written as code, for example: makeWorld(scene) → { update(dt), clickables }, or drawSky(ctx, t), or class Frog { constructor(scene); update(dt) }. Then, in under ${size.jobWords} words, how it should look, sound and feel. Your helpers are good builders who know the kid's words and the look - they fill in the details.
+- Parts only define things: nothing runs until MAIN calls it. MAIN (about ${size.main} lines) builds the page's elements and styles, creates everything by calling the parts exactly as their jobs say, runs the main loop (in 3D it calls renderer.render(scene, camera) every frame) and handles input.
 - The pieces are written apart, so they only fit if everyone follows the same rules - put them in the shared code and the jobs:
   - Time is always in seconds: MAIN's loop passes every update dt (seconds since the last frame, at most 0.05) and t (seconds since the start). Say so in the signatures, like update(dt, t).
   - MAIN owns the input: it keeps a shared input object up to date (like input.left, input.right, input.up and input.down for the arrow keys, input.x, input.y and input.pressed for the pointer, and input.tapped for a tap this frame), and the parts read it. A drag does what a finger would expect: sliding across a row of bells rings each one, dragging the star moves or steers it. A part that reacts to taps on its own things says so in its job, with the exact function MAIN calls, like hitTest(x, y) → true if tapped.
@@ -162,8 +155,24 @@ MAIN:
 - Give it everything a kid pictures when they ask for that kind of thing - what makes it what it is (a soccer game has a goalie to beat, a train has tracks and a station, a band has players who each make their own sound) - each in a job.
 - Everything is drawn in the look, so the whole scene looks like one picture: characters and things are shapes drawn in that style, not emoji (a big emoji clashes with a drawn look).
 - The kid's main action must work end to end, with both the arrow keys and the pointer (tap, hold or drag): every control you promise in DONE is wired in MAIN to the part that moves, and the thing they asked for is in plain view when it starts. Controls a 5-year-old gets at once: the arrow keys move things the way they point on the screen (left goes left, up goes up: seen from above, never steering-wheel turns; behind a chase camera, left turns left), and a quick tap gets a clear answer right away (the star hops or zooms there, sparkles and a sound where they tapped), not only while the finger is held.
-- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about 25 short lines each (about 1,800 characters), similar in size: for example the rules, the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene, a detailed star) into two parts.
-- When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.
+- <name> is one lowercase word. The kid waits for the slowest helper, so split the work into ${Math.min(5, n)}-${n} small parts of about ${size.partLines} short lines each (about ${size.partChars.toLocaleString('en')} characters), similar in size: for example the rules, the sky and background, the ground or track, the player, the other characters, the effects, the sounds. Split anything big (a whole world, a whole scene, a detailed star) into two parts.
+- When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.`;
+}
+
+function leadSystem() {
+  const n = maxHelpers();
+  return withAdvisor('lead', `${buddyIntro()}
+
+# Reply format (always exactly this)
+
+TITLE: <one emoji> <2-4 word name>   (only when you start something new or it changes a lot)
+DONE: <1-2 short sentences said when it appears: how to play with it. You may end with an open question like "What's next?" - never with a suggestion>
+then the edits or the plan (below).
+
+Someone else has already answered the kid out loud, so don't write SAY - unless there is nothing to build (you didn't understand, or they asked you something): then write only SAY: <what to say> and nothing else.
+
+# You lead a building team
+${planRules(n)}
 
 ${talkingRules()}
 
@@ -185,7 +194,7 @@ Reply with only your code, in one \`\`\`js code block - no talk before or after 
 - No <script> tags or imports (the shared code has every import). If you need page elements or styles, make them from JavaScript.
 - The kid can't read yet: no words or instructions on the page - pictures instead.
 - Draw everything in your piece in the look you're given (its colors, shapes and outlines), so it looks like part of one picture - not emoji, which clash with a drawn look.
-- About 25 short lines, about 1,800 characters (never more than 2,500): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
+- Keep to the size your request gives (about 25 short lines when it doesn't say): the kid is waiting for the slowest helper, and a small polished piece beats a big one. Don't over-plan - write it.
 - Make your piece delightful and alive, and smooth: it must run without errors at 60 frames per second. Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen (left goes left; seen from above, not steering-wheel turns). In a game, reaching a goal in it is a big, happy moment: it stays there and celebrates for a few seconds before anything starts again.
 - Anything in your piece the kid would be sad to lose when the page changes - where the player is, a level, things collected, placed or unlocked - lives in the shared keep object - in the fields of the shared code's KB.keep({ ... }) (only those carry over): put it back from there when your piece starts (on screen) and update it as it changes, not only in variables of your own.
 - If your piece is the star (the thing the kid asked for), make it easy to recognize at a glance (a piano has its body and black keys, a dragon has wings) and big enough that its face and eyes are clear from where the camera looks - but in proportion with its world (a car fits on its road).
@@ -203,7 +212,7 @@ ${worldRules()}
 ${buildingRules()}`, 'ask it once before you write your code, if your job is tricky.');
 }
 
-function helperPrompt({ page, text, alt, look, done, shared, jobs, job }) {
+function helperPrompt({ page, text, alt, look, done, shared, jobs, job, size = PLAN_SIZE }) {
   if (job.kind === 'change') {
     return [
       `<current_page>\n${page}\n</current_page>`,
@@ -217,9 +226,9 @@ function helperPrompt({ page, text, alt, look, done, shared, jobs, job }) {
     `The kid said: "${text}"${alt ? ` (the other listener heard: "${alt}")` : ''}`,
     look && !page ? `The look: ${look}.` : '',
     done ? `How they'll play with it: ${done}` : '',
-    `<shared_code>\n${shared}\n</shared_code>`,
+    shared ? `<shared_code>\n${shared}\n</shared_code>` : '',
     `<jobs>\n${jobs.map(j => `//@part ${j.name}: ${j.job}`).join('\n')}\n</jobs>`,
-    `Write the code for the ${job.name} part - about 25 short lines, never more than 2,500 characters (the kid is waiting for the slowest piece):\n//@part ${job.name}: ${job.job}`,
+    `Write the code for the ${job.name} part${shared ? '' : " (a new part, added to the page above just before the main code; the page's own names are yours to use)"} - about ${size.partLines} short lines, never more than ${size.maxChars.toLocaleString('en')} characters (the kid is waiting for the slowest piece):\n//@part ${job.name}: ${job.job}`,
   ].filter(Boolean).join('\n\n');
 }
 
@@ -530,6 +539,7 @@ const JOB_LINE = /^[ \t>*_`-]*(?:\d+[.)][ \t]*)?\/\/[ \t]*@(part|change)[ \t]+([
 const HEAD = name => new RegExp(`^[ \\t>*_#]*${name}[*_]*:`, 'im');
 const SHARED_BLOCK = /^[ \t>*_#]*PLAN[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```[ \t]*\n/im;
 const CHANGES_HEAD = /^[ \t>*_#]*CHANGES[*_]*:[^\n]*\n/im;
+const ADD_HEAD = /^[ \t>*_#]*ADD[*_]*:[^\n]*\n/m;
 // MAIN may come with a few words in capitals, like "MAIN code:" - but "Main pieces:" isn't it.
 const MAIN_WORD = '(?:[Mm][Aa][Ii][Nn][*_]*|MAIN\\b[^\\n:]{0,30}):';
 const MAIN_HEAD = new RegExp(`^[ \\t>*_#]*${MAIN_WORD}`, 'm');
@@ -546,6 +556,7 @@ class PlanReader {
     this.text = '';
     this.shared = null; // set once the plan's shared code is written
     this.changes = false; // set once the lead starts handing out changes
+    this.adding = false; // set once the lead starts handing out new parts for a change (ADD:)
     this.jobs = [];
     this.scanned = 0;
     this.inMain = false;
@@ -553,10 +564,15 @@ class PlanReader {
 
   push(chunk) {
     this.text += chunk.replace(/\r/g, '');
-    if (this.shared == null && !this.changes) {
+    if (this.shared == null && !this.changes && !this.adding) {
       const plan = SHARED_BLOCK.exec(this.text);
       const changes = CHANGES_HEAD.exec(this.text);
-      if (plan && (!changes || plan.index < changes.index)) {
+      const add = ADD_HEAD.exec(this.text);
+      if (add && !plan && !changes) {
+        this.adding = true;
+        this.lost = !this.onPlan();
+        this.scanned = add.index + add[0].length;
+      } else if (plan && (!changes || plan.index < changes.index)) {
         // Jobs written inside the shared code block still count as jobs.
         const lines = plan[1].split('\n');
         this.shared = lines.filter(l => !JOB_LINE.test(l)).join('\n');
@@ -579,7 +595,7 @@ class PlanReader {
 
   line(l) {
     if (this.lost) return;
-    if (MAIN_HEAD.test(l)) this.inMain = true;
+    if (MAIN_HEAD.test(l) || /^[ \t>*_#]*<<<<<<< FIND/.test(l)) this.inMain = true;
     const m = !this.inMain && JOB_LINE.exec(l);
     if (!m || m[1] !== (this.changes ? 'change' : 'part')) return;
     let name = m[2].toLowerCase();
@@ -838,42 +854,17 @@ async function fix(html, problem, signal, tally) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// One build by the team. Resolves like the classic way does: { say, done, title, emoji, html,
-// edited, backend }. Throws if the team couldn't do it (the classic way takes over).
+// The helpers: each starts on its job the moment the lead has written it (crew.start(job, reader)),
+// at most maxHelpers() at once. crew.running holds each job's part: { ...job, reply, code,
+// startedAt, doneAt }. Team mode and the agent way (agents.mjs) both build with it.
 
-export async function build({ page, history, text, alt, fix: crash, title = '', look = pickLook() }, emit, state) {
-  const t0 = Date.now();
-  const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
-  const stats = { parts: [] };
-  const spent = { tokens: 0 }; // output tokens written by the whole team, for the log
-  const stopAll = new AbortController();
-  const signal = stopAll.signal;
-  let chars = 0;
-  let helpersDone = 0;
+export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity }) {
   const jobs = [];
-  // team: the app shows the team at work, even before (or without) helpers.
-  const progress = (n = 0) => {
-    chars += n;
-    emit({ type: 'progress', chars, helpers: jobs.length, helpersDone, team: true, leads: runs.filter(run => !run.over && !run.stop.signal.aborted).length || 1 });
-  };
-
-  // The voice answers out loud while the lead plans (but never after the build is over).
-  let voiceSay = '';
-  let over = false;
-  const sayNow = text => {
-    if (over || state.said) return;
-    voiceSay = state.said = text;
-    emit({ type: 'say', text });
-  };
-  const voice = crash
-    ? Promise.resolve()
-    : speakFirst({ history, text, alt, title }, sayNow, { signal, tally: spent }).catch(err => log(`team voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`));
-
-  // Helpers start as their jobs are written.
-  const prompt = userPrompt({ page, history, text, alt, fix: crash, look });
+  let hedges = 0; // second tries started (each one is more for the computer and the service to do)
   const running = new Map();
-  // At most `helpers` at work at once: any further jobs wait for one to finish.
-  let free = maxHelpers();
+  let done = 0;
+  // At most `max` at work at once: any further jobs wait for one to finish.
+  let free = max;
   const waiting = [];
   const withHelper = async work => {
     if (free > 0) free--;
@@ -886,14 +877,15 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
       else free++;
     }
   };
-  const startJob = (job, reader) => {
+  const start = (job, reader) => {
     jobs.push(job);
     const seen = jobs.slice();
     let startedAt = Date.now();
+    let firstAt = null;
     const write = () =>
       withHelper(() => {
         startedAt = Date.now();
-        const prompt = helperPrompt({ page, text: text || '(fixing a crash)', alt, look, done: field(reader.text, 'DONE'), shared: reader.shared, jobs: seen, job });
+        const prompt = helperPrompt({ page, text: text || '(fixing a crash)', alt, look, done: field(reader.text, 'DONE'), shared: reader.shared, jobs: seen, job, size });
         // A helper that hasn't written a word after a few seconds is thinking hard, and the
         // slowest piece holds up the whole page: a second helper starts on the same job, and
         // whichever finishes first is used.
@@ -906,18 +898,20 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
             stallSec: 20,
             onText: chunk => {
               if (i === 0) wrote = true;
+              firstAt ??= Date.now();
               progress(chunk.length);
             },
             signal: AbortSignal.any([signal, stops[i].signal]),
-            tally: spent,
+            tally,
           }).then(reply => ({ reply, i }));
         const first = one(0);
         const second = new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
-            if (wrote || signal.aborted) return reject(new Error('not needed'));
-            log(`team: helper ${job.name} hasn't started writing after ${HEDGE_MS / 1000}s, starting a second one`);
+            if (wrote || signal.aborted || hedges >= maxHedges) return reject(new Error('not needed'));
+            hedges++;
+            log(`team: helper ${job.name} hasn't started writing after ${hedgeMs / 1000}s, starting a second one`);
             one(1).then(resolve, reject);
-          }, HEDGE_MS);
+          }, hedgeMs);
           first.then(() => (clearTimeout(timer), reject(new Error('not needed'))), () => {});
         });
         return Promise.any([first, second]).then(
@@ -938,14 +932,64 @@ export async function build({ page, history, text, alt, fix: crash, title = '', 
         return write();
       })
       .then(reply => {
-        helpersDone++;
+        done++;
         progress();
-        return { ...job, reply: reply.text, code: job.kind === 'part' ? codeOf(reply.text, reader.shared) : '', startedAt, doneAt: Date.now() };
+        return { ...job, reply: reply.text, code: job.kind === 'part' ? codeOf(reply.text, reader.shared ?? page ?? '') : '', startedAt, firstAt, doneAt: Date.now() };
       });
     part.catch(() => {}); // if the build stops early, nobody waits for it
     running.set(job.name, part);
     progress();
   };
+  return {
+    jobs,
+    running,
+    start,
+    get done() {
+      return done;
+    },
+  };
+}
+
+// Have the helpers' programs started and waiting (the agent way warms them while the kid talks).
+export const warmHelpers = (count = maxHelpers()) => keepWarm('helper', helperSystem(), count);
+
+export { PlanReader, codeOf, applyEditsWithFixer, fix as fixPage, EDIT_FORMAT };
+
+// ---------------------------------------------------------------------------------------------
+// One build by the team. Resolves like the classic way does: { say, done, title, emoji, html,
+// edited, backend }. Throws if the team couldn't do it (the classic way takes over).
+
+export async function build({ page, history, text, alt, fix: crash, title = '', look = pickLook() }, emit, state) {
+  const t0 = Date.now();
+  const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
+  const stats = { parts: [] };
+  const spent = { tokens: 0 }; // output tokens written by the whole team, for the log
+  const stopAll = new AbortController();
+  const signal = stopAll.signal;
+  let chars = 0;
+  // team: the app shows the team at work, even before (or without) helpers.
+  const progress = (n = 0) => {
+    chars += n;
+    emit({ type: 'progress', chars, helpers: crew.jobs.length, helpersDone: crew.done, team: true, leads: runs.filter(run => !run.over && !run.stop.signal.aborted).length || 1 });
+  };
+
+  // The voice answers out loud while the lead plans (but never after the build is over).
+  let voiceSay = '';
+  let over = false;
+  const sayNow = text => {
+    if (over || state.said) return;
+    voiceSay = state.said = text;
+    emit({ type: 'say', text });
+  };
+  const voice = crash
+    ? Promise.resolve()
+    : speakFirst({ history, text, alt, title }, sayNow, { signal, tally: spent }).catch(err => log(`team voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 200)}`));
+
+  // Helpers start as their jobs are written.
+  const prompt = userPrompt({ page, history, text, alt, fix: crash, look });
+  const crew = helperCrew({ page, text, alt, look, signal, tally: spent, progress: n => progress(n) });
+  const { jobs, running } = crew;
+  const startJob = (job, reader) => crew.start(job, reader);
 
   // Helpers start up while the lead writes the shared code: straight away for something new,
   // or as soon as the lead starts a plan for a change.
