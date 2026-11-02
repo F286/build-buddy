@@ -249,7 +249,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `team.agents` | `false` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers (subagents) and makes them fit. Slower to build, richer to play. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents`. |
-| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
+| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 0, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
 | `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable` (the Agent tool takes no full model names). |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo`. Needs `claude` first in `backends`. |
 | `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
@@ -445,6 +445,25 @@ basketball game and a bubble machine), each pair judged twice with the two shown
 (The comparisons with team mode and solo mode were measured just before a last round of review
 fixes, which changed how its files are kept in step with the page and a few lines of its prompts,
 not how it builds.)
+
+**Kid-speed builds (an experiment, not ready).** Here, while the kid waits, the lead writes in
+text, with no tools and no thinking. Something new is a short plan on a kit Build Buddy
+supplies (`server/kit.mjs`: the canvas or 3D scene, input, sounds and the loop, with each part one
+object with `init`, `update`, `draw`, `tap`, `drag` and `key` hooks), and ten Sonnet helpers, started
+ahead of time, begin each part the moment its line is written. A change is the lead's own
+FIND/REPLACE edits, or new parts (ADD:) that helpers write while it wires them in. The passes while
+the kid plays work as before. Measured on the eight requests above, one at a time:
+
+- **Fast:** something new in about 23 s (18 to 28 s; about 18 s while the helpers were already warm),
+  a small change in about 5 s (3 to 10 s), and a bigger one that adds new things in about 15 s
+  (12 to 18 s).
+- **Much worse.** Judged blind against the agent way above, its first builds lost all 16 judgments
+  (4.2 against 7.0 overall). Its creations after three passes lost 5 of the first 6 judgments
+  (5.8 against 7.7); judging was stopped there.
+- With Opus or Sonnet throughout instead (the usual way, not kid-speed): the Opus lead with Sonnet
+  helpers scored best alone (8.0, against 7.75 with Opus helpers and 7.0 with Sonnet leading too).
+  Sonnet leading was the quickest (about 61 s to something new, against 68 s and 85 s) but lost 15
+  of 16 judgments to the Opus lead.
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
