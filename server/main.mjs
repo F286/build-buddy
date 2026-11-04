@@ -116,11 +116,13 @@ try {
 const timerInfo = () => ({ remainingMs: timerEndsAt ? Math.max(0, timerEndsAt - Date.now()) : null });
 const timeIsUp = () => Boolean(timerEndsAt) && Date.now() >= timerEndsAt;
 
-// The kid was still saying what they wanted when time ran out (app.js: overtime): that one
-// request still gets built, if it arrives within a minute.
+// When time runs out, the kid can still ask for one last thing (app.js: overtime): that one
+// request still gets built - once, if it arrives within a few minutes (it may wait for what was
+// building when time ran out).
+const GRACE_MS = 5 * 60000;
 let graceUsedFor = 0;
 function graceAllowed() {
-  if (Date.now() - timerEndsAt > 60000 || graceUsedFor === timerEndsAt) return false;
+  if (Date.now() - timerEndsAt > GRACE_MS || graceUsedFor === timerEndsAt) return false;
   graceUsedFor = timerEndsAt;
   return true;
 }

@@ -268,6 +268,9 @@ button {
 }
 #countdown svg { width: 40px; height: 40px; }
 #countdown.hurry { color: #fff; background: linear-gradient(to right, var(--coral) calc(var(--left) * 100%), #ff9a9e 0); animation: hurry 1s ease-in-out infinite; }
+/* overtime: the seconds left to ask for one last thing */
+#countdown.ask { background: linear-gradient(to right, #7ee0a8 calc(var(--left) * 100%), var(--paper) 0); box-shadow: 0 10px 30px #1d214533, 0 0 0 3px #2fbf7180; }
+#countdown.ask.hurry { color: var(--ink); background: linear-gradient(to right, #7ee0a8 calc(var(--left) * 100%), #d8f7e6 0); }
 @keyframes hurry {
   0%, 100% { scale: 1; }
   50% { scale: 1.12; }
