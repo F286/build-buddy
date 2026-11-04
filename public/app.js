@@ -131,7 +131,7 @@ const LINES = {
   nothingYet: ["You haven't built anything yet. Let's make something!"],
   gallery: ['Here are the things you made! Pick one!'],
   oneMinute: ["One more minute! I'm getting sleepy..."],
-  lastBuild: ["Time's almost up! Let me finish this one for you."],
+  lastAsk: ["Time's up! You can ask me for one last thing!"],
   playOn: ['No more building today. Have fun playing!'],
   timeUp: ["Time's up! Great building today."],
   sleepy: ["I'm so sleepy... Good night!"],
@@ -386,7 +386,7 @@ function pageError(message) {
     const v = `${state.project?.id}:${state.project?.version}`;
     // The quick fixes didn't stick: ask the overwatch to take a careful look.
     if (state.fixStreak >= 2 || state.fixedVersions.has(v)) return checkCreation({ urgent: true });
-    if (state.busy || !state.pageErrors.length || askingClosed()) return;
+    if (state.busy || !state.pageErrors.length || askingClosed() || timer.overtime) return;
     state.fixedVersions.add(v);
     const errors = [...new Set(state.pageErrors)].slice(0, 5).join('\n');
     say(line('fixing'));
@@ -562,6 +562,14 @@ async function build(body) {
   }
   if (!voice.current) mood(null);
 
+  // (Overtime's last thing, asked for while this was building.)
+  if (timer.lastRequest && !state.timeUp) {
+    const last = timer.lastRequest;
+    timer.lastRequest = null;
+    state.queue = [];
+    showNext();
+    return build({ ...last, grace: true });
+  }
   if (state.queue.length && !askingClosed()) {
     const text = state.queue.splice(0).join(' ... and then: ');
     warmTeam();
@@ -574,7 +582,10 @@ async function build(body) {
 // there; if that doesn't work out, it starts fresh when shown (see pageError).
 async function repairFirst(result) {
   const keep = result.continues && state.kept?.projectId === state.project?.id ? state.kept.keep : null;
-  let errors = await tryPage(result.html, keep, 1500);
+  // (The agent way's pages run on its kit, where a part that throws doesn't stop the rest: a
+  // shorter look is enough.)
+  const look = result.backend === 'claude agents' ? 1000 : 1500;
+  let errors = await tryPage(result.html, keep, look);
   let withKeep = false;
   if (errors.length && keep) {
     const fresh = await tryPage(result.html, null, 1500);
@@ -614,7 +625,7 @@ function repeats(text, others) {
 // `alt` is how the second speech listener heard it, when it heard something different.
 function heard(text, alt = '') {
   if (state.timeUp) return;
-  if (timer.overtime) return graceBuild(text, alt);
+  if (timer.overtime) return lastOne(text, alt);
   state.lastActivity = Date.now();
   if (state.busy) {
     // Saying it again, or asking if it's ready, isn't something new to build after this one.
@@ -637,7 +648,7 @@ const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(),
 
 async function checkCreation({ urgent = false } = {}) {
   const cfg = state.config.watch;
-  if (!cfg?.enabled || !state.html || askingClosed() || overwatch.running || !state.project?.version) return;
+  if (!cfg?.enabled || !state.html || askingClosed() || timer.overtime || overwatch.running || !state.project?.version) return;
   if (state.busy || mic.recording || mic.transcribing) return;
   const { id: projectId, version } = state.project;
   const key = `${projectId}:${version}`;
@@ -763,22 +774,31 @@ async function checkTeamBuild(projectId, version, { solo = false } = {}) {
 // ------------------------------------------------------------------------------------- time limit
 
 // Set from the grown-up panel (the server keeps the clock, so a reload can't reset it). For the
-// last minute a clock counts down in the corner; when it runs out the creation is put away and
-// the "Time's up!" screen stays until a grown-up adds time or removes the limit.
-// If time runs out while they're still asking for something - saying it, waiting for it to be
-// heard, or waiting for it to be built - it's "overtime": no more asking, but that request
-// finishes (waiting up to OVERTIME_WAIT_MS) and they get one last minute to play with it.
+// last minute a clock counts down in the corner. When it runs out, it's "overtime", in three steps:
+//   asking    LAST_ASK_MS to ask for one last thing (the clock counts that down; once they've
+//             started saying it, it counts, however long it takes them)
+//   building  what's being built finishes, and so does that last thing (waiting up to
+//             OVERTIME_WAIT_MS) - no more asking
+//   playing   one more minute to play with it, counted down like any last minute
+// Then the creation is put away and the "Time's up!" screen stays until a grown-up adds time or
+// removes the limit.
+const LAST_ASK_MS = 30000;
 const OVERTIME_WAIT_MS = 4 * 60000;
-const timer = { endsAt: 0, warned: false, shownSec: -1, lastTick: Date.now(), overtime: null, graceUsed: false };
+const timer = { endsAt: 0, warned: false, shownSec: -1, lastTick: Date.now(), overtime: null, askUntil: 0, graceUsed: false, lastRequest: null };
 const timeLeft = () => (timer.endsAt ? timer.endsAt - Date.now() : null);
-const askingClosed = () => state.timeUp || Boolean(timer.overtime);
+// (Overtime's last thing to ask for is the only one.)
+const lastAskOpen = () => timer.overtime === 'asking' && !timer.graceUsed && Date.now() < timer.askUntil;
+const askingClosed = () => state.timeUp || (Boolean(timer.overtime) && !lastAskOpen());
 const clock = ms => `${Math.floor(Math.ceil(ms / 1000) / 60)}:${String(Math.ceil(ms / 1000) % 60).padStart(2, '0')}`;
 
 function setTimer(info) {
   const left = info?.remainingMs;
   timer.endsAt = left == null ? 0 : Date.now() + left;
   timer.warned = left != null && left <= 60000; // already in the last minute: no announcement
-  timer.overtime = null;
+  [timer.overtime, timer.graceUsed, timer.lastRequest] = [null, false, null];
+  // Time ran out before this page knew (a reload, the window reopened): no last thing, no extra
+  // minute - the time's up screen at once.
+  if (left === 0 && !state.timeUp) return timeIsUp();
   tickTimer();
 }
 
@@ -790,18 +810,25 @@ function tickTimer() {
   const el = $('#countdown');
   const left = timeLeft() ?? Infinity;
   if (left <= 0) {
+    if (state.timeUp) return (el.hidden = true);
+    const listening = mic.recording || mic.transcribing;
+    if (!timer.overtime) lastAsk();
+    if (timer.overtime === 'asking') {
+      // (They started saying it in time: it's still heard, and built.)
+      if (now < timer.askUntil || listening) return showLastAsk(timer.askUntil - now);
+      if (!state.busy) return lastMinute(); // nothing more to build
+      timer.overtime = 'building';
+    }
     el.hidden = true;
-    if (state.timeUp) return;
-    const working = state.busy || mic.recording || mic.transcribing;
-    if (!timer.overtime && working) overtime();
     if (timer.overtime === 'building') {
-      if (!working) lastMinute(); // it's done (or there was nothing to build after all)
-      else if (left < -OVERTIME_WAIT_MS) timeIsUp();
+      if (!state.busy && !listening && !timer.lastRequest) lastMinute(); // it's done
+      else if (left < -(LAST_ASK_MS + OVERTIME_WAIT_MS)) timeIsUp();
       return;
     }
-    timeIsUp();
+    timeIsUp(); // the last minute of play is over
     return;
   }
+  el.classList.remove('ask');
   if (state.timeUp) moreTime();
   if (left > 60000) {
     el.hidden = true;
@@ -842,33 +869,56 @@ function stopAsking() {
   }
 }
 
-function overtime() {
-  timer.overtime = 'building';
-  setSleepy(0); // awake to finish it; the extra minute after it gets sleepy afresh
-  // What's building now is the last thing; if nothing is, what they're saying (or what's being
-  // heard) is, and it can still be built - once. Requests waiting their turn are dropped.
-  timer.graceUsed = state.busy;
+// Time ran out: one last thing to ask for. What's building now still finishes; requests waiting
+// their turn are dropped (what they're saying right now, or what's being heard, is the last one).
+function lastAsk() {
+  timer.overtime = 'asking';
+  timer.askUntil = Date.now() + LAST_ASK_MS;
+  [timer.graceUsed, timer.lastRequest] = [false, null];
+  setSleepy(0); // awake for it; the extra minute after it gets sleepy afresh
   state.queue = [];
   showNext();
-  say(line('lastBuild'));
+  if (!mic.recording && !mic.transcribing) say(line('lastAsk'));
 }
 
-// Time ran out while they were still saying this, or it was still being heard: build it anyway.
-function graceBuild(text, alt) {
-  if (timer.overtime !== 'building' || timer.graceUsed || state.busy) return;
-  timer.graceUsed = true;
-  build({ text, alt, grace: true });
+// The clock in the corner counts down the time left to ask (in its own color).
+function showLastAsk(ms) {
+  const el = $('#countdown');
+  const sec = Math.max(0, Math.ceil(ms / 1000));
+  el.hidden = false;
+  el.classList.add('ask');
+  el.classList.toggle('hurry', sec <= 10);
+  el.style.setProperty('--left', String(Math.max(0, ms) / LAST_ASK_MS));
+  if (sec !== timer.shownSec) {
+    timer.shownSec = sec;
+    $('#countdownNum').textContent = sec;
+  }
 }
 
-// It's finished: one last minute to play with it, counted down like any last minute.
+// Their last thing: built now, or right after what's building. Then no more asking.
+function lastOne(text, alt) {
+  if (timer.overtime !== 'asking' || timer.graceUsed) return voice.current || say(line('playOn'));
+  // Asking if it's ready, or saying it again, isn't their last thing.
+  if (state.busy && (STILL_BUILDING.test(text) || repeats(text, [state.building]))) return say(line('wait'));
+  [timer.graceUsed, timer.overtime] = [true, 'building'];
+  if (!state.busy) return build({ text, alt, grace: true });
+  timer.lastRequest = { text, alt };
+  state.queue = [text];
+  showNext();
+  say(line('queued'));
+}
+
+// It's all finished: one more minute to play with it, counted down like any last minute.
 function lastMinute() {
   timer.overtime = 'playing';
   timer.endsAt = Date.now() + 60000;
   timer.warned = false;
+  drowsy.yawned.clear(); // (sleepy all over again)
 }
 
 async function timeIsUp() {
   state.timeUp = true;
+  timer.lastRequest = null;
   timer.overtime = null;
   stopAsking();
   hush();
@@ -993,6 +1043,7 @@ const mic = {
   floor: 0.002,
   tail: null, // the short wait after the key is let go
   recognizer: null,
+  awaitingWords: false, // the browser's recognizer was stopped and its words haven't come yet
 };
 
 async function initMic() {
@@ -1060,13 +1111,14 @@ function pressTalk() {
   if (state.timeUp) return;
   state.lastActivity = Date.now();
   if (overlayOpen()) return closeOverlays();
-  if (timer.overtime) return voice.current || say(line('playOn'));
+  // (A recording under way can always be finished: it started in time.)
   if (mic.recording) {
     if (!mic.tail) return stopListening(); // second tap finishes
     clearTimeout(mic.tail); // pressed again right after letting go: just keep listening
     mic.tail = null;
     return;
   }
+  if (timer.overtime && !lastAskOpen()) return voice.current || say(line('playOn'));
   if (!mic.ready && !mic.recognizer) {
     sfx.oops();
     return say(line('noMic'));
@@ -1114,7 +1166,14 @@ async function stopListening() {
   focusStage();
   if (voice.queue.length && !voice.current) nextLine(); // anything the buddy held back
 
-  if (mic.recognizer) return mic.recognizer.stop(); // result arrives via onresult
+  if (mic.recognizer) {
+    // (Until its words come, it's a request being turned into words, like a recording.)
+    if (!mic.awaitingWords) {
+      [mic.awaitingWords, mic.transcribing] = [true, mic.transcribing + 1];
+      setTimeout(() => mic.awaitingWords && ([mic.awaitingWords, mic.transcribing] = [false, mic.transcribing - 1]), 5000); // (if its end never comes)
+    }
+    return mic.recognizer.stop(); // result arrives via onresult
+  }
 
   const heldMs = performance.now() - mic.startedAt;
   const { peak, speechMs, chunks } = mic;
@@ -1134,7 +1193,7 @@ async function stopListening() {
     sfx.oops();
     return say(line('muted'));
   }
-  if (timer.overtime && !heardIt.text) return; // no "say that again" when there's no asking again
+  if (timer.overtime && !heardIt.text && !lastAskOpen()) return; // no "say that again" when there's no asking again
   if (heardIt.silent) return say(line('silence'));
   if (!heardIt.text) return say(line('unclear'));
   heard(heardIt.text, heardIt.alt);
@@ -1181,10 +1240,11 @@ function initBrowserRecognizer() {
     for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += e.results[i][0].transcript + ' ';
   };
   r.onend = () => {
+    if (mic.awaitingWords) [mic.awaitingWords, mic.transcribing] = [false, mic.transcribing - 1];
     const t = text.trim();
     text = '';
     if (t) heard(t);
-    else say(line('unclear'));
+    else if (!timer.overtime || lastAskOpen()) say(line('unclear')); // (no "say that again" when there's no asking again)
   };
   mic.recognizer = r;
 }

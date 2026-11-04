@@ -64,13 +64,15 @@ export const DEFAULTS = {
     checker: { model: '', effort: 'medium' },
     polisher: { model: '', effort: 'high' },
     tester: { model: '', effort: 'medium' },
-    // agents: true builds team mode the agent way (server/agents.mjs): one lead Claude that keeps the
-    // creation in mind and hands its parts to helpers (subagents), then makes them fit. agentLead is
+    // agents: true (the default) builds team mode the agent way (server/agents.mjs): one lead Claude
+    // that keeps the creation in mind; while the kid waits it writes a short plan on Build Buddy's kit
+    // and helpers start on each part as it's written (the quickest way); while they play it grows and
+    // polishes it with its tools and subagents. false: team mode's usual way. agentLead is
     // the lead (model, effort and args as for a role; thinking: how long it may think while the kid
     // waits, and when it looks its creation over); agentHelper.model is the helpers' model, as an alias
     // (sonnet, opus, haiku or fable: the Agent tool takes no full model names).
-    agents: false,
-    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, look: 10000 } },
+    agents: true,
+    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 0, look: 10000 } },
     agentHelper: { model: 'sonnet' },
   },
   // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
