@@ -149,7 +149,8 @@ export function kitPage(kind, shared, parts, order) {
   // A part with the name of something the kit declares (a 3D sun or camera, a 2D input): the plan
   // means the part, so it's the kit's own that is renamed.
   let kit = kitCode(kind);
-  for (const id of ids) if (new RegExp(`^(?:const|let|function)\\s+${id}\\b`, 'm').test(kit)) kit = kit.replace(new RegExp(`(?<![\\w$.'"])${id}(?![\\w$'"])`, 'g'), `kit_${id}`);
+  const declares = (code, id) => new RegExp(`^(?:const|let|var|class|function)\\s+${id}\\b`, 'm').test(code);
+  for (const id of ids) if (declares(kit, id) && parts.some(p => declares(p.code, id))) kit = kit.replace(new RegExp(`(?<![\\w$.'"])${id}(?![\\w$'"])`, 'g'), `kit_${id}`);
   // (One that isn't there - a part that didn't declare its name - is left out, and said, so it's fixed.)
   const entry = id => (/^[A-Za-z_$][\w$]*$/.test(id) ? `typeof ${id} === 'undefined' ? (setTimeout(() => { throw new ReferenceError('the part ${id} is not defined'); }), null) : ${id}` : 'null');
   return `<!doctype html>

@@ -870,7 +870,7 @@ async function fix(html, problem, signal, tally) {
 // at most maxHelpers() at once. crew.running holds each job's part: { ...job, reply, code,
 // startedAt, doneAt }. Team mode and the agent way (agents.mjs) both build with it.
 
-export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity }) {
+export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity, twinFirst = false }) {
   const jobs = [];
   let hedges = 0; // second tries started (each one is more for the computer and the service to do)
   const running = new Map();
@@ -917,13 +917,15 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
             tally,
           }).then(reply => ({ reply, i }));
         const first = one(0);
+        // (twinFirst: the first job - the biggest, which the kid waits for - gets its second helper at once.)
+        const twin = twinFirst && seen.length === 1;
         const second = new Promise((resolve, reject) => {
           const timer = setTimeout(() => {
-            if (wrote || signal.aborted || hedges >= maxHedges) return reject(new Error('not needed'));
-            hedges++;
-            log(`team: helper ${job.name} hasn't started writing after ${hedgeMs / 1000}s, starting a second one`);
+            if (wrote || signal.aborted || (!twin && hedges >= maxHedges)) return reject(new Error('not needed'));
+            if (!twin) hedges++;
+            if (!twin) log(`team: helper ${job.name} hasn't started writing after ${hedgeMs / 1000}s, starting a second one`);
             one(1).then(resolve, reject);
-          }, hedgeMs);
+          }, twin ? 0 : hedgeMs);
           first.then(() => (clearTimeout(timer), reject(new Error('not needed'))), () => {});
         });
         return Promise.any([first, second]).then(

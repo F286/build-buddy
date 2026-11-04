@@ -97,10 +97,11 @@ ${buildingRules()}`;
 // while they play.
 const QUICK_SIZE = { shared: 10, jobWords: 20, main: '15-25', partLines: 18, partChars: 1400, maxChars: 2000 };
 // How many helpers write at once while the kid waits (more, smaller parts: the kid waits for the
-// slowest), and how many are kept started and waiting: two more, for second tries on slow jobs.
+// slowest), and how many are kept started and waiting: three more, for the first job's twin and
+// second tries on slow jobs.
 // (Each waiting one is a claude program, about 170 MB.)
 const QUICK_HELPERS = 8;
-const WARM_HELPERS = QUICK_HELPERS + 2;
+const WARM_HELPERS = QUICK_HELPERS + 3;
 // They wait a while: starting ten at once takes the computer's attention just when the kid asks, so
 // they're kept through the minutes the kid plays.
 const WARM_MS = 15 * 60000;
@@ -571,7 +572,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     chars += n;
     emit({ type: 'progress', chars, helpers: crew.jobs.length + team.helpers.size, helpersDone: crew.done + team.done, team: true, leads: 1 });
   };
-  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2 });
+  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true });
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
