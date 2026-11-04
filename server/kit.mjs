@@ -24,6 +24,11 @@ const canvas = document.createElement('canvas');
 canvas.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none';
 document.body.append(canvas);
 const ctx = canvas.getContext('2d');
+// (A shape with a negative radius - a shrinking bubble - is drawn at its size instead of stopping the page.)
+for (const f of ['arc', 'ellipse']) {
+  const draw = CanvasRenderingContext2D.prototype[f];
+  CanvasRenderingContext2D.prototype[f] = function (...a) { a[2] = Math.abs(a[2]) || 0; if (f === 'ellipse') a[3] = Math.abs(a[3]) || 0; return draw.apply(this, a); };
+}
 let W = innerWidth, H = innerHeight;
 const kitFit = () => { W = canvas.width = innerWidth; H = canvas.height = innerHeight; };
 kitFit();

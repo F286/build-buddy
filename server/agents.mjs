@@ -53,7 +53,7 @@ function lead() {
     // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
     // model set: without one there'd be nothing to switch back to.
     firstModel: model ? r.firstModel || '' : '',
-    thinking: { build: 0, look: 10000, ...(r.thinking || {}) },
+    thinking: { build: 0, wire: 4000, look: 10000, ...(r.thinking || {}) },
   };
 }
 
@@ -193,6 +193,13 @@ const GROW = `Now grow it into its full, excellent version - about twice as much
 - Every arrow key, a tap anywhere and a drag each get an answer the kid sees, and a finger can do all the arrow keys do.
 - Keep it smooth (nothing made every frame, a costly look drawn the cheap way) and everything in the look.
 End your reply with WHY: <what you improved, in one short sentence for the grown-ups' log>.`;
+
+// Right after its helpers' parts appear (and the kid starts playing): it reads them for the first
+// time and makes them one world that works - in text, quickly, before it grows it.
+const WIRE = `Your helpers' parts are in and the kid is playing with it now - here's the page put together, and you haven't seen their code until now. Make it one world that works, as it is - nothing new:
+- Follow every control - each arrow key, a tap, a drag - from the kit's hook to what moves on screen, and every event from each emit to each on. Fix what's dead (never emitted or never answered, a method nobody calls, a hook the kit never calls), what lands somewhere else than what's drawn (a place worked out twice), and what fights (two parts moving the same thing).
+- Fix what would crash, and what can't be seen (off the screen, hidden behind something, too small to notice).
+Reply in text only: FIND/REPLACE edits, each FIND copied exactly from the page above, then WHY: <what you fixed, in one short sentence for the grown-ups' log>. If it all works as it is, reply with just: OK`;
 
 // Looking it over again, as a demanding parent would (the passes after that).
 const LOOK = `Test it the way a demanding parent who designs kids' simulations and games would, before they play it with their kid - in the files and in the screenshot:
@@ -340,7 +347,7 @@ function sessionFor(projectId, { renew = false } = {}) {
 // What's still to do for a creation (kept apart from the session, so a new one carries on).
 let work = { projectId: null };
 function workFor(projectId) {
-  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '', rules: null };
+  if (work.projectId !== projectId) work = { projectId, grow: false, wire: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '', rules: null };
   return work;
 }
 
@@ -766,6 +773,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   s.files = built;
   s.shown = mine ? built : null; // (its helpers' code it hasn't seen yet)
   if (asks) w.rules = asks;
+  // Its helpers wrote code it hasn't seen: the next pass makes it fit first.
+  w.wire = crew.jobs.length > 0;
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (!edited && r.title && r.title !== p.title && !sameCreation(page, built));
   if (fresh) {
@@ -829,6 +838,7 @@ export async function check({ projectId, version, report, screenshot }) {
     // (Its helpers write fuller parts while the kid plays; the quick rules come back after.)
     rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
     fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ ...rules, freshLook: '', quick: false }));
+    if (w.wire) return await wirePass({ s, w, p, page, report, shot, stale, took, before });
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
@@ -897,6 +907,42 @@ export async function check({ projectId, version, report, screenshot }) {
   }
 }
 
+// The wire pass (see WIRE): edits in text, with a look at the screenshot.
+async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
+  w.wire = false;
+  const gaps = [...missingMethods(page), ...missingParts(page), eventGaps(page)].filter(x => x && !/all met$/.test(x));
+  const prompt = [
+    `<current_page>\n${page}\n</current_page>`,
+    running(report, shot && path.basename(shot)),
+    gaps.length && `Build Buddy noticed: ${gaps.join(' ')}`,
+    WIRE,
+  ].filter(Boolean).join('\n\n');
+  await s.use(lead().model);
+  await s.think(lead().thinking.wire);
+  if (stale()) return { skipped: 'stale' };
+  const reply = await s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' });
+  const why = field(reply.text, 'WHY') || 'made its parts fit';
+  const edits = parseReply(reply.text).edits;
+  if (!edits.length || stale()) {
+    s.shown = page;
+    log(`AGENTS wire ${took()} ${edits.length ? 'stale' : 'OK'}`);
+    return edits.length ? { skipped: 'stale' } : { ok: true };
+  }
+  const fitted = await applyEditsWithFixer(page, edits);
+  const html = await renameClashes(fitted.html);
+  if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
+    log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
+    return { skipped: stale() ? 'stale' : "the change didn't run" };
+  }
+  const built = keepAsFiles(s.dir, html);
+  p = store.addVersion(store.currentProject(), built, { request: `(agents wire) ${why}`, backend: 'claude agents polish', continues: true });
+  s.files = built;
+  s.shown = !fitted.failed.length && !fitted.fixed && html === fitted.html ? built : null;
+  w.lastPass = { version: p.current, grow: false, wire: true, before };
+  log(`AGENTS wire ${took()} ${why} (${edits.length} edits${fitted.failed.length ? `, ${fitted.failed.length} didn't fit` : ''}) → v${p.current}`);
+  return { fixed: true, verdict: 'fix', why, html: store.html(p), version: p.current };
+}
+
 // One of its passes crashed when the app tried it out of sight, so it was taken back (POST
 // /api/drop-fix): its files go back to how they were, it's told why, and a lost grow happens again.
 export function takenBack({ projectId, version, error }) {
@@ -908,7 +954,7 @@ export function takenBack({ projectId, version, error }) {
   }
   w.note = `Your last changes were taken back: with them in, it crashed when it was tried (${String(error || '').slice(0, 200)}).`;
   if (w.lastPass.grow) w.grow = true;
-  w.passes = Math.max(0, w.passes - 1);
+  if (!w.lastPass.wire) w.passes = Math.max(0, w.passes - 1); // (the wire pass isn't one of the counted ones)
   w.lastPass = null;
 }
 
