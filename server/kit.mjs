@@ -13,6 +13,9 @@
 //   release(x, y)             when it's let go
 //   key(name, down)           'left' 'right' 'up' 'down', pressed (down) or let go (never space or
 //                             Enter: those are the talk keys)
+// What happens between parts goes through events: emit('basket', x, y) where it happens, and
+// on('basket', (x, y) => ...) in init() in every part that reacts - so a part written early can be
+// answered by one written later, and none needs to know another's insides.
 // A hook that throws is left out from then on and the rest go on (its error is still reported, so
 // it gets fixed).
 
@@ -59,6 +62,11 @@ function tone(freq = 440, dur = 0.15, type = 'sine', vol = 0.15) {
   } catch {}
 }
 const rand = (a = 1, b) => (b === undefined ? Math.random() * a : a + Math.random() * (b - a));
+const kitEvents = {};
+function on(name, fn) { (kitEvents[name] ||= []).push(fn); }
+function emit(name, ...args) {
+  for (const fn of kitEvents[name] || []) { try { fn(...args); } catch (err) { setTimeout(() => { throw err; }); } }
+}
 function run(parts) {
   parts = parts.filter(Boolean);
   const failed = new Set(); // (a part's hook that threw is left out from then on - the rest go on)
@@ -104,7 +112,7 @@ export function kitCode(kind) {
 }
 
 // The names the kit declares (a part may not be called one of them).
-export const KIT_NAMES = ['canvas', 'ctx', 'W', 'H', 'input', 'tone', 'rand', 'run', 'scene', 'camera', 'renderer', 'sun', 'THREE'];
+export const KIT_NAMES = ['canvas', 'ctx', 'W', 'H', 'input', 'tone', 'rand', 'on', 'emit', 'run', 'scene', 'camera', 'renderer', 'sun', 'THREE'];
 
 // What the lead and its helpers are told the kit gives them.
 export function kitApi(kind) {
@@ -113,8 +121,9 @@ export function kitApi(kind) {
     three
       ? 'The kit (3D) gives: THREE (imported), scene, camera (at 0, 7, 14 looking at the middle; a part may move it), renderer, sun (a light), W and H (the window size),'
       : 'The kit (2D) gives: canvas (the whole window), ctx (its 2D context), W and H (its size, kept up to date),'
-  } input (left, right, up, down: the arrow keys held; x, y: the pointer; pressed: a finger or button down), tone(freq, dur, type, vol) for a quick sound (type: 'sine', 'square', 'triangle' or 'sawtooth'), rand(a, b), and run(parts), which runs it all.
-Each part is one object (const <name> = { ... }) with any of: init() once at the start; update(dt, t) every frame (seconds; dt at most 0.05);${three ? '' : " draw(ctx, t) every frame after every update, back to front in run order (the kit clears the canvas each frame, so something draws the background; each part's draw starts with a fresh ctx, so a translate or color set in one part never reaches the others - to scroll a world, keep its offset in a shared number and have each part that scrolls translate by it);"} tap(x, y${three ? ', ray' : ''}) - asked from the front part back until one returns true${three ? ' (ray: a THREE.Raycaster through the tap, for ray.intersectObjects(...))' : ''}; drag(x, y, dx, dy) while pressed and moving; release(x, y); key(name, down) for 'left', 'right', 'up', 'down' (never space or Enter: those are the talk keys). ${three ? 'The kit draws the scene every frame: parts add their meshes to scene in init().' : ''} Parts use each other by name (sky.top, ball.shoot()), exactly as the plan says.`;
+  } input (left, right, up, down: the arrow keys held; x, y: the pointer; pressed: a finger or button down), tone(freq, dur, type, vol) for a quick sound (type: 'sine', 'square', 'triangle' or 'sawtooth'), rand(a, b), emit(name, ...args) and on(name, fn) for events between parts, and run(parts), which runs it all.
+Each part is one object (const <name> = { ... }) with any of: init() once at the start; update(dt, t) every frame (seconds; dt at most 0.05);${three ? '' : " draw(ctx, t) every frame after every update, back to front in run order (the kit clears the canvas each frame, so something draws the background; each part's draw starts with a fresh ctx, so a translate or color set in one part never reaches the others - to scroll a world, keep its offset in a shared number and have each part that scrolls translate by it);"} tap(x, y${three ? ', ray' : ''}) - asked from the front part back until one returns true${three ? ' (ray: a THREE.Raycaster through the tap, for ray.intersectObjects(...))' : ''}; drag(x, y, dx, dy) while pressed and moving; release(x, y); key(name, down) for 'left', 'right', 'up', 'down' (never space or Enter: those are the talk keys). ${three ? 'The kit draws the scene every frame: parts add their meshes to scene in init().' : ''} The kit calls only those hooks: anything else in a part is called by other parts, exactly as the plan says.
+How parts fit (they're written apart, at the same time): each thing on screen belongs to one part, which draws it, moves it and answers pokes on it. What happens between parts goes through events: the part where it happens calls emit('basket', x, y), and each part that reacts calls on('basket', (x, y) => ...) in its init() - use exactly the plan's event names. A part never works out where another part's things are: it reads them from that part's object (flowers.list[i].x) or from the shared code. Fields stay fields and methods stay methods (fill(n) is called, x is read), exactly as the plan writes them.`;
 }
 
 // The page: the kit, the plan's shared code, every part, and run([...]) in the plan's order.
