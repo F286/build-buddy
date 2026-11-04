@@ -386,7 +386,7 @@ function pageError(message) {
     const v = `${state.project?.id}:${state.project?.version}`;
     // The quick fixes didn't stick: ask the overwatch to take a careful look.
     if (state.fixStreak >= 2 || state.fixedVersions.has(v)) return checkCreation({ urgent: true });
-    if (state.busy || !state.pageErrors.length || askingClosed()) return;
+    if (state.busy || !state.pageErrors.length || askingClosed() || timer.overtime) return;
     state.fixedVersions.add(v);
     const errors = [...new Set(state.pageErrors)].slice(0, 5).join('\n');
     say(line('fixing'));
@@ -563,7 +563,7 @@ async function build(body) {
   if (!voice.current) mood(null);
 
   // (Overtime's last thing, asked for while this was building.)
-  if (timer.lastRequest) {
+  if (timer.lastRequest && !state.timeUp) {
     const last = timer.lastRequest;
     timer.lastRequest = null;
     state.queue = [];
@@ -796,6 +796,9 @@ function setTimer(info) {
   timer.endsAt = left == null ? 0 : Date.now() + left;
   timer.warned = left != null && left <= 60000; // already in the last minute: no announcement
   [timer.overtime, timer.graceUsed, timer.lastRequest] = [null, false, null];
+  // Time ran out before this page knew (a reload, the window reopened): no last thing, no extra
+  // minute - the time's up screen at once.
+  if (left === 0 && !state.timeUp) return timeIsUp();
   tickTimer();
 }
 
@@ -895,6 +898,8 @@ function showLastAsk(ms) {
 // Their last thing: built now, or right after what's building. Then no more asking.
 function lastOne(text, alt) {
   if (timer.overtime !== 'asking' || timer.graceUsed) return voice.current || say(line('playOn'));
+  // Asking if it's ready, or saying it again, isn't their last thing.
+  if (state.busy && (STILL_BUILDING.test(text) || repeats(text, [state.building]))) return say(line('wait'));
   [timer.graceUsed, timer.overtime] = [true, 'building'];
   if (!state.busy) return build({ text, alt, grace: true });
   timer.lastRequest = { text, alt };
@@ -913,6 +918,7 @@ function lastMinute() {
 
 async function timeIsUp() {
   state.timeUp = true;
+  timer.lastRequest = null;
   timer.overtime = null;
   stopAsking();
   hush();
@@ -1037,6 +1043,7 @@ const mic = {
   floor: 0.002,
   tail: null, // the short wait after the key is let go
   recognizer: null,
+  awaitingWords: false, // the browser's recognizer was stopped and its words haven't come yet
 };
 
 async function initMic() {
@@ -1104,13 +1111,14 @@ function pressTalk() {
   if (state.timeUp) return;
   state.lastActivity = Date.now();
   if (overlayOpen()) return closeOverlays();
-  if (timer.overtime && !lastAskOpen()) return voice.current || say(line('playOn'));
+  // (A recording under way can always be finished: it started in time.)
   if (mic.recording) {
     if (!mic.tail) return stopListening(); // second tap finishes
     clearTimeout(mic.tail); // pressed again right after letting go: just keep listening
     mic.tail = null;
     return;
   }
+  if (timer.overtime && !lastAskOpen()) return voice.current || say(line('playOn'));
   if (!mic.ready && !mic.recognizer) {
     sfx.oops();
     return say(line('noMic'));
@@ -1158,7 +1166,14 @@ async function stopListening() {
   focusStage();
   if (voice.queue.length && !voice.current) nextLine(); // anything the buddy held back
 
-  if (mic.recognizer) return mic.recognizer.stop(); // result arrives via onresult
+  if (mic.recognizer) {
+    // (Until its words come, it's a request being turned into words, like a recording.)
+    if (!mic.awaitingWords) {
+      [mic.awaitingWords, mic.transcribing] = [true, mic.transcribing + 1];
+      setTimeout(() => mic.awaitingWords && ([mic.awaitingWords, mic.transcribing] = [false, mic.transcribing - 1]), 5000); // (if its end never comes)
+    }
+    return mic.recognizer.stop(); // result arrives via onresult
+  }
 
   const heldMs = performance.now() - mic.startedAt;
   const { peak, speechMs, chunks } = mic;
@@ -1225,10 +1240,11 @@ function initBrowserRecognizer() {
     for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += e.results[i][0].transcript + ' ';
   };
   r.onend = () => {
+    if (mic.awaitingWords) [mic.awaitingWords, mic.transcribing] = [false, mic.transcribing - 1];
     const t = text.trim();
     text = '';
     if (t) heard(t);
-    else say(line('unclear'));
+    else if (!timer.overtime || lastAskOpen()) say(line('unclear')); // (no "say that again" when there's no asking again)
   };
   mic.recognizer = r;
 }
