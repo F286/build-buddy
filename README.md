@@ -452,6 +452,17 @@ basketball game and a bubble machine), each pair judged twice with the two shown
 fixes, which changed how its files are kept in step with the page and a few lines of its prompts,
 not how it builds.)
 
+**Parts that fit.** Its helpers write their parts apart, at the same time, so the plan wires them
+together: the parts talk through events (`emit('basket')` where it happens, `on('basket', ...)` in
+every part that reacts - the kit has both), the shared code says where the main places are, each
+thing on screen belongs to one part, and the lead writes the rules part itself while its helpers
+write theirs (the world's numbers, the score and the big moments). Right after it appears, a quick
+wire pass (in text, about 5 to 10 s while the kid plays) reads the helpers' code for the first time
+and fixes what doesn't meet. Judged blind on eight other requests against the version without
+these, the events, places and one-owner rule won 14 of 16 judgments (6.5 against 4.4 overall), and
+adding the lead's rules part won all 16 (6.9 against 4.1; coherent 6.9 against 3.6), at the same
+speed or a little quicker (26 s against 27 s to something new in those runs).
+
 **Kid-speed builds.** The measurements above are from before the lead wrote in text on the kit
 while the kid waits (its helpers were subagents then, and it read and fixed their parts itself).
 Measured since, on the same eight requests, one at a time:

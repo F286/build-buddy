@@ -53,7 +53,7 @@ function lead() {
     // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
     // model set: without one there'd be nothing to switch back to.
     firstModel: model ? r.firstModel || '' : '',
-    thinking: { build: 0, look: 10000, ...(r.thinking || {}) },
+    thinking: { build: 0, wire: 4000, look: 10000, ...(r.thinking || {}) },
   };
 }
 
@@ -95,12 +95,13 @@ ${buildingRules()}`;
 
 // While the kid waits, every piece of the plan is small: the kid sees it sooner, and it's grown
 // while they play.
-const QUICK_SIZE = { shared: 6, jobWords: 15, main: '15-25', partLines: 15, partChars: 1200, maxChars: 1800 };
+const QUICK_SIZE = { shared: 10, jobWords: 20, main: '15-25', partLines: 18, partChars: 1400, maxChars: 2000 };
 // How many helpers write at once while the kid waits (more, smaller parts: the kid waits for the
-// slowest), and how many are kept started and waiting: two more, for second tries on slow jobs.
+// slowest), and how many are kept started and waiting: three more, for the first job's twin and
+// second tries on slow jobs.
 // (Each waiting one is a claude program, about 170 MB.)
 const QUICK_HELPERS = 8;
-const WARM_HELPERS = QUICK_HELPERS + 2;
+const WARM_HELPERS = QUICK_HELPERS + 3;
 // They wait a while: starting ten at once takes the computer's attention just when the kid asks, so
 // they're kept through the minutes the kid plays.
 const WARM_MS = 15 * 60000;
@@ -118,7 +119,7 @@ ${EDIT_FORMAT}
 For a change that adds new things (a new character, a new place, a new toy - "add a bear who wants the honey and a rainbow"), helpers write each new thing as a new part, at the same time, while you wire them in:
 ADD:
 //@part <name>: const <name> = { <what other parts use of it> } - <the job, in under ${z.jobWords} words>
-then your own edits that wire them in: add each new part's name to the run([...]) list (where it's drawn: back to front), anything the page's other parts now do with it, and any new keep fields in KB.keep. Each new part goes into the page just before the run([...]) line; its helper sees the page as it is, so it can use the page's names. Write the ADD lines first, straight away - each helper starts the moment its line is written - then your edits.
+then your own edits that wire them in: add each new part's name to the run([...]) list (where it's drawn: back to front), anything the page's other parts now do with it, and any new keep fields in KB.keep. Each new part goes into the page just before the run([...]) line; its helper sees the page as it is, so it can use the page's names and answer its events (on(...)) - and a new event the page should react to is one of your edits. Write the ADD lines first, straight away - each helper starts the moment its line is written - then your edits.
 
 When the kid asks for several separate changes to what's there at once ("make it night and give the car headlights"), hand them out - helpers write the edits, one thing each, at the same time:
 CHANGES:
@@ -134,20 +135,26 @@ PLAN:            (or PLAN: 3d, for a 3D creation)
 //@part <name>: const <name> = { <what other parts use of it> } - <the job>
 //@part <name>: ...
 RUN: <every part's name, back to front>
+RULES:
+\`\`\`js
+const rules = { <the world's rules, which you write yourself while your helpers write their parts> };
+\`\`\`
 
 The page is Build Buddy's kit, your shared code, each part, then run([...]) in your RUN order - there's no main code to write: the kit runs it.
 2D: ${kitApi('2d')}
 3D: ${kitApi('3d')}
 
-- The shared code (at most about ${z.shared} short lines): the palette and sizes, the world's numbers (const world = { ... }), and const keep = KB.keep({ ... }) - nothing else (the kit has the canvas, input, sounds and loop).
-- Each job starts with the part's object and what other parts use of it, written as code - for example: const hive = { x, y, fill(n) } or const ball = { x, y, shoot(vx, vy) }. Then, in under ${z.jobWords} words, how it looks, sounds and feels and what pokes do. Your helpers know the kit, the kid's words and the look - they fill in the details.
-- Write the jobs biggest first (the slowest helper starts first), then RUN.
+- The shared code (at most about ${z.shared} short lines): the palette and sizes; where the main places are, as functions of W and H everyone uses (const at = { ground: () => H * 0.8, hive: () => ({ x: W * 0.7, y: H * 0.35 }) }); the world's numbers (const world = { ... }); const keep = KB.keep({ ... }); and a comment naming every event, with what it carries and when it happens (// events: basket(x, y) when a ball goes in; miss() when it lands). Nothing else (the kit has the canvas, input, sounds and loop).
+- The parts are written apart, at the same time, and each helper sees only the jobs written before its own - so what happens between parts goes through those events: the part where it happens emits it, and every part that reacts answers it (on('basket', ...)). Each job says which events its part emits and which it answers, and every reaction you want (the crowd cheers, sparkles burst, the net swishes, the score goes up) is in the job of the part that reacts. Never a method one part has to call on a part that comes later.
+- Each thing on screen belongs to exactly one part, which draws it, moves it and answers pokes on it - never one part for a thing's look and another for its moves. A part that needs to know where another part's things are reads them from that part's object or from at, never works them out itself.
+- Each job starts with the part's object and what other parts read of it, written as code - fields bare and methods with their parentheses: const hive = { x, y, cells } or const ball = { x, y, flying }. Then, in under ${z.jobWords} words, how it looks, sounds and feels, what pokes do, and its events. Your helpers know the kit, the kid's words and the look - they fill in the details.
+- Write the jobs biggest first (the slowest helper starts first), then RUN, then the rules part yourself (at most about 15 short lines; it runs first): it updates the world's numbers every frame, and answers the events that add up - the score, the goal, what grows - emitting the big moments (emit('jarFull')) for the parts that react. Counting and the goal are the rules part's alone: the jobs say what to emit, never to count it too. Pace it for a 5-year-old: something changes in the first two seconds, each poke shows at once, and a big moment comes within a few pokes or half a minute of play - never after hundreds. It's the one part that knows them all, so it's what makes the parts one world. Never give a helper a job named rules.
 - Plan how it works, not just the look: its 2 or 3 real rules, as a few numbers in world that one part (named rules, or the star) updates every frame, pokes nudge and everything else reads; what each poke sets off; what keeps going on its own; one or two things to discover. No score or goal unless they ask for a game - then also one clear thing to do, a reward every time and a goal that grows. The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, where the camera sees it).
 - Anything one part makes and another uses - an object's fields, a function - is named exactly in both jobs (or in the shared code).
 - Everything they'd be sad to lose when the page changes (where the player is, the level, the score, what they collected, placed or chose) lives in keep - every field in its defaults there, since only those carry over - and each job says which keep fields its part puts back when it starts and updates.
 - Give it everything a kid pictures for that kind of thing (a soccer game has a goalie to beat, a train has tracks and a station), each in a job. Everything is drawn in the look - shapes, not emoji.
-- The kid's main action works end to end, with the arrow keys and the pointer: the star's job says what its key() and tap()/drag() do. Arrow keys move things the way they point on the screen (left goes left; seen from above, never steering-wheel turns), and a quick tap gets a clear answer right away (a hop, a sparkle and a sound where they tapped) - the front part that wants a tap takes it; the background's tap() can answer taps anywhere else.
-- <name> is one lowercase word, and the part's object has that name (never kit, main, or a name the kit gives: ${KIT_NAMES.join(', ')}). The kid waits for the slowest helper: ${n - 2}-${n} small parts of about ${z.partLines} short lines each (about ${z.partChars.toLocaleString('en')} characters), similar in size - for example the sky, the ground, the star's look, the star's moves and pokes, the other characters, the effects. The star is always two parts (how it looks; how it moves and answers pokes), and anything else big (a whole world, a game's rules) is split too.
+- The kid's main action works end to end, with the arrow keys and the pointer: the star's job says what its key(), tap() and drag() do - a finger alone can do all the arrow keys do. Arrow keys move things the way they point on the screen (left goes left; seen from above, never steering-wheel turns), and a quick tap gets a clear answer right away (a hop, a sparkle and a sound where they tapped) - the front part that wants a tap takes it; the background's tap() can answer taps anywhere else.
+- <name> is one lowercase word, and the part's object has that name (never kit, main, or a name the kit gives: ${KIT_NAMES.join(', ')}). The kid waits for the slowest helper: ${n - 2}-${n} small parts of about ${z.partLines} short lines each (about ${z.partChars.toLocaleString('en')} characters), similar in size - for example the sky, the ground, the star, the other characters, the effects. Keep the star's part to the star itself (what it pokes off - sparkles, sounds, a score - goes to other parts as events), and split anything else big (a whole world, a game's rules) into two parts, each owning its own things.
 - When you plan over an existing page, the helpers also see the page as it was, so they can keep what the kid already built. Keep the same KB.keep names.`;
 }
 
@@ -188,6 +195,13 @@ const GROW = `Now grow it into its full, excellent version - about twice as much
 - Keep it smooth (nothing made every frame, a costly look drawn the cheap way) and everything in the look.
 End your reply with WHY: <what you improved, in one short sentence for the grown-ups' log>.`;
 
+// Right after its helpers' parts appear (and the kid starts playing): it reads them for the first
+// time and makes them one world that works - in text, quickly, before it grows it.
+const WIRE = `Your helpers' parts are in and the kid is playing with it now - here's the page put together, and you haven't seen their code until now. Make it one world that works, as it is - nothing new:
+- Follow every control - each arrow key, a tap, a drag - from the kit's hook to what moves on screen, and every event from each emit to each on. Fix what's dead (never emitted or never answered, a method nobody calls, a hook the kit never calls), what lands somewhere else than what's drawn (a place worked out twice), and what fights (two parts moving the same thing).
+- Fix what would crash, and what can't be seen (off the screen, hidden behind something, too small to notice).
+Reply in text only: FIND/REPLACE edits, each FIND copied exactly from the page above, then WHY: <what you fixed, in one short sentence for the grown-ups' log>. If it all works as it is, reply with just: OK`;
+
 // Looking it over again, as a demanding parent would (the passes after that).
 const LOOK = `Test it the way a demanding parent who designs kids' simulations and games would, before they play it with their kid - in the files and in the screenshot:
 1. Every control: follow each arrow key, a tap anywhere and a drag from its handler to what moves on screen. Does each one do something the kid sees right away, and does left go left? Can a finger alone do all the arrow keys do, and is the main thing to poke easy to spot?
@@ -221,6 +235,9 @@ export function assemble(dir) {
   });
   return { html, missing };
 }
+
+// The lead's own rules part, written after its plan (RULES: and a code block).
+const RULES_BLOCK = /^[ \t>*_#]*RULES[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```/m;
 
 // The page and its parts as they are now (to put back if a pass doesn't work out).
 function snapshot(dir) {
@@ -331,7 +348,7 @@ function sessionFor(projectId, { renew = false } = {}) {
 // What's still to do for a creation (kept apart from the session, so a new one carries on).
 let work = { projectId: null };
 function workFor(projectId) {
-  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '', rules: null };
+  if (work.projectId !== projectId) work = { projectId, grow: false, wire: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '', rules: null };
   return work;
 }
 
@@ -487,6 +504,17 @@ function missingParts(html) {
   return gone.length ? [`run([...]) runs ${gone.join(', ')}, but nothing declares ${gone.length > 1 ? 'them' : 'it'}: the part${gone.length > 1 ? 's' : ''} named ${gone.length > 1 ? 'their objects' : 'its object'} differently - use one name.`] : [];
 }
 
+// Events emitted that nothing answers, and answered that nothing emits (for the log: wiring that
+// didn't meet).
+function eventGaps(html) {
+  const names = re => new Set([...html.matchAll(re)].map(m => m[1]));
+  const sent = names(/\bemit\(\s*['"]([\w-]+)['"]/g);
+  const heard = names(/\bon\(\s*['"]([\w-]+)['"]/g);
+  const deaf = [...sent].filter(n => !heard.has(n));
+  const mute = [...heard].filter(n => !sent.has(n));
+  return deaf.length || mute.length ? `events ${sent.size}${deaf.length ? `, unanswered: ${deaf.join(' ')}` : ''}${mute.length ? `, never sent: ${mute.join(' ')}` : ''}` : sent.size ? `events ${sent.size}, all met` : '';
+}
+
 // Does the page run? Problems found before it's shown go back to the lead once.
 async function problemsIn(built) {
   if (!built?.html) return ['there is no page.html'];
@@ -544,7 +572,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     chars += n;
     emit({ type: 'progress', chars, helpers: crew.jobs.length + team.helpers.size, helpersDone: crew.done + team.done, team: true, leads: 1 });
   };
-  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2 });
+  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true });
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
@@ -661,8 +689,10 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       const parts = await Promise.all(reader.jobs.map(j => crew.running.get(j.name)));
       const main = reader.main();
       const order = (/^[ \t>*_#]*RUN[*_]*:[ \t]*(.+)$/im.exec(reply.text)?.[1] || '').split(/[^\w-]+/).map(x => x.toLowerCase()).filter(Boolean);
-      // (Its own main code, if it wrote one; otherwise the kit runs the parts.)
-      html = main != null && !order.length ? teamAssemble(own, parts, main) : kitPage(kind(), own, parts, order);
+      // (Its own main code, if it wrote one; otherwise the kit runs the parts - its own rules part first.)
+      const rules = RULES_BLOCK.exec(reply.text)?.[1]?.trim();
+      const all = rules && !parts.some(x => x.name === 'rules') ? [{ name: 'rules', code: rules }, ...parts] : parts;
+      html = main != null && !order.length ? teamAssemble(own, parts, main) : kitPage(kind(), own, all, rules ? ['rules', ...order.filter(n => n !== 'rules')] : order);
       how = `${thought ? `thought ${thought}c, ` : ''}first word ${secs(firstAt)}, shared code ${secs(planAt)}, lead done ${secs(leadAt)} (${reply.text.length}c), ${parts.length} helpers${slowest(parts)}`;
     } else if (reader.adding && reader.jobs.length) {
       if (!page) throw new Error('new parts on a blank page');
@@ -744,6 +774,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   s.files = built;
   s.shown = mine ? built : null; // (its helpers' code it hasn't seen yet)
   if (asks) w.rules = asks;
+  // Its helpers wrote code it hasn't seen: the next pass makes it fit first.
+  w.wire = crew.jobs.length > 0;
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (!edited && r.title && r.title !== p.title && !sameCreation(page, built));
   if (fresh) {
@@ -754,7 +786,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // (Starting programs takes the computer's attention: the helpers taken are replaced once the page is
   // ready, for the kid's next turn.)
   keepHelpersWarm();
-  log(`ok   claude agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, turn ${s.turns}`);
+  log(`ok   claude agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, ${eventGaps(built) || 'no events'}, turn ${s.turns}`);
   const sameOne = Boolean(page) && (edited || sameCreation(page, built));
   return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: 'claude agents' };
 }
@@ -807,6 +839,7 @@ export async function check({ projectId, version, report, screenshot }) {
     // (Its helpers write fuller parts while the kid plays; the quick rules come back after.)
     rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
     fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ ...rules, freshLook: '', quick: false }));
+    if (w.wire) return await wirePass({ s, w, p, page, report, shot, stale, took, before });
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
@@ -875,6 +908,42 @@ export async function check({ projectId, version, report, screenshot }) {
   }
 }
 
+// The wire pass (see WIRE): edits in text, with a look at the screenshot.
+async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
+  w.wire = false;
+  const gaps = [...missingMethods(page), ...missingParts(page), eventGaps(page)].filter(x => x && !/all met$/.test(x));
+  const prompt = [
+    `<current_page>\n${page}\n</current_page>`,
+    running(report, shot && path.basename(shot)),
+    gaps.length && `Build Buddy noticed: ${gaps.join(' ')}`,
+    WIRE,
+  ].filter(Boolean).join('\n\n');
+  await s.use(lead().model);
+  await s.think(lead().thinking.wire);
+  if (stale()) return { skipped: 'stale' };
+  const reply = await s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' });
+  const why = field(reply.text, 'WHY') || 'made its parts fit';
+  const edits = parseReply(reply.text).edits;
+  if (!edits.length || stale()) {
+    s.shown = page;
+    log(`AGENTS wire ${took()} ${edits.length ? 'stale' : 'OK'}`);
+    return edits.length ? { skipped: 'stale' } : { ok: true };
+  }
+  const fitted = await applyEditsWithFixer(page, edits);
+  const html = await renameClashes(fitted.html);
+  if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
+    log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
+    return { skipped: stale() ? 'stale' : "the change didn't run" };
+  }
+  const built = keepAsFiles(s.dir, html);
+  p = store.addVersion(store.currentProject(), built, { request: `(agents wire) ${why}`, backend: 'claude agents polish', continues: true });
+  s.files = built;
+  s.shown = !fitted.failed.length && !fitted.fixed && html === fitted.html ? built : null;
+  w.lastPass = { version: p.current, grow: false, wire: true, before };
+  log(`AGENTS wire ${took()} ${why} (${edits.length} edits${fitted.failed.length ? `, ${fitted.failed.length} didn't fit` : ''}) → v${p.current}`);
+  return { fixed: true, verdict: 'fix', why, html: store.html(p), version: p.current };
+}
+
 // One of its passes crashed when the app tried it out of sight, so it was taken back (POST
 // /api/drop-fix): its files go back to how they were, it's told why, and a lost grow happens again.
 export function takenBack({ projectId, version, error }) {
@@ -886,7 +955,7 @@ export function takenBack({ projectId, version, error }) {
   }
   w.note = `Your last changes were taken back: with them in, it crashed when it was tried (${String(error || '').slice(0, 200)}).`;
   if (w.lastPass.grow) w.grow = true;
-  w.passes = Math.max(0, w.passes - 1);
+  if (!w.lastPass.wire) w.passes = Math.max(0, w.passes - 1); // (the wire pass isn't one of the counted ones)
   w.lastPass = null;
 }
 
