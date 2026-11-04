@@ -134,6 +134,10 @@ PLAN:            (or PLAN: 3d, for a 3D creation)
 //@part <name>: const <name> = { <what other parts use of it> } - <the job>
 //@part <name>: ...
 RUN: <every part's name, back to front>
+RULES:
+\`\`\`js
+const rules = { <the world's rules, which you write yourself while your helpers write their parts> };
+\`\`\`
 
 The page is Build Buddy's kit, your shared code, each part, then run([...]) in your RUN order - there's no main code to write: the kit runs it.
 2D: ${kitApi('2d')}
@@ -143,7 +147,7 @@ The page is Build Buddy's kit, your shared code, each part, then run([...]) in y
 - The parts are written apart, at the same time, and each helper sees only the jobs written before its own - so what happens between parts goes through those events: the part where it happens emits it, and every part that reacts answers it (on('basket', ...)). Each job says which events its part emits and which it answers, and every reaction you want (the crowd cheers, sparkles burst, the net swishes, the score goes up) is in the job of the part that reacts. Never a method one part has to call on a part that comes later.
 - Each thing on screen belongs to exactly one part, which draws it, moves it and answers pokes on it - never one part for a thing's look and another for its moves. A part that needs to know where another part's things are reads them from that part's object or from at, never works them out itself.
 - Each job starts with the part's object and what other parts read of it, written as code - fields bare and methods with their parentheses: const hive = { x, y, cells } or const ball = { x, y, flying }. Then, in under ${z.jobWords} words, how it looks, sounds and feels, what pokes do, and its events. Your helpers know the kit, the kid's words and the look - they fill in the details.
-- Write the jobs biggest first (the slowest helper starts first), then RUN.
+- Write the jobs biggest first (the slowest helper starts first), then RUN, then the rules part yourself (at most about 15 short lines; it runs first): it updates the world's numbers every frame, and answers the events that add up - the score, the goal, what grows - emitting the big moments (emit('jarFull')) for the parts that react. It's the one part that knows them all, so it's what makes the parts one world. Never give a helper a job named rules.
 - Plan how it works, not just the look: its 2 or 3 real rules, as a few numbers in world that one part (named rules, or the star) updates every frame, pokes nudge and everything else reads; what each poke sets off; what keeps going on its own; one or two things to discover. No score or goal unless they ask for a game - then also one clear thing to do, a reward every time and a goal that grows. The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, where the camera sees it).
 - Anything one part makes and another uses - an object's fields, a function - is named exactly in both jobs (or in the shared code).
 - Everything they'd be sad to lose when the page changes (where the player is, the level, the score, what they collected, placed or chose) lives in keep - every field in its defaults there, since only those carry over - and each job says which keep fields its part puts back when it starts and updates.
@@ -223,6 +227,9 @@ export function assemble(dir) {
   });
   return { html, missing };
 }
+
+// The lead's own rules part, written after its plan (RULES: and a code block).
+const RULES_BLOCK = /^[ \t>*_#]*RULES[*_]*:[^\n]*\n+[ \t]*```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```/m;
 
 // The page and its parts as they are now (to put back if a pass doesn't work out).
 function snapshot(dir) {
@@ -674,8 +681,10 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       const parts = await Promise.all(reader.jobs.map(j => crew.running.get(j.name)));
       const main = reader.main();
       const order = (/^[ \t>*_#]*RUN[*_]*:[ \t]*(.+)$/im.exec(reply.text)?.[1] || '').split(/[^\w-]+/).map(x => x.toLowerCase()).filter(Boolean);
-      // (Its own main code, if it wrote one; otherwise the kit runs the parts.)
-      html = main != null && !order.length ? teamAssemble(own, parts, main) : kitPage(kind(), own, parts, order);
+      // (Its own main code, if it wrote one; otherwise the kit runs the parts - its own rules part first.)
+      const rules = RULES_BLOCK.exec(reply.text)?.[1]?.trim();
+      const all = rules && !parts.some(x => x.name === 'rules') ? [{ name: 'rules', code: rules }, ...parts] : parts;
+      html = main != null && !order.length ? teamAssemble(own, parts, main) : kitPage(kind(), own, all, rules ? ['rules', ...order.filter(n => n !== 'rules')] : order);
       how = `${thought ? `thought ${thought}c, ` : ''}first word ${secs(firstAt)}, shared code ${secs(planAt)}, lead done ${secs(leadAt)} (${reply.text.length}c), ${parts.length} helpers${slowest(parts)}`;
     } else if (reader.adding && reader.jobs.length) {
       if (!page) throw new Error('new parts on a blank page');
