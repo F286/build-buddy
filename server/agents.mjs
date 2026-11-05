@@ -95,7 +95,7 @@ ${buildingRules()}`;
 
 // While the kid waits, every piece of the plan is small: the kid sees it sooner, and it's grown
 // while they play.
-const QUICK_SIZE = { shared: 10, jobWords: 20, main: '15-25', partLines: 18, partChars: 1400, maxChars: 2000 };
+const QUICK_SIZE = { shared: 10, jobWords: 20, main: '15-25', partLines: 16, partChars: 1250, maxChars: 1800 };
 // How many helpers write at once while the kid waits (more, smaller parts: the kid waits for the
 // slowest), and how many are kept started and waiting: three more, for the first job's twin and
 // second tries on slow jobs.
