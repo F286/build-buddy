@@ -165,7 +165,7 @@ The page is Build Buddy's kit, your shared code, each part, then run([...]) in y
 function helperRules({ asked, latest = '', look, freshLook = '', quick = true }) {
   return `# How to write your part
 
-You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. page.html has Build Buddy's kit at the top (when it starts with \`// ---- kit\`), then the lead's shared code, a \`// @part <name>\` line where each part goes, and at the bottom run([...]) (or, on older pages, MAIN), which uses your part exactly as your job says. On the kit: ${kitApi('2d')} (In 3D: the kit gives THREE, scene, camera, renderer and sun, and tap(x, y, ray) gets a THREE.Raycaster.) The comments in the shared code tell you how the parts fit together (the coordinates, how they talk to each other) - follow them. Other helpers write the other parts at the same time.
+You are a helper on a small team building a web page for a ${config().kidAge}-year-old, from what the kid said out loud. page.html has Build Buddy's kit at the top (when it starts with \`// ---- kit\`), then the lead's shared code, a \`// @part <name>\` line where each part goes, and at the bottom run([...]) (or, on older pages, MAIN), which uses your part exactly as your job says. On the kit: ${kitApi('2d')} (In 3D: the kit gives THREE, scene, camera, renderer and sun, tap(x, y, ray) gets a THREE.Raycaster, and positions between parts are in world units.) The comments in the shared code tell you how the parts fit together (the coordinates, how they talk to each other) - follow them. Other helpers write the other parts at the same time.
 
 - Read rules.md and page.html together (both Reads at once), then write only the file your job names, with the Write tool (or Edit, if your job is to change a part that's there)${quick ? " - in one go: the lead checks every part afterwards, so don't polish it with more edits" : ''}. Then reply with one short line: what you defined.
 - Define exactly what your job says (the same names and parameters, returning the same things): MAIN depends on it. Use the shared code's names as they are.
@@ -510,24 +510,30 @@ function missingParts(html) {
 // Names the page assigns to but never declares (fx_add = (...) => ..., const k = KB_ = keep): the
 // page is a module, so the line throws the moment it runs - and the kit leaves that hook out from
 // then on. Each gets a `var` (hoisted: it's there wherever it's first used) just before run([...]).
-const KEYWORDS = new Set('break case catch class const continue debugger default delete do else export extends finally for function if import in instanceof let new return super switch this throw try typeof var void while with yield await async of static get set true false null undefined NaN Infinity'.split(' '));
+const KEYWORDS = new Set('break case catch class const continue debugger default delete do else export extends finally for function if import in instanceof let new return super switch this throw try typeof var void while with yield await async of static get set true false null undefined NaN Infinity implements interface package private protected public enum eval arguments'.split(' '));
 export function undeclared(html) {
-  const bare = [...html.matchAll(/<script\b[^>]*\btype=["']?module\b[^>]*>([\s\S]*?)<\/script>/gi)]
-    .map(m => m[1])
-    .join('\n')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, '``')
-    .replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, "''")
-    .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  // (Strings, template text and comments out, so only code is read.)
+  const codeOf = scripts =>
+    scripts
+      .map(m => m[2])
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, '``')
+      .replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, "''")
+      .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+  const bare = codeOf(scripts.filter(m => /\btype=["']?module\b/i.test(m[1])));
+  // (Names any script declares count, so the page's other scripts are read for declarations too.)
+  const all = codeOf(scripts);
   const declared = new Set();
   const add = text => { for (const m of text.matchAll(/[A-Za-z_$][\w$]*/g)) declared.add(m[0]); };
   // Every name a const/let/var list declares (a = 1, b = 2, { c, d } = o), to the end of the list.
-  for (const m of bare.matchAll(/\b(?:const|let|var)\b/g)) {
+  for (const m of all.matchAll(/\b(?:const|let|var)\b/g)) {
     let depth = 0;
     let expect = true;
     let last = '';
-    for (let i = m.index + m[0].length; i < bare.length; i++) {
-      const ch = bare[i];
+    for (let i = m.index + m[0].length; i < all.length; i++) {
+      const ch = all[i];
       if (/\s/.test(ch)) {
         if (ch === '\n' && depth === 0 && !expect && !/[,=+\-*/%&|^?:([{<>!~.]$/.test(last)) break;
         continue;
@@ -536,15 +542,15 @@ export function undeclared(html) {
         if (ch === '{' || ch === '[') {
           let d = 0;
           let j = i;
-          for (; j < bare.length; j++) {
-            if ('{['.includes(bare[j])) d++;
-            else if ('}]'.includes(bare[j]) && --d === 0) break;
+          for (; j < all.length; j++) {
+            if ('{['.includes(all[j])) d++;
+            else if ('}]'.includes(all[j]) && --d === 0) break;
           }
-          add(bare.slice(i, j + 1));
+          add(all.slice(i, j + 1));
           [i, expect, last] = [j, false, ']'];
           continue;
         }
-        const id = /^[A-Za-z_$][\w$]*/.exec(bare.slice(i, i + 80))?.[0];
+        const id = /^[A-Za-z_$][\w$]*/.exec(all.slice(i, i + 80))?.[0];
         if (id) {
           declared.add(id);
           [i, expect, last] = [i + id.length - 1, false, 'x'];
@@ -559,14 +565,16 @@ export function undeclared(html) {
       last = ch;
     }
   }
-  for (const m of bare.matchAll(/\b(?:function\s*\*?|class)\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
-  for (const m of bare.matchAll(/\bimport\s+(?:\*\s+as\s+)?([\s\S]*?)\s+from\b/g)) add(m[1]);
+  for (const m of all.matchAll(/\b(?:function\s*\*?|class)\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  for (const m of all.matchAll(/\bimport\s+(?:\*\s+as\s+)?([\s\S]*?)\s+from\b/g)) add(m[1]);
   // (Parameters: function (...) {, method(...) {, (...) =>, x =>, catch (e).)
-  for (const m of bare.matchAll(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:=>|\{)/g)) add(m[1].replace(/=[^,]*/g, ''));
-  for (const m of bare.matchAll(/([A-Za-z_$][\w$]*)\s*=>/g)) declared.add(m[1]);
-  for (const m of bare.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  for (const m of all.matchAll(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:=>|\{)/g)) add(m[1].replace(/=[^,]*/g, ''));
+  for (const m of all.matchAll(/([A-Za-z_$][\w$]*)\s*=>/g)) declared.add(m[1]);
+  for (const m of all.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  // (And the window's own: window.level = 1 makes level a name every script can use.)
+  for (const m of all.matchAll(/\b(?:window|globalThis|self)\.([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
   const names = new Set();
-  for (const m of bare.matchAll(/(?<![\w$.\])}'"`?:]\s*|[\w$.])([A-Za-z_$][\w$]*)\s*(?:[-+*/%|&^]|\*\*|<<|>>>?|\|\||&&|\?\?)?=(?![=>])/g)) {
+  for (const m of bare.matchAll(/(?<![\w$.\])}'"`?:][ \t]*|[\w$.])([A-Za-z_$][\w$]*)[ \t]*(?:[-+*/%|&^]|\*\*|<<|>>>?|\|\||&&|\?\?)?=(?![=>])/g)) {
     const n = m[1];
     // (The window's own properties - onresize = ..., name = ... - are there already.)
     if (!KEYWORDS.has(n) && !declared.has(n) && !/^on[a-z]+$/.test(n) && !['name', 'status', 'location'].includes(n)) names.add(n);
@@ -574,11 +582,14 @@ export function undeclared(html) {
   return [...names];
 }
 
-function declareMissing(html) {
+// (Only if the page still parses as well as it did: a declaration this missed would make it twice.)
+async function declareMissing(html) {
   const names = undeclared(html);
   if (!names.length || !/^\/\/ ---- main[ \t]*$/m.test(html)) return html;
+  const next = html.replace(/^\/\/ ---- main[ \t]*$/m, m => `var ${names.join(', ')}; // (assigned, but never declared)\n\n${m}`);
+  if ((await syntaxErrors(next)).length > (await syntaxErrors(html)).length) return html;
   log(`agents: the page assigned ${names.join(', ')} without declaring ${names.length > 1 ? 'them' : 'it'}, so ${names.length > 1 ? 'they were' : 'it was'} declared`);
-  return html.replace(/^\/\/ ---- main[ \t]*$/m, m => `var ${names.join(', ')}; // (assigned, but never declared)\n\n${m}`);
+  return next;
 }
 
 // Events emitted that nothing answers, and answered that nothing emits (for the log: wiring that
@@ -827,7 +838,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const raw = html;
   html = await renameClashes(html);
   const named = repairNames(html);
-  html = declareMissing(named.html);
+  html = await declareMissing(named.html);
   let problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems, ...missingMethods(html), ...missingParts(html)];
   // (Did it write every line of the change itself, and is each in as it wrote it?)
   let mine = exact && html === raw && !crew.jobs.length && !team.helpers.size;
@@ -936,6 +947,10 @@ export async function check({ projectId, version, report, screenshot }) {
       if (grow) w.grow = false;
     };
     let built = assemble(s.dir);
+    if (built?.html && !built.missing.length) {
+      const declared = await declareMissing(built.html);
+      if (declared !== built.html) built = { html: keepAsFiles(s.dir, declared), missing: [] };
+    }
     if (!built?.html || built.html === page) {
       if (!built?.html) {
         restore(s.dir, before);
@@ -944,10 +959,6 @@ export async function check({ projectId, version, report, screenshot }) {
       done();
       log(`AGENTS ok   ${took()} (pass ${w.passes})`);
       return { ok: true };
-    }
-    if (!built.missing.length) {
-      const declared = declareMissing(built.html);
-      if (declared !== built.html) built = { html: keepAsFiles(s.dir, declared), missing: [] };
     }
     // With its changes in, the page should still run as well as before.
     const was = (await syntaxErrors(page)).length;
@@ -1017,7 +1028,7 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     return edits.length ? { skipped: 'stale' } : { ok: true };
   }
   const fitted = await applyEditsWithFixer(page, edits);
-  const html = declareMissing(await renameClashes(fitted.html));
+  const html = await declareMissing(await renameClashes(fitted.html));
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
     log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
     return { skipped: stale() ? 'stale' : "the change didn't run" };
