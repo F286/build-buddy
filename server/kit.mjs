@@ -135,19 +135,25 @@ For a 5-year-old: a tap anywhere on a thing - its whole body and a little around
 // The page: the kit, the plan's shared code, every part, and run([...]) in the plan's order.
 export function kitPage(kind, shared, parts, order) {
   const names = parts.map(p => p.name);
-  const ordered = [...order.filter(n => names.includes(n)), ...names.filter(n => !order.includes(n))];
+  // (RUN may name a part by its object instead - //@part scene: const scene2 = { ... } run as
+  // scene2 - and a part RUN leaves out goes last, in front of everything: a background there hides
+  // the whole creation.)
+  const flat = s => s.replace(/[-_]/g, '').toLowerCase();
+  const nameOf = n => (names.includes(n) ? n : names.find(x => flat(idOf(x)) === flat(n)));
+  const listed = [...new Set(order.map(nameOf).filter(Boolean))];
+  const ordered = [...listed, ...names.filter(n => !listed.includes(n))];
   // (The kit imports THREE: a copy in the shared code or a part would declare it twice.)
   const strip = code => (kind === '3d' ? code.replace(/^[ \t]*import\s+\*\s+as\s+THREE\s+from\s+['"]three['"];?[ \t]*$/gm, '') : code);
   // The name each part's own object has: the job's name is lowercased (dragonlook), but the part may
   // declare dragonLook or dragon_look.
-  const idOf = n => {
+  function idOf(n) {
     const p = parts.find(x => x.name === n);
     const want = n.replace(/[-_]/g, '').toLowerCase();
     const declared = [...(p?.code || '').matchAll(/^(?:const|let|var|class|function)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
     // (Or, when none has its name - a camera job that wrote const cam = { ... } - the one object it declares.)
     const objects = [...(p?.code || '').matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{/gm)].map(m => m[1]);
     return declared.find(id => id.replace(/_/g, '').toLowerCase() === want) || (objects.length === 1 && !KIT_NAMES.includes(objects[0]) ? objects[0] : n);
-  };
+  }
   const ids = ordered.map(idOf);
   // A part with the name of something the kit declares (a 3D sun or camera, a 2D input): the plan
   // means the part, so it's the kit's own that is renamed.
