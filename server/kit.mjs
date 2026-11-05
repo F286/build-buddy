@@ -24,10 +24,16 @@ const canvas = document.createElement('canvas');
 canvas.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none';
 document.body.append(canvas);
 const ctx = canvas.getContext('2d');
-// (A shape with a negative radius - a shrinking bubble - is drawn at its size instead of stopping the page.)
+// (A shape with a negative radius - a shrinking bubble - is drawn at its size instead of stopping the page;
+// a gradient given a number that isn't one - NaN before something has its place - is made at 0 instead
+// of throwing, which would leave that part's drawing out from then on.)
 for (const f of ['arc', 'ellipse']) {
   const draw = CanvasRenderingContext2D.prototype[f];
   CanvasRenderingContext2D.prototype[f] = function (...a) { a[2] = Math.abs(a[2]) || 0; if (f === 'ellipse') a[3] = Math.abs(a[3]) || 0; return draw.apply(this, a); };
+}
+for (const f of ['createLinearGradient', 'createRadialGradient']) {
+  const make = CanvasRenderingContext2D.prototype[f];
+  CanvasRenderingContext2D.prototype[f] = function (...a) { return make.apply(this, a.map((v, i) => (Number.isFinite(v) ? (f === 'createRadialGradient' && (i === 2 || i === 5) ? Math.abs(v) : v) : 0))); };
 }
 let W = innerWidth, H = innerHeight;
 const kitFit = () => { W = canvas.width = innerWidth; H = canvas.height = innerHeight; };
@@ -152,6 +158,11 @@ export function kitPage(kind, shared, parts, order) {
     const declared = [...(p?.code || '').matchAll(/^(?:const|let|var|class|function)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
     // (Or, when none has its name - a camera job that wrote const cam = { ... } - the one object it declares.)
     const objects = [...(p?.code || '').matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{/gm)].map(m => m[1]);
+    // (Or the object it fills in - the shared code's const car = { ... } that a racer part gives its
+    // hooks with Object.assign(car, { init() { ... } }) - rather than a helper object of its own.)
+    const filled = /^Object\.assign\(\s*([A-Za-z_$][\w$]*)\s*,\s*\{/m.exec(p?.code || '')?.[1];
+    const empty = [...(p?.code || '').matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{\s*\}/gm)].map(m => m[1]);
+    if (filled && !declared.includes(filled) && !KIT_NAMES.includes(filled) && objects.every(o => empty.includes(o))) return declared.find(id => id.replace(/_/g, '').toLowerCase() === want) || filled;
     return declared.find(id => id.replace(/_/g, '').toLowerCase() === want) || (objects.length === 1 && !KIT_NAMES.includes(objects[0]) ? objects[0] : n);
   }
   const ids = ordered.map(idOf);
