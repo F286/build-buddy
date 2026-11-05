@@ -53,7 +53,7 @@ function lead() {
     // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
     // model set: without one there'd be nothing to switch back to.
     firstModel: model ? r.firstModel || '' : '',
-    thinking: { build: 0, wire: 4000, look: 10000, ...(r.thinking || {}) },
+    thinking: { build: 0, wire: 8000, look: 10000, ...(r.thinking || {}) },
   };
 }
 
@@ -202,6 +202,7 @@ const WIRE = `Your helpers' parts are in and the kid is playing with it now - he
 - Follow every control - each arrow key, a tap, a drag - from the kit's hook to what moves on screen, and every event from each emit to each on. Fix what's dead (never emitted or never answered, a method nobody calls, a hook the kit never calls), what lands somewhere else than what's drawn (a place worked out twice), and what fights (two parts moving the same thing).
 - Fix what would crash, and what can't be seen (off the screen, hidden behind or inside something, too small to notice).
 - Fix what's done twice (two parts changing the same number, one tap handled by two parts), and a tap() that takes every tap instead of only taps on its own thing.
+- Then play it in your head for half a minute as a 5-year-old would - tapping, holding, dragging, doing nothing - working the numbers through the code: does what they asked for show from the first second (rain already falling, the fish already swimming), can the main thing really succeed (the ball can reach the hoop, the rocket lands once and stays), does what adds up visibly build with each poke, and does anything fire over and over, pile up or never happen? Fix what doesn't.
 Reply in text only: FIND/REPLACE edits, each FIND copied exactly from the page above, then WHY: <what you fixed, in one short sentence for the grown-ups' log>. If it all works as it is, reply with just: OK`;
 
 // Looking it over again, as a demanding parent would (the passes after that).
