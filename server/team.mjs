@@ -181,7 +181,20 @@ ${worldRules()}
 ${buildingRules()}`, 'ask it once, right before you write the plan, the changes or the edits.');
 }
 
-function helperSystem() {
+// kit: the agent way's helpers (on Build Buddy's kit, with a rules part that owns the counts) get
+// the two lines about shared numbers and keep that fit that; team mode's are as they always were.
+const KIT_LINES = [
+  ["- The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules, cycles or discoveries your job doesn't ask for.",
+    "- The world's rules belong to the lead's rules part: read the shared numbers your job names and emit what happens - never change a count or a world number yourself (the rules part does), never keep a copy of your own, and add no rules, cycles or discoveries your job doesn't ask for."],
+  ['put it back from there when your piece starts (on screen) and update it as it changes, not only in variables of your own.',
+    "put it back from there when your piece starts (on screen) and update the fields of your own things as they change (where they are, what's placed or chosen), not only in variables of your own - a count in keep you only read."],
+];
+export function helperSystem(kit = false) {
+  const text = teamHelperSystem();
+  return kit ? KIT_LINES.reduce((t, [a, b]) => t.replace(a, b), text) : text;
+}
+
+function teamHelperSystem() {
   const c = config();
   return withAdvisor('helper', `You are a helper on a small team building a web page for a ${c.kidAge}-year-old: pictures, animated scenes, toys and little games, made from what the kid says out loud. The team lead has planned the page: shared code every piece uses, one job for each helper, and the main code that puts the pieces together. You write the code for one job, while the other helpers write theirs at the same time.
 
@@ -870,7 +883,7 @@ async function fix(html, problem, signal, tally) {
 // at most maxHelpers() at once. crew.running holds each job's part: { ...job, reply, code,
 // startedAt, doneAt }. Team mode and the agent way (agents.mjs) both build with it.
 
-export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity, twinFirst = false }) {
+export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity, twinFirst = false, kit = false }) {
   const jobs = [];
   let hedges = 0; // second tries started (each one is more for the computer and the service to do)
   const running = new Map();
@@ -905,7 +918,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
         let wrote = false;
         const one = i =>
           ask('helper', {
-            system: helperSystem(),
+            system: helperSystem(kit),
             prompt,
             stallSec: 20,
             onText: chunk => {
@@ -965,7 +978,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
 }
 
 // Have the helpers' programs started and waiting (the agent way warms them while the kid talks).
-export const warmHelpers = (count = maxHelpers(), ms = WARM_MS) => keepWarm('helper', helperSystem(), count, ms);
+export const warmHelpers = (count = maxHelpers(), ms = WARM_MS, kit = false) => keepWarm('helper', helperSystem(kit), count, ms);
 
 export { PlanReader, codeOf, applyEditsWithFixer, fix as fixPage, EDIT_FORMAT };
 
