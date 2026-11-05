@@ -158,9 +158,9 @@ export function kitPage(kind, shared, parts, order) {
     const declared = [...(p?.code || '').matchAll(/^(?:const|let|var|class|function)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
     // (Or, when none has its name - a camera job that wrote const cam = { ... } - the one object it declares.)
     const objects = [...(p?.code || '').matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{/gm)].map(m => m[1]);
-    // (Or the object it fills in - the shared code's const car = { ... } that a racer part gives its
-    // hooks with Object.assign(car, { init() { ... } }) - rather than a helper object of its own.)
-    // (The one with the part's name, or else the one given hooks - never world, given numbers.)
+    // (Or, when its own objects are all empty, the object it fills in: the shared code's
+    // const car = { ... } that a racer part gives its hooks with Object.assign(car, { init() { ... } }) -
+    // the one with the part's name, or else the one given hooks, never world given only numbers.)
     const code = p?.code || '';
     const fills = [...code.matchAll(/^Object\.assign\(\s*([A-Za-z_$][\w$]*)\s*,\s*\{/gm)].map((m, i, all) => ({ id: m[1], body: code.slice(m.index, all[i + 1]?.index ?? code.length) }));
     const hooked = f => /(?:^|[\s,{])(?:init|update|draw|tap|drag|release|key)\s*(?:\(|:\s*(?:function|\())/.test(f.body);
