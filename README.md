@@ -493,7 +493,7 @@ above, a farm, a 3D sea, and four kinds in a kid's own words from saved requests
 show, a Jurassic World with a volcano, a car wash, and driving to the school, the fire station and
 the shops). Two were built at once, each put on a stage like the app's and played with (every arrow
 key, two taps and a drag), and every pair was judged blind twice, in both orders. Main judged against
-itself won 23 of 44 judgments, and one version's rounds ranged from 18 to 30 of 44: most rounds were
+itself won 23 of 44 judgments, and one version's rounds ranged from 18 of 43 to 30 of 44: most were
 decided by a creation that broke. Two changes came out of it, neither of which makes the kid wait
 longer:
 
@@ -520,11 +520,11 @@ Measured and left out, because the kid would wait longer:
 
 - **A keys comment in the plan** (`// keys: left/right roll, up throws, down bounces - ball`, next to
   the events, so every helper knows what each arrow key does). It worked on what it aimed at: side by
-  side with main, the judges named dead arrow keys as a creation's biggest problem 19, 17, 17 and 19
-  times for main against 7, 4, 6 and 7 for it, and with the four repairs it won 23 of 32 judgments
+  side with main, the judges' biggest problem for a creation mentioned its arrow keys 19, 17, 17 and
+  19 times for main against 7, 4, 6 and 7 for it, and with the four repairs it won 23 of 32 judgments
   (6.4 against 5.8 overall), but on the eight requests no round tuned on it was even with main (31 of
   64 over four runs). Its helpers wrote 5-15% more (each part that answers a key writes that too), and
-  something new took 1 to 3.5 s longer in every run. Asking for smaller parts to make up for it was
+  something new took longer in every run: 0.6 to 6.7 s on average, 3.5 s for its last version. Asking for smaller parts to make up for it was
   1.2 s quicker than main but lost 15 of 32 judgments (5.5 against 6.1).
 - A size for the star (at least a fifth of the screen) and a rule that every position between parts
   is in pixels showed nothing on what they aimed at (and the size made a growing maze overflow the
