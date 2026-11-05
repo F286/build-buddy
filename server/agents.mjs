@@ -507,6 +507,80 @@ function missingParts(html) {
   return gone.length ? [`run([...]) runs ${gone.join(', ')}, but nothing declares ${gone.length > 1 ? 'them' : 'it'}: the part${gone.length > 1 ? 's' : ''} named ${gone.length > 1 ? 'their objects' : 'its object'} differently - use one name.`] : [];
 }
 
+// Names the page assigns to but never declares (fx_add = (...) => ..., const k = KB_ = keep): the
+// page is a module, so the line throws the moment it runs - and the kit leaves that hook out from
+// then on. Each gets a `var` (hoisted: it's there wherever it's first used) just before run([...]).
+const KEYWORDS = new Set('break case catch class const continue debugger default delete do else export extends finally for function if import in instanceof let new return super switch this throw try typeof var void while with yield await async of static get set true false null undefined NaN Infinity'.split(' '));
+export function undeclared(html) {
+  const bare = [...html.matchAll(/<script\b[^>]*\btype=["']?module\b[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map(m => m[1])
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, '``')
+    .replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, "''")
+    .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  const declared = new Set();
+  const add = text => { for (const m of text.matchAll(/[A-Za-z_$][\w$]*/g)) declared.add(m[0]); };
+  // Every name a const/let/var list declares (a = 1, b = 2, { c, d } = o), to the end of the list.
+  for (const m of bare.matchAll(/\b(?:const|let|var)\b/g)) {
+    let depth = 0;
+    let expect = true;
+    let last = '';
+    for (let i = m.index + m[0].length; i < bare.length; i++) {
+      const ch = bare[i];
+      if (/\s/.test(ch)) {
+        if (ch === '\n' && depth === 0 && !expect && !/[,=+\-*/%&|^?:([{<>!~.]$/.test(last)) break;
+        continue;
+      }
+      if (expect && depth === 0) {
+        if (ch === '{' || ch === '[') {
+          let d = 0;
+          let j = i;
+          for (; j < bare.length; j++) {
+            if ('{['.includes(bare[j])) d++;
+            else if ('}]'.includes(bare[j]) && --d === 0) break;
+          }
+          add(bare.slice(i, j + 1));
+          [i, expect, last] = [j, false, ']'];
+          continue;
+        }
+        const id = /^[A-Za-z_$][\w$]*/.exec(bare.slice(i, i + 80))?.[0];
+        if (id) {
+          declared.add(id);
+          [i, expect, last] = [i + id.length - 1, false, 'x'];
+          continue;
+        }
+      }
+      if ('([{'.includes(ch)) depth++;
+      else if (')]}'.includes(ch)) {
+        if (--depth < 0) break;
+      } else if (ch === ';' && depth === 0) break;
+      else if (ch === ',' && depth === 0) expect = true;
+      last = ch;
+    }
+  }
+  for (const m of bare.matchAll(/\b(?:function\s*\*?|class)\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  for (const m of bare.matchAll(/\bimport\s+(?:\*\s+as\s+)?([\s\S]*?)\s+from\b/g)) add(m[1]);
+  // (Parameters: function (...) {, method(...) {, (...) =>, x =>, catch (e).)
+  for (const m of bare.matchAll(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:=>|\{)/g)) add(m[1].replace(/=[^,]*/g, ''));
+  for (const m of bare.matchAll(/([A-Za-z_$][\w$]*)\s*=>/g)) declared.add(m[1]);
+  for (const m of bare.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  const names = new Set();
+  for (const m of bare.matchAll(/(?<![\w$.\])}'"`?:]\s*|[\w$.])([A-Za-z_$][\w$]*)\s*(?:[-+*/%|&^]|\*\*|<<|>>>?|\|\||&&|\?\?)?=(?![=>])/g)) {
+    const n = m[1];
+    // (The window's own properties - onresize = ..., name = ... - are there already.)
+    if (!KEYWORDS.has(n) && !declared.has(n) && !/^on[a-z]+$/.test(n) && !['name', 'status', 'location'].includes(n)) names.add(n);
+  }
+  return [...names];
+}
+
+function declareMissing(html) {
+  const names = undeclared(html);
+  if (!names.length || !/^\/\/ ---- main[ \t]*$/m.test(html)) return html;
+  log(`agents: the page assigned ${names.join(', ')} without declaring ${names.length > 1 ? 'them' : 'it'}, so ${names.length > 1 ? 'they were' : 'it was'} declared`);
+  return html.replace(/^\/\/ ---- main[ \t]*$/m, m => `var ${names.join(', ')}; // (assigned, but never declared)\n\n${m}`);
+}
+
 // Events emitted that nothing answers, and answered that nothing emits (for the log: wiring that
 // didn't meet).
 function eventGaps(html) {
@@ -753,7 +827,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const raw = html;
   html = await renameClashes(html);
   const named = repairNames(html);
-  html = named.html;
+  html = declareMissing(named.html);
   let problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems, ...missingMethods(html), ...missingParts(html)];
   // (Did it write every line of the change itself, and is each in as it wrote it?)
   let mine = exact && html === raw && !crew.jobs.length && !team.helpers.size;
@@ -871,6 +945,10 @@ export async function check({ projectId, version, report, screenshot }) {
       log(`AGENTS ok   ${took()} (pass ${w.passes})`);
       return { ok: true };
     }
+    if (!built.missing.length) {
+      const declared = declareMissing(built.html);
+      if (declared !== built.html) built = { html: keepAsFiles(s.dir, declared), missing: [] };
+    }
     // With its changes in, the page should still run as well as before.
     const was = (await syntaxErrors(page)).length;
     const worse = async b => {
@@ -939,7 +1017,7 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     return edits.length ? { skipped: 'stale' } : { ok: true };
   }
   const fitted = await applyEditsWithFixer(page, edits);
-  const html = await renameClashes(fitted.html);
+  const html = declareMissing(await renameClashes(fitted.html));
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
     log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
     return { skipped: stale() ? 'stale' : "the change didn't run" };
