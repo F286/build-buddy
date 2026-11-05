@@ -24,10 +24,16 @@ const canvas = document.createElement('canvas');
 canvas.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;display:block;touch-action:none';
 document.body.append(canvas);
 const ctx = canvas.getContext('2d');
-// (A shape with a negative radius - a shrinking bubble - is drawn at its size instead of stopping the page.)
+// (A shape with a negative radius - a shrinking bubble - is drawn at its size instead of stopping the page;
+// a gradient given a number that isn't one - NaN before something has its place - is made at 0 instead
+// of throwing, which would leave that part's drawing out from then on.)
 for (const f of ['arc', 'ellipse']) {
   const draw = CanvasRenderingContext2D.prototype[f];
   CanvasRenderingContext2D.prototype[f] = function (...a) { a[2] = Math.abs(a[2]) || 0; if (f === 'ellipse') a[3] = Math.abs(a[3]) || 0; return draw.apply(this, a); };
+}
+for (const f of ['createLinearGradient', 'createRadialGradient']) {
+  const make = CanvasRenderingContext2D.prototype[f];
+  CanvasRenderingContext2D.prototype[f] = function (...a) { return make.apply(this, a.map((v, i) => (Number.isFinite(+v) ? (f === 'createRadialGradient' && (i === 2 || i === 5) ? Math.abs(+v) : +v) : 0))); };
 }
 let W = innerWidth, H = innerHeight;
 const kitFit = () => { W = canvas.width = innerWidth; H = canvas.height = innerHeight; };
@@ -135,19 +141,34 @@ For a 5-year-old: a tap anywhere on a thing - its whole body and a little around
 // The page: the kit, the plan's shared code, every part, and run([...]) in the plan's order.
 export function kitPage(kind, shared, parts, order) {
   const names = parts.map(p => p.name);
-  const ordered = [...order.filter(n => names.includes(n)), ...names.filter(n => !order.includes(n))];
+  // (RUN may name a part by its object instead - //@part scene: const scene2 = { ... } run as
+  // scene2 - and a part RUN leaves out goes last, in front of everything: a background there hides
+  // the whole creation.)
+  const flat = s => s.replace(/[-_]/g, '').toLowerCase();
+  const nameOf = n => (names.includes(n) ? n : names.find(x => flat(idOf(x)) === flat(n)));
+  const listed = [...new Set(order.map(nameOf).filter(Boolean))];
+  const ordered = [...listed, ...names.filter(n => !listed.includes(n))];
   // (The kit imports THREE: a copy in the shared code or a part would declare it twice.)
   const strip = code => (kind === '3d' ? code.replace(/^[ \t]*import\s+\*\s+as\s+THREE\s+from\s+['"]three['"];?[ \t]*$/gm, '') : code);
   // The name each part's own object has: the job's name is lowercased (dragonlook), but the part may
   // declare dragonLook or dragon_look.
-  const idOf = n => {
+  function idOf(n) {
     const p = parts.find(x => x.name === n);
     const want = n.replace(/[-_]/g, '').toLowerCase();
     const declared = [...(p?.code || '').matchAll(/^(?:const|let|var|class|function)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
     // (Or, when none has its name - a camera job that wrote const cam = { ... } - the one object it declares.)
     const objects = [...(p?.code || '').matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{/gm)].map(m => m[1]);
+    // (Or, when its own objects are all empty, the object it fills in: the shared code's
+    // const car = { ... } that a racer part gives its hooks with Object.assign(car, { init() { ... } }) -
+    // the one with the part's name, or else the one given hooks, never world given only numbers.)
+    const code = p?.code || '';
+    const fills = [...code.matchAll(/^Object\.assign\(\s*([A-Za-z_$][\w$]*)\s*,\s*\{/gm)].map((m, i, all) => ({ id: m[1], body: code.slice(m.index, all[i + 1]?.index ?? code.length) }));
+    const hooked = f => /(?:^|[\s,{])(?:init|update|draw|tap|drag|release|key)\s*(?:\(|:\s*(?:function|\())/.test(f.body);
+    const filled = (fills.find(f => f.id.replace(/_/g, '').toLowerCase() === want) || fills.find(hooked))?.id;
+    const empty = [...code.matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{\s*\}/gm)].map(m => m[1]);
+    if (filled && !declared.includes(filled) && !KIT_NAMES.includes(filled) && !['window', 'globalThis', 'self'].includes(filled) && objects.every(o => empty.includes(o))) return declared.find(id => id.replace(/_/g, '').toLowerCase() === want) || filled;
     return declared.find(id => id.replace(/_/g, '').toLowerCase() === want) || (objects.length === 1 && !KIT_NAMES.includes(objects[0]) ? objects[0] : n);
-  };
+  }
   const ids = ordered.map(idOf);
   // A part with the name of something the kit declares (a 3D sun or camera, a 2D input): the plan
   // means the part, so it's the kit's own that is renamed.

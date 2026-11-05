@@ -457,7 +457,7 @@ together: the parts talk through events (`emit('basket')` where it happens, `on(
 every part that reacts - the kit has both), the shared code says where the main places are, each
 thing on screen belongs to one part, and the lead writes the rules part itself while its helpers
 write theirs (the world's numbers, the score and the big moments). Right after it appears, a quick
-wire pass (in text, about 5 to 10 s while the kid plays) reads the helpers' code for the first time
+wire pass (in text, about 10 to 15 s while the kid plays) reads the helpers' code for the first time
 and fixes what doesn't meet. Judged blind on eight other requests against the version without
 these, the events, places and one-owner rule won 14 of 16 judgments (6.5 against 4.4 overall), and
 adding the lead's rules part won all 16 (6.9 against 4.1; coherent 6.9 against 3.6), at the same
@@ -487,6 +487,49 @@ Measured since, on the same eight requests, one at a time:
   helpers scored best alone (8.0, against 7.75 with Opus helpers and 7.0 with Sonnet leading too).
   Sonnet leading was the quickest (about 61 s to something new, against 68 s and 85 s) but lost 15
   of 16 judgments to the Opus lead.
+
+**Fewer broken creations.** Then it was measured on a bench of 22 requests a round: the sixteen
+above, a farm, a 3D sea, and four kinds in a kid's own words from saved requests (a monster truck
+show, a Jurassic World with a volcano, a car wash, and driving to the school, the fire station and
+the shops). Two were built at once, each put on a stage like the app's and played with (every arrow
+key, two taps and a drag), and every pair was judged blind twice, in both orders. Main judged against
+itself won 23 of 44 judgments, and one version's rounds ranged from 18 of 43 to 30 of 44: most were
+decided by a creation that broke. Two changes came out of it, neither of which makes the kid wait
+longer:
+
+- **Four ways a whole part was lost are put right before the page is shown** (in code, no AI and no
+  prompt change). A name a part assigned but never declared (`fx_add = ...`: in a module that throws,
+  and the kit leaves the hook out) - 2 of main's 22 first builds lost their star or their sparkles that
+  way; it now gets a `var`, only if the page still parses as well. A RUN line naming a part by its
+  object (`//@part scene: const scene2 = ...`, then `RUN: scene2, ...`) sent that part to the front -
+  6 of the first 40 plans, and in two the background hid the whole creation; RUN now matches objects
+  too. A part that filled in the shared code's object (`Object.assign(car, { ... })`) beside an empty
+  one of its own ran the empty one, so the car never appeared. And a gradient given NaN threw and left
+  the part's drawing out for good; it now gets 0. With these alone, against main's builds: 25 of 44
+  judgments, 6.0 against 5.6 overall (the creations that had broken went from 1 to about 7), at
+  29.6 s against 31.4 s to something new.
+- **The wire pass works the numbers through.** It first writes a short trace of the main action
+  through the code's real numbers (the ball's highest point against the rim's height), then fixes
+  what's broken. On the same first builds, against the wire pass before: 25 of 44 judgments, nearly
+  all slight (2 clear wins, no clear losses), 6.1 against 5.9 overall; and on the eight requests no
+  round tuned on (a fish tank, a dancing dino, a 3D castle with a dragon, a marble run, a hamster,
+  a pirate ship, a treehouse and a bubble machine), built fresh by main, 12 of 16, all slight (6.3
+  against 6.2). It takes about 12 s instead of 7, while the kid plays.
+
+Measured and left out, because the kid would wait longer:
+
+- **A keys comment in the plan** (`// keys: left/right roll, up throws, down bounces - ball`, next to
+  the events, so every helper knows what each arrow key does). It worked on what it aimed at: side by
+  side with main, the judges' biggest problem for a creation mentioned its arrow keys 19, 17, 17 and
+  19 times for main against 7, 4, 6 and 7 for it, and with the four repairs it won 23 of 32 judgments
+  (6.4 against 5.8 overall), but on the eight requests no round tuned on it was even with main (31 of
+  64 over four runs). Its helpers wrote 5-15% more (each part that answers a key writes that too), and
+  something new took longer in every run: 0.6 to 6.7 s on average, 3.5 s for its last version. Asking for smaller parts to make up for it was
+  1.2 s quicker than main but lost 15 of 32 judgments (5.5 against 6.1).
+- A size for the star (at least a fifth of the screen) and a rule that every position between parts
+  is in pixels showed nothing on what they aimed at (and the size made a growing maze overflow the
+  screen); starting second helpers sooner, and helpers that don't think first, didn't make it
+  quicker (what holds a helper up is how soon the service answers).
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
@@ -606,6 +649,8 @@ but `setup.sh` needs WSL, or use `"stt": "browser", "tts": "browser"` with Chrom
 server/main.mjs      web server, API, full-screen browser launcher
 server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
 server/team.mjs      team mode: a lead and helpers that build a creation together, at the same time
+server/agents.mjs    team mode, the agent way: one lead that remembers the creation, helpers for its parts
+server/kit.mjs       the agent way's kit: canvas or 3D scene, input, sounds and the loop for every part
 server/solo.mjs      solo mode: one Claude session per creation that remembers it and keeps improving it
 server/speech.mjs    whisper.cpp (listening), Kokoro and Piper (talking)
 server/watch.mjs     the overwatch: a stronger model that checks on games and fixes them

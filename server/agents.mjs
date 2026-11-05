@@ -203,7 +203,7 @@ const WIRE = `Your helpers' parts are in and the kid is playing with it now - he
 - Fix what would crash, and what can't be seen (off the screen, hidden behind or inside something, too small to notice).
 - Fix what's done twice (two parts changing the same number, one tap handled by two parts), and a tap() that takes every tap instead of only taps on its own thing.
 - Then play it in your head for half a minute as a 5-year-old would - tapping, holding, dragging, doing nothing - working the numbers through the code: does what they asked for show from the first second (rain already falling, the fish already swimming), can the main thing really succeed (the ball can reach the hoop, the rocket lands once and stays), does what adds up visibly build with each poke, and does anything fire over and over, pile up or never happen? Fix what doesn't.
-Reply in text only: FIND/REPLACE edits, each FIND copied exactly from the page above, then WHY: <what you fixed, in one short sentence for the grown-ups' log>. If it all works as it is, reply with just: OK`;
+Reply in text only. First TRACE: a few short lines working it through the code's real numbers - each control from its hook to what moves on screen, and the main thing from the first poke to its big moment (the ball's highest point against the rim's height; how many pokes fill the jar; where the star is after ten seconds of doing nothing) - each line ending in works or broken. Then FIND/REPLACE edits for everything broken, each FIND copied exactly from the page above, then WHY: <what you fixed, in one short sentence for the grown-ups' log>. If nothing is broken, end with just: OK`;
 
 // Looking it over again, as a demanding parent would (the passes after that).
 const LOOK = `Test it the way a demanding parent who designs kids' simulations and games would, before they play it with their kid - in the files and in the screenshot:
@@ -507,6 +507,91 @@ function missingParts(html) {
   return gone.length ? [`run([...]) runs ${gone.join(', ')}, but nothing declares ${gone.length > 1 ? 'them' : 'it'}: the part${gone.length > 1 ? 's' : ''} named ${gone.length > 1 ? 'their objects' : 'its object'} differently - use one name.`] : [];
 }
 
+// Names the page assigns to but never declares (fx_add = (...) => ..., const k = KB_ = keep): the
+// page is a module, so the line throws the moment it runs - and the kit leaves that hook out from
+// then on. Each gets a `var` (hoisted: it's there wherever it's first used) just before run([...]).
+const KEYWORDS = new Set('break case catch class const continue debugger default delete do else export extends finally for function if import in instanceof let new return super switch this throw try typeof var void while with yield await async of static get set true false null undefined NaN Infinity implements interface package private protected public enum eval arguments'.split(' '));
+export function undeclared(html) {
+  // (Strings, template text and comments out, so only code is read.)
+  const codeOf = scripts =>
+    scripts
+      .map(m => m[2])
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/`(?:\\[\s\S]|\$\{[^}]*\}|[^`\\])*`/g, '``')
+      .replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"/g, "''")
+      .replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+  const bare = codeOf(scripts.filter(m => /\btype=["']?module\b/i.test(m[1])));
+  // (Names any script declares count, so the page's other scripts are read for declarations too.)
+  const all = codeOf(scripts);
+  const declared = new Set();
+  const add = text => { for (const m of text.matchAll(/[A-Za-z_$][\w$]*/g)) declared.add(m[0]); };
+  // Every name a const/let/var list declares (a = 1, b = 2, { c, d } = o), to the end of the list.
+  for (const m of all.matchAll(/\b(?:const|let|var)\b/g)) {
+    let depth = 0;
+    let expect = true;
+    let last = '';
+    for (let i = m.index + m[0].length; i < all.length; i++) {
+      const ch = all[i];
+      if (/\s/.test(ch)) {
+        if (ch === '\n' && depth === 0 && !expect && !/[,=+\-*/%&|^?:([{<>!~.]$/.test(last)) break;
+        continue;
+      }
+      if (expect && depth === 0) {
+        if (ch === '{' || ch === '[') {
+          let d = 0;
+          let j = i;
+          for (; j < all.length; j++) {
+            if ('{['.includes(all[j])) d++;
+            else if ('}]'.includes(all[j]) && --d === 0) break;
+          }
+          add(all.slice(i, j + 1));
+          [i, expect, last] = [j, false, ']'];
+          continue;
+        }
+        const id = /^[A-Za-z_$][\w$]*/.exec(all.slice(i, i + 80))?.[0];
+        if (id) {
+          declared.add(id);
+          [i, expect, last] = [i + id.length - 1, false, 'x'];
+          continue;
+        }
+      }
+      if ('([{'.includes(ch)) depth++;
+      else if (')]}'.includes(ch)) {
+        if (--depth < 0) break;
+      } else if (ch === ';' && depth === 0) break;
+      else if (ch === ',' && depth === 0) expect = true;
+      last = ch;
+    }
+  }
+  for (const m of all.matchAll(/\b(?:function\s*\*?|class)\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  for (const m of all.matchAll(/\bimport\s+(?:\*\s+as\s+)?([\s\S]*?)\s+from\b/g)) add(m[1]);
+  // (Parameters: function (...) {, method(...) {, (...) =>, x =>, catch (e).)
+  for (const m of all.matchAll(/\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:=>|\{)/g)) add(m[1].replace(/=[^,]*/g, ''));
+  for (const m of all.matchAll(/([A-Za-z_$][\w$]*)\s*=>/g)) declared.add(m[1]);
+  for (const m of all.matchAll(/\bcatch\s*\(\s*([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  // (And the window's own: window.level = 1 makes level a name every script can use.)
+  for (const m of all.matchAll(/\b(?:window|globalThis|self)\.([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+  const names = new Set();
+  for (const m of bare.matchAll(/(?<![\w$.\])}'"`?:][ \t]*|[\w$.])([A-Za-z_$][\w$]*)[ \t]*(?:[-+*/%|&^]|\*\*|<<|>>>?|\|\||&&|\?\?)?=(?![=>])/g)) {
+    const n = m[1];
+    // (The window's own properties - onresize = ..., name = ... - are there already.)
+    if (!KEYWORDS.has(n) && !declared.has(n) && !/^on[a-z]+$/.test(n) && !['name', 'status', 'location'].includes(n)) names.add(n);
+  }
+  return [...names];
+}
+
+// (Only if the page still parses as well as it did: a declaration this missed would make it twice.)
+async function declareMissing(html) {
+  const names = undeclared(html);
+  if (!names.length || !/^\/\/ ---- main[ \t]*$/m.test(html)) return html;
+  const next = html.replace(/^\/\/ ---- main[ \t]*$/m, m => `var ${names.join(', ')}; // (assigned, but never declared)\n\n${m}`);
+  if ((await syntaxErrors(next)).length > (await syntaxErrors(html)).length) return html;
+  log(`agents: the page assigned ${names.join(', ')} without declaring ${names.length > 1 ? 'them' : 'it'}, so ${names.length > 1 ? 'they were' : 'it was'} declared`);
+  return next;
+}
+
 // Events emitted that nothing answers, and answered that nothing emits (for the log: wiring that
 // didn't meet).
 function eventGaps(html) {
@@ -753,7 +838,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const raw = html;
   html = await renameClashes(html);
   const named = repairNames(html);
-  html = named.html;
+  html = await declareMissing(named.html);
   let problems = [...(await syntaxErrors(html)), ...blankProblems(html), ...named.problems, ...missingMethods(html), ...missingParts(html)];
   // (Did it write every line of the change itself, and is each in as it wrote it?)
   let mine = exact && html === raw && !crew.jobs.length && !team.helpers.size;
@@ -862,6 +947,10 @@ export async function check({ projectId, version, report, screenshot }) {
       if (grow) w.grow = false;
     };
     let built = assemble(s.dir);
+    if (built?.html && !built.missing.length) {
+      const declared = await declareMissing(built.html);
+      if (declared !== built.html) built = { html: keepAsFiles(s.dir, declared), missing: [] };
+    }
     if (!built?.html || built.html === page) {
       if (!built?.html) {
         restore(s.dir, before);
@@ -939,7 +1028,7 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     return edits.length ? { skipped: 'stale' } : { ok: true };
   }
   const fitted = await applyEditsWithFixer(page, edits);
-  const html = await renameClashes(fitted.html);
+  const html = await declareMissing(await renameClashes(fitted.html));
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
     log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
     return { skipped: stale() ? 'stale' : "the change didn't run" };
