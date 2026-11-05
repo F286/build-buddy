@@ -463,6 +463,16 @@ these, the events, places and one-owner rule won 14 of 16 judgments (6.5 against
 adding the lead's rules part won all 16 (6.9 against 4.1; coherent 6.9 against 3.6), at the same
 speed or a little quicker (26 s against 27 s to something new in those runs).
 
+Then, so it isn't tuned to one kind of creation, it was judged on sixteen more - eight kinds from
+before (a piano, a house, weather, a rocket, a 3D kart race, a beehive, hoops, a butterfly) and
+eight it had never seen (a drawing pad, a story, a counting game, a robot to build, an animal band,
+a 3D space flight, dress-up and a maze). Each number in the world now has one owner (the rules
+part), a tap goes to the thing it's on, what a kid paints stays painted, two surprises are hidden in
+every creation and the world keeps going on its own; and the wire pass plays it through in its head
+before it's done. Against the version before, on eight requests none of those rounds used: 9 of 16
+judgments, 6.0 against 5.5 overall, something to discover 6.1 against 4.7 and joy 6.5 against 5.7,
+at about the same speed (26 s against 28 s, two at once).
+
 **Kid-speed builds.** The measurements above are from before the lead wrote in text on the kit
 while the kid waits (its helpers were subagents then, and it read and fixed their parts itself).
 Measured since, on the same eight requests, one at a time:

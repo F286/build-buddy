@@ -53,7 +53,7 @@ function lead() {
     // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
     // model set: without one there'd be nothing to switch back to.
     firstModel: model ? r.firstModel || '' : '',
-    thinking: { build: 0, wire: 4000, look: 10000, ...(r.thinking || {}) },
+    thinking: { build: 0, wire: 8000, look: 10000, ...(r.thinking || {}) },
   };
 }
 
@@ -84,7 +84,7 @@ When you change a page, its FIND lines are copied exactly from the current page 
 # While the kid plays: your tools and your helpers
 Then your working folder holds the creation: page.html is the page, with a line \`// @part <name>\` wherever a part's code goes, and parts/<name>.js holds each part (your helpers' parts from the plan; Build Buddy's kit, the shared code and the run([...]) line are in page.html). Build Buddy puts them together (each \`// @part\` line becomes that part's file) when your reply ends. rules.md holds the rules every helper follows and what the kid asked for - Build Buddy writes it, so never change it. If your helpers need to know something about the whole creation (the coordinates, how the parts talk to each other), say it in a short comment in page.html's shared code: they read it there.
 
-You'll be shown how it's running (a screenshot, the frame rate, any errors) and asked to grow it or look it over. Your helpers are then subagents (the Agent tool, subagent_type "general-purpose", model "${helperModel}"): hand out anything big, all in one message so they work at the same time - each helper owns different files (a new part, which you add a \`// @part\` line for and put in run([...]), or a part it extends or rewrites), never two on the same file. Each job is short - the helper reads rules.md and page.html itself: "Read rules.md and page.html, then write parts/<name>.js defining exactly: <what it defines>. <how it looks, sounds and feels, what it does when poked, and the shared names and keep fields it reads or changes>". Then Read what they wrote and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash - with the Edit tool. Small fixes you make yourself with Edit. Never rewrite what works just to tidy it. Anything new the kid can make progress in gets its default in page.html's \`KB.keep({ ... })\` - only those fields carry over, and only you can add them - and its job names that keep field.
+You'll be shown how it's running (a screenshot, the frame rate, any errors) and asked to grow it or look it over. Your helpers are then subagents (the Agent tool, subagent_type "general-purpose", model "${helperModel}"): hand out anything big, all in one message so they work at the same time - each helper owns different files (a new part, which you add a \`// @part\` line for and put in run([...]), or a part it extends or rewrites), never two on the same file. Each job is short - the helper reads rules.md and page.html itself: "Read rules.md and page.html, then write parts/<name>.js defining exactly: <what it defines>. <how it looks, sounds and feels, what it does when poked, the events it emits and answers, and the shared names and keep fields it reads>". Then Read what they wrote and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash - with the Edit tool. Small fixes you make yourself with Edit. Never rewrite what works just to tidy it. Anything new the kid can make progress in gets its default in page.html's \`KB.keep({ ... })\` - only those fields carry over, and only you can add them - and its job names that keep field. Counting, growing, goals and timers go in the rules part (parts/rules.js), which you change yourself - on a page without one, add a \`// @part rules\` line and put rules first in run([...]).
 
 ${talkingRules()}
 
@@ -105,7 +105,7 @@ const WARM_HELPERS = QUICK_HELPERS + 3;
 // They wait a while: starting ten at once takes the computer's attention just when the kid asks, so
 // they're kept through the minutes the kid plays.
 const WARM_MS = 15 * 60000;
-const keepHelpersWarm = () => warmHelpers(WARM_HELPERS, WARM_MS);
+const keepHelpersWarm = () => warmHelpers(WARM_HELPERS, WARM_MS, true);
 
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
@@ -144,14 +144,15 @@ The page is Build Buddy's kit, your shared code, each part, then run([...]) in y
 2D: ${kitApi('2d')}
 3D: ${kitApi('3d')}
 
-- The shared code (at most about ${z.shared} short lines): the palette and sizes; where the main places are, as functions of W and H everyone uses (const at = { ground: () => H * 0.8, hive: () => ({ x: W * 0.7, y: H * 0.35 }) }); the world's numbers (const world = { ... }); const keep = KB.keep({ ... }); and a comment naming every event, with what it carries and when it happens (// events: basket(x, y) when a ball goes in; miss() when it lands). Nothing else (the kit has the canvas, input, sounds and loop).
+- The shared code (at most about ${z.shared} short lines): the palette and sizes; where the main places are, as functions of W and H everyone uses (const at = { ground: () => H * 0.8, hive: () => ({ x: W * 0.7, y: H * 0.35 }) }) - and of the world's numbers when they change (a crater that rises with the volcano); the world's numbers (const world = { ... }); const keep = KB.keep({ ... }); and a comment naming every event, with what it carries and when it happens (// events: basket(x, y) when a ball goes in; miss() when it lands). Nothing else (the kit has the canvas, input, sounds and loop).
 - The parts are written apart, at the same time, and each helper sees only the jobs written before its own - so what happens between parts goes through those events: the part where it happens emits it, and every part that reacts answers it (on('basket', ...)). Each job says which events its part emits and which it answers, and every reaction you want (the crowd cheers, sparkles burst, the net swishes, the score goes up) is in the job of the part that reacts. Never a method one part has to call on a part that comes later.
 - Each thing on screen belongs to exactly one part, which draws it, moves it and answers pokes on it - never one part for a thing's look and another for its moves. A part that needs to know where another part's things are reads them from that part's object or from at, never works them out itself.
 - Each job starts with the part's object and what other parts read of it, written as code - fields bare and methods with their parentheses: const hive = { x, y, cells } or const ball = { x, y, flying }. Then, in under ${z.jobWords} words, how it looks, sounds and feels, what pokes do, and its events. Your helpers know the kit, the kid's words and the look - they fill in the details.
-- Write the jobs biggest first (the slowest helper starts first), then RUN, then the rules part yourself (at most about 15 short lines; it runs first): it updates the world's numbers every frame, and answers the events that add up - the score, the goal, what grows - emitting the big moments (emit('jarFull')) for the parts that react. Counting and the goal are the rules part's alone: the jobs say what to emit, never to count it too. Pace it for a 5-year-old: something changes in the first two seconds, each poke shows at once, and a big moment comes within a few pokes or half a minute of play - never after hundreds. It's the one part that knows them all, so it's what makes the parts one world. Never give a helper a job named rules.
-- Plan how it works, not just the look: its 2 or 3 real rules, as a few numbers in world that one part (named rules, or the star) updates every frame, pokes nudge and everything else reads; what each poke sets off; what keeps going on its own; one or two things to discover. No score or goal unless they ask for a game - then also one clear thing to do, a reward every time and a goal that grows. The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, where the camera sees it).
+- Write the jobs biggest first (the slowest helper starts first), then RUN, then the rules part yourself (at most about 15 short lines; it runs first): it updates the world's numbers every frame, and answers the events that add up - the score, the goal, what grows - emitting the big moments (emit('jarFull')) for the parts that react. The world's numbers and keep's counts - counting, growing, the goal, any timer - belong to the rules part alone: the jobs say what each part emits and reads, never that it changes one of them (a part changes only its own things: where they are, how they look); and no tap is handled by two parts. Pace it for a 5-year-old: something changes in the first two seconds, each poke shows at once, and a big moment comes within a few pokes or half a minute of play - never after hundreds. It's the one part that knows them all, so it's what makes the parts one world. Never give a helper a job named rules.
+- Plan how it works, not just the look: its 2 or 3 real rules, as a few numbers in world that the rules part updates every frame, pokes nudge and everything else reads; what each poke sets off; and what keeps going when the kid does nothing (the sun moves, the flowers get thirsty, the fish get hungry - and the parts show it). No score or goal unless they ask for a game - then also one clear thing to do, a reward every time and a goal that grows. The star of it - the thing they asked for - is big, near the middle of the action, and the kid can see its face (in 3D, where the camera sees it).
+- Hide two surprises a kid finds by playing, never told - small extras on the thing they asked for, never instead of it: each in the job of the part it's on, set off by doing something a few times or in a new way (tap the moon three times and it winks and rains stars; the fifth fly gets the frog a crown; a drag across the strings plays a tune).
 - Anything one part makes and another uses - an object's fields, a function - is named exactly in both jobs (or in the shared code).
-- Everything they'd be sad to lose when the page changes (where the player is, the level, the score, what they collected, placed or chose) lives in keep - every field in its defaults there, since only those carry over - and each job says which keep fields its part puts back when it starts and updates.
+- Everything they'd be sad to lose when the page changes (where the player is, the level, the score, what they collected, placed, drew or chose - a picture as a list of flat dots or stamps, never a canvas) lives in keep - every field in its defaults there, since only those carry over - and each job says which keep fields its part puts back when it starts and updates.
 - Give it everything a kid pictures for that kind of thing (a soccer game has a goalie to beat, a train has tracks and a station), each in a job. Everything is drawn in the look - shapes, not emoji.
 - The kid's main action works end to end, with the arrow keys and the pointer: the star's job says what its key(), tap() and drag() do - a finger alone can do all the arrow keys do. Arrow keys move things the way they point on the screen (left goes left; seen from above, never steering-wheel turns), and a quick tap gets a clear answer right away (a hop, a sparkle and a sound where they tapped) - the front part that wants a tap takes it; the background's tap() can answer taps anywhere else.
 - <name> is one lowercase word, and the part's object has that name (never kit, main, or a name the kit gives: ${KIT_NAMES.join(', ')}). The kid waits for the slowest helper: ${n - 2}-${n} small parts of about ${z.partLines} short lines each (about ${z.partChars.toLocaleString('en')} characters), similar in size - for example the sky, the ground, the star, the other characters, the effects. Keep the star's part to the star itself (what it pokes off - sparkles, sounds, a score - goes to other parts as events), and split anything else big (a whole world, a game's rules) into two parts, each owning its own things.
@@ -170,10 +171,10 @@ You are a helper on a small team building a web page for a ${config().kidAge}-ye
 - Define exactly what your job says (the same names and parameters, returning the same things): MAIN depends on it. Use the shared code's names as they are.
 - Only define things at the top level: nothing runs until MAIN calls your part. No imports and no <script> tags (the shared code has every import). Extra top-level names you add start with your part's name and an underscore, so they can't clash. Whatever your piece needs before its first frame happens in the function MAIN calls first.
 - Time is in seconds: use dt and t exactly as passed (never divide them by 1000). Read the arrow keys and the pointer from the shared input object, unless your job says otherwise.
-- The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules your job doesn't ask for.
+- The world's rules belong to the lead: read the shared numbers your job names; on Build Buddy's kit the rules part changes the counts and world numbers and your part emits what happens (elsewhere, change one only when your job says your part does). Never a copy of your own, and no rules your job doesn't ask for.
 - No words on the page - pictures instead. Draw everything in the look, so it's all one picture - shapes, not emoji.
 ${quick ? '- About 25-40 short lines, never more than 2,500 characters - a hard limit: the kid is waiting for the slowest helper. Write the heart of your part well and leave the extras out; the lead grows the creation after it appears.' : '- About 30-60 short lines: the kid is playing with it, not waiting, so make your part rich and complete - what it does when poked, how it reacts to what happens, the little things to find.'} Smooth: no shadowBlur or CSS/SVG filters, at most about 40 moving things; in 3D, no new lights unless your job says so, reuse geometries and materials, InstancedMesh for many copies.
-- What the kid would miss when the page changes lives in the fields of page.html's \`KB.keep({ ... })\` (only those carry over): put it back from there when your piece starts, and update it as it changes. Use the keep fields your job names; never call KB.keep yourself.
+- What the kid would miss when the page changes lives in the fields of page.html's \`KB.keep({ ... })\` (only those carry over): put it back from there when your piece starts, and update the fields of your own things as they change (where they are, what's placed or chosen) - a count you only read. Use the keep fields your job names; never call KB.keep yourself.
 - If your piece is the star, make it easy to recognize at a glance, with a face, big enough to see - in proportion with its world. If it's the place, make it full and unmistakable: a few kinds of things, each made in a loop with varied sizes, colors and spots.
 - Whatever the kid can touch or steer in your piece answers every time - a bounce, a sound, a burst - and moves the way the arrow points on the screen.
 
@@ -199,7 +200,9 @@ End your reply with WHY: <what you improved, in one short sentence for the grown
 // time and makes them one world that works - in text, quickly, before it grows it.
 const WIRE = `Your helpers' parts are in and the kid is playing with it now - here's the page put together, and you haven't seen their code until now. Make it one world that works, as it is - nothing new:
 - Follow every control - each arrow key, a tap, a drag - from the kit's hook to what moves on screen, and every event from each emit to each on. Fix what's dead (never emitted or never answered, a method nobody calls, a hook the kit never calls), what lands somewhere else than what's drawn (a place worked out twice), and what fights (two parts moving the same thing).
-- Fix what would crash, and what can't be seen (off the screen, hidden behind something, too small to notice).
+- Fix what would crash, and what can't be seen (off the screen, hidden behind or inside something, too small to notice).
+- Fix what's done twice (two parts changing the same number, one tap handled by two parts), and a tap() that takes every tap instead of only taps on its own thing.
+- Then play it in your head for half a minute as a 5-year-old would - tapping, holding, dragging, doing nothing - working the numbers through the code: does what they asked for show from the first second (rain already falling, the fish already swimming), can the main thing really succeed (the ball can reach the hoop, the rocket lands once and stays), does what adds up visibly build with each poke, and does anything fire over and over, pile up or never happen? Fix what doesn't.
 Reply in text only: FIND/REPLACE edits, each FIND copied exactly from the page above, then WHY: <what you fixed, in one short sentence for the grown-ups' log>. If it all works as it is, reply with just: OK`;
 
 // Looking it over again, as a demanding parent would (the passes after that).
@@ -572,7 +575,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     chars += n;
     emit({ type: 'progress', chars, helpers: crew.jobs.length + team.helpers.size, helpersDone: crew.done + team.done, team: true, leads: 1 });
   };
-  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true });
+  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
@@ -906,6 +909,12 @@ export async function check({ projectId, version, report, screenshot }) {
     w.checking = false;
     if (shot) fs.rmSync(shot, { force: true });
   }
+}
+
+// The next pass makes the page fit first (a page it hasn't read - the bench uses it to try the wire
+// pass on a page put in from outside).
+export function wireNext(projectId) {
+  workFor(projectId).wire = true;
 }
 
 // The wire pass (see WIRE): edits in text, with a look at the screenshot.
