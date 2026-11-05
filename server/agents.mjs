@@ -911,6 +911,12 @@ export async function check({ projectId, version, report, screenshot }) {
   }
 }
 
+// The next pass makes the page fit first (a page it hasn't read - the bench uses it to try the wire
+// pass on a page put in from outside).
+export function wireNext(projectId) {
+  workFor(projectId).wire = true;
+}
+
 // The wire pass (see WIRE): edits in text, with a look at the screenshot.
 async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
   w.wire = false;
