@@ -143,7 +143,10 @@ export function kitPage(kind, shared, parts, order) {
   const idOf = n => {
     const p = parts.find(x => x.name === n);
     const want = n.replace(/[-_]/g, '').toLowerCase();
-    return [...(p?.code || '').matchAll(/^(?:const|let|var|class|function)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]).find(id => id.replace(/_/g, '').toLowerCase() === want) || n;
+    const declared = [...(p?.code || '').matchAll(/^(?:const|let|var|class|function)\s+([A-Za-z_$][\w$]*)/gm)].map(m => m[1]);
+    // (Or, when none has its name - a camera job that wrote const cam = { ... } - the one object it declares.)
+    const objects = [...(p?.code || '').matchAll(/^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\{/gm)].map(m => m[1]);
+    return declared.find(id => id.replace(/_/g, '').toLowerCase() === want) || (objects.length === 1 ? objects[0] : n);
   };
   const ids = ordered.map(idOf);
   // A part with the name of something the kit declares (a 3D sun or camera, a 2D input): the plan
