@@ -494,31 +494,43 @@ show, a Jurassic World with a volcano, a car wash, and driving to the school, th
 the shops). Two were built at once, each put on a stage like the app's and played with (every arrow
 key, two taps and a drag), and every pair was judged blind twice, in both orders. Main judged against
 itself won 23 of 44 judgments, and one version's rounds ranged from 18 to 30 of 44: most rounds were
-decided by a creation that broke, so this round went after what breaks.
+decided by a creation that broke. Two changes came out of it, neither of which makes the kid wait
+longer:
 
-- **Four ways a whole part was lost, now put right before the page is shown.** A name a part
-  assigned but never declared (`fx_add = ...`: in a module that throws, and the kit leaves the hook
-  out) - 2 of main's 22 first builds lost their star or their sparkles that way; it now gets a `var`,
-  only if the page still parses as well. A RUN line naming a part by its object
-  (`//@part scene: const scene2 = ...`, then `RUN: scene2, ...`) sent that part to the front - 6 of
-  the first 40 plans, and in two the background hid the whole creation; RUN now matches objects too.
-  A part that filled in the shared code's object (`Object.assign(car, { ... })`) beside an empty one
-  of its own ran the empty one, so the car never appeared. And a gradient given NaN threw and left
-  the part's drawing out for good; it now gets 0.
-- **Every arrow key does something.** The shared code now says what each arrow key does and which
-  part does it (`// keys: ...`, next to the events), so every helper reads it. In every comparison
-  after it, the judges named dead arrow keys far less often as a creation's biggest problem: 19, 17
-  and 17 times for main's creations against 7, 4 and 6 for these, side by side.
+- **Four ways a whole part was lost are put right before the page is shown** (in code, no AI and no
+  prompt change). A name a part assigned but never declared (`fx_add = ...`: in a module that throws,
+  and the kit leaves the hook out) - 2 of main's 22 first builds lost their star or their sparkles that
+  way; it now gets a `var`, only if the page still parses as well. A RUN line naming a part by its
+  object (`//@part scene: const scene2 = ...`, then `RUN: scene2, ...`) sent that part to the front -
+  6 of the first 40 plans, and in two the background hid the whole creation; RUN now matches objects
+  too. A part that filled in the shared code's object (`Object.assign(car, { ... })`) beside an empty
+  one of its own ran the empty one, so the car never appeared. And a gradient given NaN threw and left
+  the part's drawing out for good; it now gets 0. With these alone, against main's builds: 25 of 44
+  judgments, 6.0 against 5.6 overall (the creations that had broken went from 1 to about 7), at
+  29.6 s against 31.4 s to something new.
 - **The wire pass works the numbers through.** It first writes a short trace of the main action
   through the code's real numbers (the ball's highest point against the rim's height), then fixes
   what's broken. On the same first builds, against the wire pass before: 25 of 44 judgments, nearly
-  all slight (2 clear wins, no clear losses), 6.1 against 5.9 overall. It takes about 13 s instead
-  of 7, while the kid plays.
-- FINAL_RESULT
-- **Tried and taken back:** a size for the star (at least a fifth of the screen) and a rule that
-  every position between parts is in pixels showed nothing on what they aimed at, and the size made a
-  growing maze overflow the screen; starting second helpers sooner, and helpers that don't think
-  first, didn't make it quicker (what holds a helper up is how soon the service answers).
+  all slight (2 clear wins, no clear losses), 6.1 against 5.9 overall; and on the eight requests no
+  round tuned on (a fish tank, a dancing dino, a 3D castle with a dragon, a marble run, a hamster,
+  a pirate ship, a treehouse and a bubble machine), built fresh by main, 12 of 16, all slight (6.3
+  against 6.2). It takes about 12 s
+  instead of 7, while the kid plays.
+
+Measured and left out, because the kid would wait longer:
+
+- **A keys comment in the plan** (`// keys: left/right roll, up throws, down bounces - ball`, next to
+  the events, so every helper knows what each arrow key does). It worked on what it aimed at: side by
+  side with main, the judges named dead arrow keys as a creation's biggest problem 19, 17, 17 and 19
+  times for main against 7, 4, 6 and 7 for it, and with the four repairs it won 23 of 32 judgments
+  (6.4 against 5.8 overall), but on the eight requests no round tuned on it was even with main (31 of
+  64 over four runs). Its helpers wrote 5-15% more (each part that answers a key writes that too), and
+  something new took 1 to 3.5 s longer in every run. Asking for smaller parts to make up for it was
+  1.2 s quicker than main but lost 15 of 32 judgments (5.5 against 6.1).
+- A size for the star (at least a fifth of the screen) and a rule that every position between parts
+  is in pixels showed nothing on what they aimed at (and the size made a growing maze overflow the
+  screen); starting second helpers sooner, and helpers that don't think first, didn't make it
+  quicker (what holds a helper up is how soon the service answers).
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
