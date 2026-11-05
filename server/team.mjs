@@ -352,11 +352,12 @@ function claudeArgs(name, system, tools = '') {
   return args;
 }
 
-function start(args) {
+function start(args, env = null) {
   const bin = findBin('claude', config().claude.bin);
   if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
   const child = spawn(bin, args, {
     cwd: WORK_DIR,
+    ...(env && { env: { ...process.env, ...env } }),
     stdio: ['pipe', 'pipe', 'pipe'],
     shell: process.platform === 'win32' && /\.cmd$/i.test(bin),
   });
@@ -388,7 +389,7 @@ function take(key) {
 
 // Have `count` programs for this role started and waiting (each for ms, then closed). Returns how
 // many were started.
-function keepWarm(name, system, count, ms = WARM_MS) {
+function keepWarm(name, system, count, ms = WARM_MS, env = null) {
   if (config().team?.warm === false) return 0;
   warmPool = warmPool.filter(w => !w.proc.closed);
   const args = claudeArgs(name, system);
@@ -397,7 +398,7 @@ function keepWarm(name, system, count, ms = WARM_MS) {
   for (let n = warmPool.filter(w => w.key === key).length; n < count; n++) {
     let proc;
     try {
-      proc = start(args);
+      proc = start(args, env);
     } catch {
       break;
     }
@@ -448,14 +449,14 @@ export const warmVoice = () => keepWarm('voice', voiceSystem(), 1);
 // Ask one member of the team. onText(chunk) gets the reply as it's written. Resolves with the
 // whole reply; the AbortSignal stops it. stallSec: once it has started writing, a reply that goes
 // quiet that long has stalled (a dropped stream) - it's stopped, so it can be asked again.
-function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stallSec, tally, tools = '' }) {
+function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stallSec, tally, tools = '', env = null }) {
   const args = claudeArgs(name, system, tools);
   const r = roleConfig(name);
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new Error('stopped'));
     let proc;
     try {
-      proc = take(JSON.stringify(args)) || start(args);
+      proc = take(JSON.stringify(args)) || start(args, env);
     } catch (err) {
       return reject(err);
     }
@@ -919,6 +920,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
         const one = i =>
           ask('helper', {
             system: helperSystem(kit),
+            env: kit ? KIT_HELPER_ENV : null,
             prompt,
             stallSec: 20,
             onText: chunk => {
@@ -978,7 +980,10 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
 }
 
 // Have the helpers' programs started and waiting (the agent way warms them while the kid talks).
-export const warmHelpers = (count = maxHelpers(), ms = WARM_MS, kit = false) => keepWarm('helper', helperSystem(kit), count, ms);
+// The agent way's helpers write without thinking first: on its small parts, a helper that thought
+// took about 6 s longer to start, and the kid waits for the slowest. (Team mode's are as they were.)
+const KIT_HELPER_ENV = { MAX_THINKING_TOKENS: '0' };
+export const warmHelpers = (count = maxHelpers(), ms = WARM_MS, kit = false) => keepWarm('helper', helperSystem(kit), count, ms, kit ? KIT_HELPER_ENV : null);
 
 export { PlanReader, codeOf, applyEditsWithFixer, fix as fixPage, EDIT_FORMAT };
 
