@@ -514,8 +514,7 @@ longer:
   all slight (2 clear wins, no clear losses), 6.1 against 5.9 overall; and on the eight requests no
   round tuned on (a fish tank, a dancing dino, a 3D castle with a dragon, a marble run, a hamster,
   a pirate ship, a treehouse and a bubble machine), built fresh by main, 12 of 16, all slight (6.3
-  against 6.2). It takes about 12 s
-  instead of 7, while the kid plays.
+  against 6.2). It takes about 12 s instead of 7, while the kid plays.
 
 Measured and left out, because the kid would wait longer:
 
