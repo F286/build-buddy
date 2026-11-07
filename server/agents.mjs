@@ -119,8 +119,16 @@ const WARM_HELPERS = QUICK_HELPERS + 3;
 // They wait a while: starting ten at once takes the computer's attention just when the kid asks, so
 // they're kept through the minutes the kid plays.
 const WARM_MS = 15 * 60000;
-// (On agy: as many Argon helpers as write at once, and the quick voice, for a few minutes.)
-const keepHelpersWarm = () => (onAgy() ? keepAgyWarm({ [lead().helperModel]: QUICK_HELPERS, ...(config().agy.voiceModel ? { [config().agy.voiceModel]: 1 } : {}) }) : warmHelpers(WARM_HELPERS, WARM_MS, true));
+// (On agy: as many Argon helpers as write at once, and the quick voice, for a few minutes - one more
+// of the helpers' model when the voice is that model too. None with team.warm off, as for Claude's.)
+function keepHelpersWarm() {
+  if (!onAgy()) return warmHelpers(WARM_HELPERS, WARM_MS, true);
+  const c = config();
+  if (c.team?.warm === false) return 0;
+  const need = { [lead().helperModel]: QUICK_HELPERS };
+  if (c.agy.voiceModel) need[c.agy.voiceModel] = (need[c.agy.voiceModel] || 0) + 1;
+  return keepAgyWarm(need);
+}
 
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
@@ -661,7 +669,7 @@ async function problemsIn(built) {
 
 export { missingMethods, missingParts }; // (for tests)
 
-export async function build({ page, history, text, alt, fix, title = '', look = pickLook() }, emit, state) {
+export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), last = false }, emit, state) {
   const t0 = Date.now();
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
   const p = store.currentProject();
@@ -924,8 +932,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (page) fs.writeFileSync(rules, helperRules((w.rules = { asked: text, look })));
   } else [w.passes, w.tries] = [0, 0];
   // (Starting programs takes the computer's attention: the helpers taken are replaced once the page is
-  // ready, for the kid's next turn.)
-  keepHelpersWarm();
+  // ready, for the kid's next turn - on agy, not after the last thing they could ask for.)
+  if (!(last && onAgy())) keepHelpersWarm();
   log(`ok   ${brainName()} agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, ${eventGaps(built) || 'no events'}, turn ${s.turns}`);
   const sameOne = Boolean(page) && (edited || sameCreation(page, built));
   return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: `${brainName()} agents` };
