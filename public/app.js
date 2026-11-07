@@ -936,6 +936,9 @@ async function timeIsUp() {
   state.resumeKeep = fresh?.keep ?? (state.kept?.projectId === state.project?.id ? state.kept.keep : null);
   expectLoad = true;
   frame.srcdoc = '';
+  // (The emptied stage would keep the keys: Ctrl+Shift+P and the space bar come back to the app.)
+  frame.blur();
+  window.focus();
   $('#timeUp').hidden = false;
   document.body.classList.add('time-is-up');
   sfx.timeUp();
