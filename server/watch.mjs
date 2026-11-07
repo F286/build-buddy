@@ -63,11 +63,11 @@ function saveScreenshot(dataUrl) {
   return file;
 }
 
-// Which brain watches: the first configured one of claude, codex and agy (agy can't be shown the
-// screenshot: it judges from the page and how it's running).
+// Which brain watches: the first configured one that can look at the screenshot (claude, codex),
+// or else agy, which judges from the page and how it's running.
 function watcher() {
   const c = config();
-  const name = c.backends.find(b => b === 'claude' || b === 'codex' || b === 'agy');
+  const name = c.backends.find(b => b === 'claude' || b === 'codex') || c.backends.find(b => b === 'agy');
   if (name === 'claude') return { name, opts: { model: c.watch.model, effort: c.watch.effort, fast: false, tools: 'Read' } };
   if (name === 'codex') return { name, opts: { model: c.watch.codexModel || undefined, reasoning: 'high' } };
   if (name === 'agy') return { name, opts: { model: c.watch.agyModel || undefined }, blind: true };

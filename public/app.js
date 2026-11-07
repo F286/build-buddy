@@ -1138,7 +1138,7 @@ function pressTalk() {
 // the moment the request arrives (see server/team.mjs).
 // Also while something is building: what the kid says now is built next, by a team that's ready.
 function warmTeam() {
-  if (state.config.teamActive || state.config.soloActive) api('/api/warm', {}).catch(() => {});
+  if (state.config.teamActive || state.config.soloActive || state.config.agyActive) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {
@@ -1460,7 +1460,9 @@ async function openParent() {
   const c = (state.config = await api('/api/config'));
   const f = $('#parentForm');
   const brains = c.backends.join(',');
-  f.brains.value = [...f.brains.options].some(o => o.value === brains) ? brains : 'claude,codex';
+  // (A combination set in config.json that the list doesn't have is kept, not reset on save.)
+  if (![...f.brains.options].some(o => o.value === brains)) f.brains.append(new Option(`${c.backends.join(', then ')} (from config.json)`, brains));
+  f.brains.value = brains;
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
   f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? 'agents' : 'team') : '';

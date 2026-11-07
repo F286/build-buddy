@@ -91,8 +91,9 @@ export const DEFAULTS = {
   // Antigravity (agy): model is any id `agy models` lists. It builds the classic way (one AI writes
   // it all - the team, agent and solo ways are Claude's). voiceModel: a quick model that says the
   // first line out loud while agy builds (Gemini Flash answers in about 2 s; the builder takes 5 to
-  // 10 s to start writing); "" lets the builder's own first line be said. keepHistory: false removes
-  // Build Buddy's runs from agy's own conversation list afterwards.
+  // 10 s to start writing); "" lets the builder's own first line be said. keepHistory: true runs agy
+  // in your own agy home, so Build Buddy's runs are listed with your conversations (by default they
+  // use one of their own, data/agy-home, sharing only the sign-in).
   agy: { bin: '', model: 'gemini-4-argon-low', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },
   command: { cmd: '', args: [] },
 
@@ -116,9 +117,9 @@ export const DEFAULTS = {
   // The overwatch: a careful model that checks on a creation once the kid has played with it for
   // firstAfterSec, then every everySec while they keep playing the same version. It fixes it if
   // it's broken or stuck, and otherwise may make a tiny polish (once per version). Uses the first
-  // of claude/codex/agy in backends (agy with agyModel; it can't be shown the screenshot, so it
-  // judges from the page and how it's running).
-  watch: { enabled: true, model: 'opus', effort: 'medium', codexModel: '', agyModel: 'gemini-4-argon-high', firstAfterSec: 25, everySec: 180, timeoutSec: 300 },
+  // of claude/codex in backends, which can look at a screenshot, or else agy (with agyModel; it
+  // judges from the page and how it's running: Argon high took 1 to 5 minutes, so low).
+  watch: { enabled: true, model: 'opus', effort: 'medium', codexModel: '', agyModel: 'gemini-4-argon-low', firstAfterSec: 25, everySec: 180, timeoutSec: 300 },
 
   // The ⭐ button that opens My creations (every creation they've made, to pick one and carry on).
   // Hidden unless a grown-up turns it on.

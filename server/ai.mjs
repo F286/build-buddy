@@ -7,7 +7,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
 import { config, DATA, ROOT } from './config.mjs';
 import { findBin, run } from './bins.mjs';
 import * as store from './store.mjs';
@@ -309,31 +308,88 @@ const backends = {
 };
 
 // ---------------------------------------------------------------------------------------------
-// Antigravity (agy): each run is one agy program in an empty folder of its own, reading one message
-// as stream-json. Starting one takes about 3 s, so while the kid talks (POST /api/warm) the builder
-// and the voice are started and wait for their message; they're closed after a few minutes unused.
+// Antigravity (agy): each run is one agy program in an empty folder of its own (outside Build
+// Buddy's folder, so agy has no project to look at), reading one message as stream-json. Starting
+// one takes about 3 s, so while the kid talks (POST /api/warm) the builder and the voice are started
+// and wait for their message; they're closed after a few minutes unused.
+//
+// agy keeps every run as a conversation, listed with the grown-up's own (and on their phone). So
+// Build Buddy's runs use an agy home of their own (data/agy-home), sharing only the sign-in, and old
+// runs are cleared out of it now and then (agy.keepHistory runs them in the grown-up's own home).
 
 const AGY_SETTINGS = JSON.stringify({ toolPermission: 'strict', allowNonWorkspaceAccess: false, enableTerminalSandbox: true });
 const agyArgs = model => ['-p=', '--input-format', 'stream-json', '--output-format', 'stream-json', '--sandbox', '--settings', AGY_SETTINGS, ...(model ? ['--model', model] : [])];
 const AGY_WARM_MS = 3 * 60000;
 let agyPool = []; // { model, proc, timer }
+const agyLive = new Set(); // every agy program still running
+
+const AGY_HOME = path.join(DATA, 'agy-home');
+const AGY_KEEP_MS = 60 * 60000; // (old runs in its own home are cleared after an hour)
+let agyPruned = 0;
+
+// The environment an agy program gets: its own home with the grown-up's sign-in linked in.
+function agyEnv() {
+  if (config().agy.keepHistory) return process.env;
+  const real = path.join(os.homedir(), '.gemini', 'antigravity-cli');
+  const mine = path.join(AGY_HOME, '.gemini', 'antigravity-cli');
+  fs.mkdirSync(mine, { recursive: true });
+  for (const f of ['antigravity-oauth-token', 'installation_id']) {
+    const from = path.join(real, f);
+    const to = path.join(mine, f);
+    try {
+      if (fs.readlinkSync(to) === from) continue;
+    } catch {}
+    fs.rmSync(to, { force: true });
+    if (!fs.existsSync(from)) continue;
+    try {
+      fs.symlinkSync(from, to);
+    } catch {
+      fs.copyFileSync(from, to); // (Windows without symlink rights)
+    }
+  }
+  if (Date.now() - agyPruned > AGY_KEEP_MS / 4) {
+    agyPruned = Date.now();
+    pruneAgyHome(mine);
+  }
+  return { ...process.env, HOME: AGY_HOME, USERPROFILE: AGY_HOME };
+}
+
+// Runs over an hour old are removed from Build Buddy's own agy home (its list there is never shown).
+function pruneAgyHome(home) {
+  const old = Date.now() - AGY_KEEP_MS;
+  for (const sub of ['conversations', 'brain', 'presence', 'annotations']) {
+    let names = [];
+    try {
+      names = fs.readdirSync(path.join(home, sub));
+    } catch {}
+    for (const n of names) {
+      const f = path.join(home, sub, n);
+      try {
+        if (fs.statSync(f).mtimeMs < old) fs.rmSync(f, { recursive: true, force: true });
+      } catch {}
+    }
+  }
+}
 
 function startAgy(model) {
   const bin = findBin('agy', config().agy.bin);
   if (!bin) throw new Error('Antigravity CLI (agy) not found (install it and run `agy` once to sign in)');
-  const dir = fs.mkdtempSync(path.join(WORK, 'agy-'));
-  const child = spawn(bin, agyArgs(model), { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' && /\.cmd$/i.test(bin) });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'buildbuddy-agy-'));
+  const child = spawn(bin, agyArgs(model), { cwd: dir, env: agyEnv(), stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' && /\.cmd$/i.test(bin) });
   // (Output that comes before anyone listens - while it waits - is kept for them.)
   const proc = { child, dir, early: [], onData: null, onClose: null, closed: null, err: '' };
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', d => (proc.onData ? proc.onData(d) : proc.early.push(d)));
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', d => (proc.err = (proc.err + d).slice(-2000)));
+  agyLive.add(proc);
   const closed = info => {
     if (proc.closed) return;
     proc.closed = info;
-    // (Its folder goes with it: a run whose folder is gone is over, so forgetAgy may remove it.)
-    fs.rmSync(dir, { recursive: true, force: true });
+    agyLive.delete(proc);
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {}
     proc.onClose?.();
   };
   child.on('error', error => closed({ code: -1, error }));
@@ -348,6 +404,19 @@ function takeAgy(model) {
   const [w] = agyPool.splice(i, 1);
   clearTimeout(w.timer);
   return w.proc;
+}
+
+// Build Buddy is quitting: its agy programs stop now, and their folders go with them.
+export function stopAgy() {
+  for (const w of agyPool) clearTimeout(w.timer);
+  agyPool = [];
+  for (const proc of agyLive) {
+    proc.child.kill('SIGKILL');
+    try {
+      fs.rmSync(proc.dir, { recursive: true, force: true });
+    } catch {}
+  }
+  agyLive.clear();
 }
 
 // The kid started talking: with agy as the first brain (and so building the classic way), have its
@@ -381,7 +450,7 @@ export function warmAgy() {
 }
 
 // One message to agy; resolves with its reply once its turn is over (the program then exits on its
-// own, and is removed from agy's conversation list unless agy.keepHistory).
+// own). A turn Gemini's safety filter stopped is a failure (the next brain is tried), never a reply.
 function askAgy(model, content, { onText = () => {}, timeoutSec = 120 } = {}) {
   return new Promise((resolve, reject) => {
     let proc;
@@ -393,24 +462,19 @@ function askAgy(model, content, { onText = () => {}, timeoutSec = 120 } = {}) {
     let buf = '';
     let streamed = '';
     let result = null;
-    let id = '';
     let finished = false;
-    const forget = () => {
-      if (!config().agy.keepHistory) forgetAgy(id || result?.conversation_id).catch(() => {});
-    };
     const finish = err => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
       if (err) proc.child.kill('SIGKILL');
-      // (Once it has exited and its folder is gone, it's taken out of agy's list.)
-      if (proc.closed) forget();
-      else proc.onClose = forget;
+      proc.onClose = null;
       if (err) return reject(err);
       if (!result) return reject(new Error(`agy returned no result${proc.closed?.code ? ` (exit ${proc.closed.code}: ${proc.err.trim().slice(-300)})` : ''}`));
       if (result.status !== 'SUCCESS') return reject(new Error(result.error || `agy ${result.status || 'failed'}`));
       const text = result.response?.trim() ? result.response : streamed;
       if (!text.trim()) return reject(new Error('agy returned an empty reply'));
+      if (/blocked by Gemini'?s filters/i.test(text)) return reject(new Error("Gemini's safety filter stopped it"));
       resolve(text);
     };
     const handle = line => {
@@ -422,8 +486,7 @@ function askAgy(model, content, { onText = () => {}, timeoutSec = 120 } = {}) {
         return;
       }
       const step = ev.step_update;
-      if (ev.event === 'init') id = ev.conversation_id || id;
-      else if (step?.step_type === 'agent_response' && step.text_delta) {
+      if (step?.step_type === 'agent_response' && step.text_delta) {
         streamed += step.text_delta;
         onText(step.text_delta);
       } else if (ev.event === 'result') {
@@ -468,40 +531,6 @@ export function agyVoice({ history, text, alt, title }, sayNow) {
     const line = field(reply, 'SAY');
     if (line) sayNow(line);
   });
-}
-
-// agy keeps every run as a conversation (half a megabyte or so each, listed with the grown-up's own
-// in agy and on their phone). Build Buddy's are throwaway, so it removes its own afterwards - and
-// any earlier ones whose run is over (other agy programs running at the same time can put a
-// removed one back in the list).
-async function forgetAgy(id) {
-  const home = path.join(os.homedir(), '.gemini', 'antigravity-cli');
-  const ids = new Set(/^[0-9a-f-]{36}$/i.test(id || '') ? [id] : []);
-  let db = null;
-  try {
-    const { DatabaseSync } = await import('node:sqlite'); // (Node 22.5 and later)
-    db = new DatabaseSync(path.join(home, 'conversation_summaries.db'));
-    db.exec('PRAGMA busy_timeout = 2000');
-    const ours = `%${pathToFileURL(path.join(WORK, 'agy-')).href}%`;
-    for (const row of db.prepare('SELECT conversation_id, workspace_uris FROM conversation_summaries WHERE workspace_uris LIKE ?').all(ours)) {
-      // (A run's own folder is there until it's over.)
-      const dirs = JSON.parse(row.workspace_uris || '[]');
-      if (dirs.every(u => !fs.existsSync(fileURLToPath(u)))) ids.add(row.conversation_id);
-    }
-  } catch {} // an older Node, or agy changed how it keeps its list: only list entries stay
-  for (const c of ids) {
-    if (!/^[0-9a-f-]{36}$/i.test(c)) continue;
-    for (const f of [`conversations/${c}.db`, `conversations/${c}.db-wal`, `conversations/${c}.db-shm`, `brain/${c}`, `presence/${c}.lock`, `annotations/${c}.pbtxt`]) {
-      fs.rmSync(path.join(home, f), { recursive: true, force: true });
-    }
-    try {
-      db?.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(c);
-      db?.prepare('DELETE FROM conversations_fts WHERE conversation_id = ?').run(c);
-    } catch {}
-  }
-  try {
-    db?.close();
-  } catch {}
 }
 
 export const backendNames = Object.keys(backends);
@@ -707,7 +736,18 @@ export async function build({ text, alt, fix }, emit) {
       } finally {
         over = true;
       }
-      if (voiced && state.said) r = { ...r, say: state.said };
+      // (If agy only talked - it asked what they meant, or answered a question - that's said too.)
+      if (voiced && state.said) r = { ...r, say: state.said, done: !r.html && r.say && r.say !== state.said ? [r.say, r.done].filter(Boolean).join(' ') : r.done };
+      // A page that doesn't parse would only crash when shown: it's fixed first, once.
+      if (r.html && !fix) {
+        const broken = await team.syntaxErrors(r.html);
+        if (broken.length) {
+          log(`the new page doesn't run (${broken[0].slice(0, 120)}), fixing it before it's shown`);
+          emit({ type: 'progress', chars: 0, note: 'fixing a wobbly bit' });
+          const fixed = await classic({ page: r.html, history, text: '', alt, fix: broken.join('\n') }, emit, { said: state.said || 'quiet' }).catch(() => null);
+          if (fixed?.html && (await team.syntaxErrors(fixed.html)).length < broken.length) r = { ...r, html: fixed.html };
+        }
+      }
     }
     const newHtml = r.html;
 

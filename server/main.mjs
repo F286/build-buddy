@@ -73,6 +73,8 @@ function publicConfig() {
     teamActive: team.enabled() && !solo.enabled(),
     soloActive: solo.enabled(),
     agentsActive: agents.enabled(),
+    // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
+    agyActive: !solo.enabled() && !team.enabled() && c.backends[0] === 'agy',
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
     // every look counts).
     polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : agents.enabled() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
@@ -457,6 +459,7 @@ function shutdown() {
   quitting = true;
   console.log('Bye!');
   browser?.kill();
+  ai.stopAgy();
   server.close();
   setTimeout(() => process.exit(0), 300);
 }
