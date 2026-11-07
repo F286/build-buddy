@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { config, DATA, ROOT } from './config.mjs';
 import { findBin, run } from './bins.mjs';
 import * as store from './store.mjs';
@@ -358,24 +359,37 @@ const backends = {
 };
 
 // agy keeps every run as a conversation (half a megabyte or so each, listed with the grown-up's own
-// in agy and on their phone). Build Buddy's are throwaway, so it removes its own afterwards.
+// in agy and on their phone). Build Buddy's are throwaway, so it removes its own afterwards - and
+// any earlier ones whose run is over (other agy programs running at the same time can put a
+// removed one back in the list).
 async function forgetAgy(id) {
-  if (!/^[0-9a-f-]{36}$/i.test(id || '')) return;
   const home = path.join(os.homedir(), '.gemini', 'antigravity-cli');
-  for (const f of [`conversations/${id}.db`, `conversations/${id}.db-wal`, `conversations/${id}.db-shm`, `brain/${id}`, `presence/${id}.lock`, `annotations/${id}.pbtxt`]) {
-    fs.rmSync(path.join(home, f), { recursive: true, force: true });
-  }
+  const ids = new Set(/^[0-9a-f-]{36}$/i.test(id || '') ? [id] : []);
+  let db = null;
   try {
     const { DatabaseSync } = await import('node:sqlite'); // (Node 22.5 and later)
-    const db = new DatabaseSync(path.join(home, 'conversation_summaries.db'));
-    try {
-      db.exec('PRAGMA busy_timeout = 2000');
-      db.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(id);
-      db.prepare('DELETE FROM conversations_fts WHERE conversation_id = ?').run(id);
-    } finally {
-      db.close();
+    db = new DatabaseSync(path.join(home, 'conversation_summaries.db'));
+    db.exec('PRAGMA busy_timeout = 2000');
+    const ours = `%${pathToFileURL(path.join(WORK, 'agy-')).href}%`;
+    for (const row of db.prepare('SELECT conversation_id, workspace_uris FROM conversation_summaries WHERE workspace_uris LIKE ?').all(ours)) {
+      // (A run's own folder is there until it's over.)
+      const dirs = JSON.parse(row.workspace_uris || '[]');
+      if (dirs.every(u => !fs.existsSync(fileURLToPath(u)))) ids.add(row.conversation_id);
     }
-  } catch {} // an older Node, or agy changed how it keeps its list: only the list entry stays
+  } catch {} // an older Node, or agy changed how it keeps its list: only list entries stay
+  for (const c of ids) {
+    if (!/^[0-9a-f-]{36}$/i.test(c)) continue;
+    for (const f of [`conversations/${c}.db`, `conversations/${c}.db-wal`, `conversations/${c}.db-shm`, `brain/${c}`, `presence/${c}.lock`, `annotations/${c}.pbtxt`]) {
+      fs.rmSync(path.join(home, f), { recursive: true, force: true });
+    }
+    try {
+      db?.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(c);
+      db?.prepare('DELETE FROM conversations_fts WHERE conversation_id = ?').run(c);
+    } catch {}
+  }
+  try {
+    db?.close();
+  } catch {}
 }
 
 export const backendNames = Object.keys(backends);
