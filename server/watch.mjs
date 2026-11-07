@@ -63,15 +63,19 @@ function saveScreenshot(dataUrl) {
   return file;
 }
 
-// Which brain watches: the first configured one that can look at the screenshot (claude, codex),
-// or else agy, which judges from the page and how it's running.
-function watcher() {
+// The brains that can watch, in the order they're tried (the next if one fails - not installed, or
+// at its usage limit): the configured ones that can look at the screenshot (claude, codex), then agy,
+// which judges from the page and how it's running.
+function watchers() {
   const c = config();
-  const name = c.backends.find(b => b === 'claude' || b === 'codex') || c.backends.find(b => b === 'agy');
-  if (name === 'claude') return { name, opts: { model: c.watch.model, effort: c.watch.effort, fast: false, tools: 'Read' } };
-  if (name === 'codex') return { name, opts: { model: c.watch.codexModel || undefined, reasoning: 'high' } };
-  if (name === 'agy') return { name, opts: { model: c.watch.agyModel || undefined }, blind: true };
-  return null;
+  const order = [...c.backends.filter(b => b === 'claude' || b === 'codex'), ...c.backends.filter(b => b === 'agy')];
+  return order.map(name =>
+    name === 'claude'
+      ? { name, opts: { model: c.watch.model, effort: c.watch.effort, fast: false, tools: 'Read' } }
+      : name === 'codex'
+        ? { name, opts: { model: c.watch.codexModel || undefined, reasoning: 'high' } }
+        : { name, opts: { model: c.watch.agyModel || undefined }, blind: true },
+  );
 }
 
 export async function review({ projectId, version, report, screenshot }) {
@@ -80,11 +84,12 @@ export async function review({ projectId, version, report, screenshot }) {
   if (running || ai.isBusy()) return { skipped: 'busy' };
   let p = store.currentProject();
   if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
-  const who = watcher();
-  if (!who) return { skipped: 'no brain that can watch' };
+  const list = watchers();
+  if (!list.length) return { skipped: 'no brain that can watch' };
 
   running = true;
-  const shot = who.blind ? null : saveScreenshot(screenshot);
+  const shot = list.some(w => !w.blind) ? saveScreenshot(screenshot) : null;
+  let who = list[0];
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   try {
@@ -93,9 +98,20 @@ export async function review({ projectId, version, report, screenshot }) {
     // One polish per version of the kid's: never polish our own work.
     const madeByUs = String(p.versions.find(v => v.n === p.current)?.request || '').startsWith('(overwatch');
     const polish = madeByUs ? 'Polish is NOT allowed this time - only fix real problems.' : 'Polish is allowed this time.';
-    const prompt = `<current_page>\n${page}\n</current_page>\n\n<what_the_kid_asked_for_lately>\n${asked || '- (nothing yet)'}\n</what_the_kid_asked_for_lately>\n\n${describe(report, shot)}\n\n${polish}`;
-    const opts = { ...who.opts, ...(who.name === 'codex' && shot ? { images: [shot] } : {}), timeoutSec: c.timeoutSec };
-    const text = await ai.runBackend(who.name, { system: systemPrompt(), prompt, ...opts });
+    let text = '';
+    for (const [i, w] of list.entries()) {
+      who = w;
+      const seen = w.blind ? null : shot;
+      const prompt = `<current_page>\n${page}\n</current_page>\n\n<what_the_kid_asked_for_lately>\n${asked || '- (nothing yet)'}\n</what_the_kid_asked_for_lately>\n\n${describe(report, seen)}\n\n${polish}`;
+      const opts = { ...w.opts, ...(w.name === 'codex' && seen ? { images: [seen] } : {}), timeoutSec: c.timeoutSec };
+      try {
+        text = await ai.runBackend(w.name, { system: systemPrompt(), prompt, ...opts });
+        break;
+      } catch (err) {
+        if (i === list.length - 1) throw err;
+        ai.log(`WATCH fail ${w.name} ${took()} ${err.message.replace(/\s+/g, ' ').slice(0, 160)}, trying ${list[i + 1].name}`);
+      }
+    }
 
     const said = ai.field(text, 'VERDICT').toLowerCase();
     const verdict = said.startsWith('fix') ? 'fix' : said.startsWith('polish') && !madeByUs ? 'polish' : 'ok';

@@ -135,7 +135,7 @@ won all 16 judgments against it, 9 of them clearly.
 5. **They keep building, without starting over.** Changes take a few seconds and slot into what
    they're playing: where they were and what they made come back. If they don't like something,
    the back button undoes it.
-6. **A careful helper keeps watch.** Once they've played for a bit, a stronger AI looks at what they
+6. **A careful helper keeps watch.** Once they've played for a bit, a careful AI looks at what they
    made and quietly fixes it if it's broken or stuck.
 
 ## Install
@@ -266,16 +266,16 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
-| `agy.model` | `"gemini-4-argon-low"` | Model for Antigravity (`agy`): any id `agy models` lists (Gemini 4 Argon at low, medium or high effort, Gemini Flash, ...). With `"backends": ["agy", "claude"]` Gemini builds and Claude takes over if it fails; also in the panel as *AI brain* and *Gemini model*. It builds the classic way (team, agent and solo building are Claude's). While the kid talks, agy's builder and its voice are started and wait (starting one takes about 3 s), and a quick model says Sparky's first line while the builder works (see `agy.voiceModel`). The overwatch uses Claude or Codex if one is listed, and otherwise agy itself (see `watch.agyModel`). In blind tests on the kids' own requests (14 new creations, 8 changes, each judged both ways round by an Opus judge and a Gemini judge), Argon low's new creations beat Claude Opus's classic ones about 3 times in 4 with both judges, and the agent way's first look 24 times in 28; changes came out even. It's slower: about 100 s for something new (Opus classic about 60 s, the agent way about 30 s) and 35 s for a change (Opus 20 s), with Sparky's first sentence after about 11 s. Medium effort scored the same and wasn't quicker. agy runs in an empty folder of its own with its strictest permissions and a sandboxed terminal, and is only asked for text. |
+| `agy.model` | `"gemini-4-argon-low"` | Model for Antigravity (`agy`): any id `agy models` lists (Gemini 4 Argon at low, medium or high effort, Gemini Flash, ...). With `"backends": ["agy", "claude"]` Gemini builds and Claude takes over if it fails (or if Gemini's safety filter stops a request); also in the panel as *AI brain* and *Gemini model*. It builds the classic way (team, agent and solo building are Claude's), and a page whose scripts don't parse is fixed once before it's shown. While the kid talks, agy's builder and its voice are started and wait (starting one takes about 3 s), and a quick model says Sparky's first line while the builder works (see `agy.voiceModel`): in the app, Sparky answered after about 2.5 s and the page appeared after 70 to 110 s. COMPARE_RESULTS Medium effort scored the same and wasn't quicker; a `-medium` or `-high` model thinks before it writes (Flash medium wrote nothing for 38 s). agy runs in an empty folder of its own, outside Build Buddy's, with its strictest permissions and a sandboxed terminal, and is only asked for text: it can't run commands or read or write files outside that folder (it could still search the web). |
 | `agy.voiceModel` | `"gemini-3.8-flash-low"` | The quick model that says Sparky's first line out loud while agy builds, with team mode's voice instructions: about 2 to 3 s, against 5 to 12 s for the builder's own first line. `""` lets the builder's own first line be said. |
-| `agy.keepHistory` | `false` | agy keeps every run as a conversation (in its list and on your phone, about half a megabyte each); Build Buddy removes its own afterwards unless this is `true`. |
+| `agy.keepHistory` | `false` | agy keeps every run as a conversation (in its list and on your phone, about half a megabyte each). Build Buddy's runs use an agy home of their own (`data/agy-home`, sharing only your sign-in), so they're never listed with yours, and runs over an hour old are cleared out of it. `true` runs them in your own agy home. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
 | `stt` | `"both"` | Speech-to-text: `both` (whisper and Parakeet together, the AI gets both versions), `whisper`, `parakeet`, or `browser` (Chrome's online speech service; macOS/Windows Chrome only). |
 | `tts` | `"kokoro"` | Voice: `kokoro` (natural), `piper` (faster), `browser` (the system's voices), or `off`. |
 | `kokoro.voice` / `kokoro.speed` | `"af_heart"` / `1.0` | One of 28 English voices; preview them in the Ctrl+Shift+P panel. |
-| `watch.enabled` | `true` | The overwatch: a stronger AI that checks on the game while they play and fixes it if it's broken or stuck. |
+| `watch.enabled` | `true` | The overwatch: a careful AI that checks on the game while they play and fixes it if it's broken or stuck (Claude or Codex if one is listed, looking at a screenshot; with agy alone, Argon, judging from the page). |
 | `watch.model` / `watch.effort` | `"opus"` / `"medium"` | Model and effort for the overwatch (with Claude; with Codex it uses high reasoning). |
-| `watch.agyModel` | `"gemini-4-argon-high"` | The overwatch's model when agy is the only brain it can use. agy can't be shown the screenshot, so it judges from the page and how it's running (frame rate, errors, kept values, a blank screen). |
+| `watch.agyModel` | `"gemini-4-argon-low"` | The overwatch's model when agy is the only brain it can use (with Claude or Codex listed too, they watch: they can look at the screenshot). agy can't be shown the screenshot, so it judges from the page and how it's running (frame rate, errors, kept values, a blank screen). Argon high took 1 to 5 minutes a look, and hit the 5-minute limit once in 4. |
 | `watch.firstAfterSec` / `watch.everySec` | `25` / `180` | First check after this much play, then this often while they keep playing the same version. |
 | `creationsButton` | `false` | Show the ⭐ *My creations* button, so the kid can go back to anything they've made. Also in the Ctrl+Shift+P panel. |
 | `unmuteMic` | `true` | Linux: switch the microphone on at startup if it's muted in the system settings. |
@@ -606,7 +606,8 @@ Buddy changes.
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
   every 3 minutes after that while they keep playing it, Opus takes a careful look: a screenshot of
-  the game, its frame rate, recent errors and kept values. It fixes problems that don't show up as
+  the game, its frame rate, recent errors and kept values (with agy as the only brain, Argon does,
+  from the page and those numbers: agy can't be shown the screenshot). It fixes problems that don't show up as
   errors, like a player who's invisible or stuck, a frozen screen, or a request that didn't take.
   If everything works, it may give that version one tiny polish (something cut off at the edge, too
   small to see, a missing bounce), but it never adds new things or changes what the kid chose, so

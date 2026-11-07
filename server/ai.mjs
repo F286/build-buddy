@@ -354,10 +354,11 @@ function agyEnv() {
   return { ...process.env, HOME: AGY_HOME, USERPROFILE: AGY_HOME };
 }
 
-// Runs over an hour old are removed from Build Buddy's own agy home (its list there is never shown).
+// Runs over an hour old are removed from Build Buddy's own agy home (its list there is never shown),
+// and so are agy's logs of them.
 function pruneAgyHome(home) {
   const old = Date.now() - AGY_KEEP_MS;
-  for (const sub of ['conversations', 'brain', 'presence', 'annotations']) {
+  for (const sub of ['conversations', 'brain', 'presence', 'annotations', 'log', 'crashes']) {
     let names = [];
     try {
       names = fs.readdirSync(path.join(home, sub));
@@ -406,8 +407,11 @@ function takeAgy(model) {
   return w.proc;
 }
 
-// Build Buddy is quitting: its agy programs stop now, and their folders go with them.
+// Build Buddy is quitting: its agy programs stop now, and their folders go with them (and no other
+// brain takes over from the ones stopped - see ask()).
+let quitting = false;
 export function stopAgy() {
+  quitting = true;
   for (const w of agyPool) clearTimeout(w.timer);
   agyPool = [];
   for (const proc of agyLive) {
@@ -469,6 +473,7 @@ function askAgy(model, content, { onText = () => {}, timeoutSec = 120 } = {}) {
       clearTimeout(timer);
       if (err) proc.child.kill('SIGKILL');
       proc.onClose = null;
+      if (quitting) return reject(new Error('Build Buddy is quitting'));
       if (err) return reject(err);
       if (!result) return reject(new Error(`agy returned no result${proc.closed?.code ? ` (exit ${proc.closed.code}: ${proc.err.trim().slice(-300)})` : ''}`));
       if (result.status !== 'SUCCESS') return reject(new Error(result.error || `agy ${result.status || 'failed'}`));
@@ -575,7 +580,7 @@ export function parseReply(raw) {
   }
 
   // A reply that ignored the format entirely is still worth saying out loud.
-  if (!out.say && !out.done && !out.html && !out.edits.length) out.say = text.trim().split('\n')[0].slice(0, 200);
+  if (!out.say && !out.done && !out.html && !out.edits.length) [out.say, out.offFormat] = [text.trim().split('\n')[0].slice(0, 200), true];
   return out;
 }
 
@@ -656,6 +661,7 @@ async function ask(prompt, emit, state) {
       log(`ok   ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${reply.length} chars${speed}`);
       return { text: reply, backend: name };
     } catch (err) {
+      if (quitting) throw err; // (no other brain is started while Build Buddy quits)
       lastErr = err;
       log(`FAIL ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${err.message.replace(/\s+/g, ' ').slice(0, 300)}`);
       emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
@@ -737,7 +743,7 @@ export async function build({ text, alt, fix }, emit) {
         over = true;
       }
       // (If agy only talked - it asked what they meant, or answered a question - that's said too.)
-      if (voiced && state.said) r = { ...r, say: state.said, done: !r.html && r.say && r.say !== state.said ? [r.say, r.done].filter(Boolean).join(' ') : r.done };
+      if (voiced && state.said) r = { ...r, say: state.said, done: !r.html && !r.offFormat && r.say && r.say !== state.said ? [r.say, r.done].filter(Boolean).join(' ') : r.done };
       // A page that doesn't parse would only crash when shown: it's fixed first, once.
       if (r.html && !fix) {
         const broken = await team.syntaxErrors(r.html);
@@ -745,7 +751,9 @@ export async function build({ text, alt, fix }, emit) {
           log(`the new page doesn't run (${broken[0].slice(0, 120)}), fixing it before it's shown`);
           emit({ type: 'progress', chars: 0, note: 'fixing a wobbly bit' });
           const fixed = await classic({ page: r.html, history, text: '', alt, fix: broken.join('\n') }, emit, { said: state.said || 'quiet' }).catch(() => null);
-          if (fixed?.html && (await team.syntaxErrors(fixed.html)).length < broken.length) r = { ...r, html: fixed.html };
+          // (Taken only if it's still the whole page - not a bit of it - and runs better.)
+          const whole = fixed?.html && fixed.html.length > r.html.length * 0.6 && /<\/html>|<\/body>|<\/script>/i.test(fixed.html);
+          if (whole && (await team.syntaxErrors(fixed.html)).length < broken.length) r = { ...r, html: fixed.html };
         }
       }
     }
