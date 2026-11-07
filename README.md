@@ -227,8 +227,11 @@ Linux desktops, add a `start.sh` entry to your startup applications. On macOS, a
 
 Things to try: *a piano with rainbow keys*, *a fish tank where I can feed the fish*, *a dinosaur
 that dances when I click it*, *a 3D racing game*, *make it faster*, *add a second player*, *make the
-sky night time*. Sparky is told to keep everything friendly. Monsters come out goofy and zaps turn
-into confetti.
+sky night time*. Sparky follows what the kid asks for as closely as it can and censors it as little
+as it can: potty humor is fine (*a poop that farts*, *a dinosaur with diarrhea*) - built gladly,
+said back in their own words, never added when they didn't ask for it. It stays friendly: monsters
+come out goofy and zaps turn into confetti, and there are no swear words, nothing sexual and nothing
+mean about a real person.
 
 ## Settings
 
@@ -626,8 +629,9 @@ Buddy changes.
   sends a small screenshot of the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
-- **Kid-friendly by instruction.** Sparky is told to keep everything friendly and age-appropriate,
-  but it's still an AI. Sit with them the first few times.
+- **Kid-friendly by instruction.** Sparky is told to keep everything friendly and age-appropriate
+  (silly potty humor is allowed when the kid asks for it), but it's still an AI. Sit with them the
+  first few times.
 
 ## Troubleshooting
 
