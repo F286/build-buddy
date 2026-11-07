@@ -651,12 +651,12 @@ function heard(text, alt = '') {
 // A stronger, slower model checks on the creation once the kid has played with it for a while,
 // then every few minutes while they keep playing it (or straight away if quick fixes didn't
 // help), and quietly fixes it if it's broken or stuck. See server/watch.mjs.
-const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '', noteFor: null };
+const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '', noteFor: null, busyUntil: 0 };
 
 async function checkCreation({ urgent = false } = {}) {
   const cfg = state.config.watch;
   if (!cfg?.enabled || !state.html || askingClosed() || timer.overtime || overwatch.running || !state.project?.version) return;
-  if (state.busy || mic.recording || mic.transcribing) return;
+  if (state.busy || mic.recording || mic.transcribing || Date.now() < overwatch.busyUntil) return;
   const { id: projectId, version } = state.project;
   const key = `${projectId}:${version}`;
   const last = overwatch.lastCheck.get(key);
@@ -685,11 +685,13 @@ async function checkCreation({ urgent = false } = {}) {
       screenshot,
       report: { ...rest, shownSec: (Date.now() - state.loadedAt) / 1000, errors: [...new Set([...(rest.errors || []), ...state.pageErrors])] },
     });
-    // (A pass of the builder's own was at work: this look didn't happen, so it's tried again soon.)
+    // (A pass of the builder's own was at work: this look didn't happen, so it's tried again in a
+    // little while.)
     if (r.skipped === 'busy') {
       if (last) overwatch.lastCheck.set(key, last);
       else overwatch.lastCheck.delete(key);
       overwatch.urgentDone.delete(key);
+      overwatch.busyUntil = Date.now() + 20000;
       return;
     }
     overwatch.note = r.fixed ? `${r.verdict === 'polish' ? 'polished' : 'fixed'}: ${r.why}` : r.verdict ? `all good (${r.why})` : `skipped (${r.skipped})`;

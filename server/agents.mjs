@@ -698,6 +698,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const w = workFor(p.id);
   let s = sessionFor(p.id, { renew: true });
   makeWay(s);
+  warmedAt = 0; // (the kid's talking that led here is used: only talking after it counts for a spare)
+  w.lastThing = last;
   await settled(w);
   // (Normally they're warm already: the app warms the team up while the kid talks.)
   keepHelpersWarm();
@@ -945,9 +947,12 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // Its helpers wrote code it hasn't seen: the next pass makes it fit first. (On agy, where that pass is
   // the only one, one still to come - stopped for the kid, or not run yet - stays to come after a change
   // made with its own edits.)
+  // (The version it'll be: a pass still to come is for it and the versions made from it, not one undone -
+  // or still for an earlier one this was made from, whose helpers' code it hasn't seen either.)
+  const now = store.currentProject();
+  const earlier = w.wire && w.wireFor != null && wireIsFor(now, now.current, w);
   if (crew.jobs.length || !(onAgy() && edited && w.wire)) [w.wire, w.wireTries] = [crew.jobs.length > 0, 0];
-  // (The version it'll be: a pass still to come is for it and the versions made from it, not one undone.)
-  if (crew.jobs.length) w.wireFor = store.currentProject().versions.reduce((m, v) => Math.max(m, v.n), 0) + 1;
+  if (crew.jobs.length && !earlier) w.wireFor = now.versions.reduce((m, v) => Math.max(m, v.n), 0) + 1;
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (!edited && r.title && r.title !== p.title && !sameCreation(page, built));
   if (fresh) {
@@ -1132,7 +1137,7 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     throw err;
   });
   // (The kid started talking just before it began: their request will end it, so a new lead waits.)
-  if (Date.now() - warmedAt < 30000) spareFor(s);
+  if (!w.lastThing && Date.now() - warmedAt < 30000) spareFor(s);
   const reply = await asking;
   const edits = parseReply(reply.text).edits;
   // (On agy, a reply with no edits that doesn't say OK - empty, or a tool it tried to use - is a turn
@@ -1159,6 +1164,11 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     return { skipped: 'stale' };
   }
   const html = await declareMissing(await renameClashes(fitted.html));
+  if (html === page) {
+    s.shown = page;
+    log(`AGENTS wire ${took()} OK (its edits were in already)`);
+    return { ok: true };
+  }
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
     if (stale()) later();
     log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
