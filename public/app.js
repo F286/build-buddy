@@ -1545,7 +1545,8 @@ $('#parentForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
   const c = await api('/api/config', {
-    backends: f.brains.value.split(','),
+    // (A brain order for one run - --agents, --team, --solo, KIDBUILD_BACKENDS - isn't saved unless changed here.)
+    ...(f.brains.value !== state.config.backends.join(',') && { backends: f.brains.value.split(',') }),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
     ...(f.building.value !== state.buildingShown && { team: ['team', 'agents'].includes(f.building.value), agents: f.building.value === 'agents', solo: f.building.value === 'solo' }),
