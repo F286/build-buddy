@@ -204,6 +204,9 @@ export function saveConfig(patch) {
   fs.writeFileSync(FILE, JSON.stringify(user, null, 2) + '\n');
   if ((patch.team && 'enabled' in patch.team) || (patch.solo && 'enabled' in patch.solo)) runMode = null;
   current = withRunTeam(merge(DEFAULTS, user));
+  // (KIDBUILD_BACKENDS stays this run's brains until a grown-up picks others in the panel.)
+  if (patch.backends) delete process.env.KIDBUILD_BACKENDS;
+  else if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());
   return current;
 }
 
