@@ -131,8 +131,9 @@ function keepHelpersWarm() {
 }
 
 // Who writes for the team on agy - its helpers' parts, and the fixer's edits that didn't fit - is an
-// Argon helper (null: a Claude one).
-const runner = () => (onAgy() ? agyHelper : null);
+// Argon helper (null: a Claude one). Like a helper, the fixer is given up once it goes quiet for 20 s
+// (and after its 60 s, as Claude's is).
+const runner = () => (onAgy() ? o => agyHelper({ stallSec: 20, ...o }) : null);
 
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
