@@ -97,7 +97,10 @@ export const DEFAULTS = {
   // 10 s to start writing); "" lets the builder's own first line be said. keepHistory: true runs agy
   // in your own agy home, so Build Buddy's runs are listed with your conversations (by default they
   // use one of their own, data/agy-home, sharing only the sign-in).
-  agy: { bin: '', model: 'gemini-4-argon-low', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },
+  // way: "agents" (the default) builds the agent way on agy - an Argon lead that remembers the
+  // creation plans it, and Argon helpers (helperModel, "" for agy.model) write its parts at the same
+  // time, about as quick as Claude's; "classic" has one Argon write the whole page (about 100 s).
+  agy: { bin: '', model: 'gemini-4-argon-low', way: 'agents', helperModel: '', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },
   command: { cmd: '', args: [] },
 
   // Speech in: both (whisper and Parakeet listen together and the AI gets both versions; whisper

@@ -898,7 +898,8 @@ async function fix(html, problem, signal, tally) {
 // at most maxHelpers() at once. crew.running holds each job's part: { ...job, reply, code,
 // startedAt, doneAt }. Team mode and the agent way (agents.mjs) both build with it.
 
-export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity, twinFirst = false, kit = false }) {
+// runner: who writes each part (the agent way on agy passes agy's); by default a claude helper.
+export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity, twinFirst = false, kit = false, runner = null }) {
   const jobs = [];
   let hedges = 0; // second tries started (each one is more for the computer and the service to do)
   const running = new Map();
@@ -932,7 +933,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
         const stops = [new AbortController(), new AbortController()];
         let wrote = false;
         const one = i =>
-          ask('helper', {
+          (runner || (o => ask('helper', o)))({
             system: helperSystem(kit),
             prompt,
             stallSec: 20,

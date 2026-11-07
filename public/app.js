@@ -530,7 +530,7 @@ async function build(body) {
   // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
   // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
   state.fixing = false; // the server counted the fix's time back up to here; trying it is play time
-  if (result?.html && /^claude (team|solo|agents)$/.test(result.backend)) result = await repairFirst(result);
+  if (result?.html && /^(claude (team|solo|agents)|agy agents)$/.test(result.backend)) result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -560,7 +560,7 @@ async function build(body) {
         cheer();
       }
       // (Solo mode and the agent way keep looking until the server says it's done.)
-      if (/^claude (team|solo|agents)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend !== 'claude team' });
+      if (/^(claude (team|solo|agents)|agy agents)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend !== 'claude team' });
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -591,7 +591,7 @@ async function repairFirst(result) {
   const keep = result.continues && state.kept?.projectId === state.project?.id ? state.kept.keep : null;
   // (The agent way's pages run on its kit, where a part that throws doesn't stop the rest: a
   // shorter look is enough.)
-  const look = result.backend === 'claude agents' ? 1000 : 1500;
+  const look = /^(claude|agy) agents$/.test(result.backend) ? 1000 : 1500;
   let errors = await tryPage(result.html, keep, look);
   let withKeep = false;
   if (errors.length && keep) {
@@ -1145,7 +1145,7 @@ function pressTalk() {
 // the moment the request arrives (see server/team.mjs).
 // Also while something is building: what the kid says now is built next, by a team that's ready.
 function warmTeam() {
-  if (state.config.teamActive || state.config.soloActive || state.config.agyActive) api('/api/warm', {}).catch(() => {});
+  if (state.config.teamActive || state.config.soloActive || state.config.agentsActive || state.config.agyActive) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {

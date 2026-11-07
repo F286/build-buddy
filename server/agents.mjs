@@ -18,20 +18,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
 import * as store from './store.mjs';
-import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
+import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR, AgySession, agyHelper, agyVoice, keepAgyWarm } from './ai.mjs';
 import { Session } from './solo.mjs';
 import { leadBrain } from './bins.mjs';
 import { kitApi, kitPage, KIT_NAMES } from './kit.mjs';
 import { syntaxErrors, blankProblems, speakFirst, warmVoice, warmHelpers, maxHelpers, polishPasses as teamPolish, EDIT_FORMAT, PlanReader, helperCrew, applyEditsWithFixer, assemble as teamAssemble, repairNames, renameClashes } from './team.mjs';
 
-// The agent way is team mode with team.agents on (Claude only; solo mode comes first).
+// The agent way is team mode with team.agents on, when Claude leads (solo mode comes first) - or,
+// when Gemini (agy) leads, how it builds unless agy.way is "classic": an Argon lead that remembers the
+// creation writes the plan, and Argon helpers write its parts at the same time (one Argon writing a
+// whole page took about 100 s; this way about as long as Claude's).
 export function enabled() {
   const c = config();
-  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && leadBrain() === 'claude';
+  const brain = leadBrain();
+  if (brain === 'agy') return c.agy?.way !== 'classic';
+  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && brain === 'claude';
 }
+const onAgy = () => leadBrain() === 'agy';
+// (What its versions are called: 'claude agents' or 'agy agents'.)
+const brainName = () => (onAgy() ? 'agy' : 'claude');
 
-// Passes after something new or a change: growing it, then looking again (team.polish more).
-export const passes = () => 1 + teamPolish();
+// Passes after something new or a change: growing it, then looking again (team.polish more). On agy
+// there's only the wire pass (in text): growing and looking it over use Claude Code's tools.
+export const passes = () => (onAgy() ? 0 : 1 + teamPolish());
 
 // The Agent tool takes a model alias only (no full model names).
 const ALIASES = ['sonnet', 'opus', 'haiku', 'fable'];
@@ -42,6 +51,7 @@ function helperAlias(want) {
 
 function lead() {
   const c = config();
+  if (onAgy()) return { model: c.agy.model || '', effort: '', fast: false, args: [], helperModel: c.agy.helperModel || c.agy.model || '', firstModel: '', thinking: { build: 0, wire: 0, look: 0 } };
   const r = c.team?.agentLead || {};
   const model = r.model || c.claude.model || '';
   return {
@@ -106,7 +116,8 @@ const WARM_HELPERS = QUICK_HELPERS + 3;
 // They wait a while: starting ten at once takes the computer's attention just when the kid asks, so
 // they're kept through the minutes the kid plays.
 const WARM_MS = 15 * 60000;
-const keepHelpersWarm = () => warmHelpers(WARM_HELPERS, WARM_MS, true);
+// (On agy: as many Argon helpers as write at once, and the quick voice, for a few minutes.)
+const keepHelpersWarm = () => (onAgy() ? keepAgyWarm({ [lead().helperModel]: QUICK_HELPERS, ...(config().agy.voiceModel ? { [config().agy.voiceModel]: 1 } : {}) }) : warmHelpers(WARM_HELPERS, WARM_MS, true));
 
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
@@ -337,12 +348,15 @@ function sessionArgs() {
 function sessionFor(projectId, { renew = false } = {}) {
   const s = session;
   const usable = s?.alive && s.projectId === projectId;
-  if (usable && (s.kidWaiting || !renew || (s.turns < MAX_TURNS && s.key === JSON.stringify(sessionArgs())))) return s;
+  const key = onAgy() ? JSON.stringify(['agy', lead().model, leadSystem()]) : JSON.stringify(sessionArgs());
+  if (usable && (s.kidWaiting || !renew || (s.turns < MAX_TURNS && s.key === key))) return s;
   s?.end();
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
   // (Helpers always work in the foreground: the lead's turn ends only once they're done.)
-  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
+  session = onAgy()
+    ? new AgySession(projectId, { system: leadSystem(), model: lead().model, label: 'agents' })
+    : new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
   session.shown = null; // the page as it last saw it, every line (its own edits in): no need to show it again
@@ -389,7 +403,7 @@ export function warm() {
   try {
     const s = sessionFor(store.currentProject().id, { renew: true });
     // (Its helpers too: while the kid waits, they start on each job the moment it's written.)
-    return { warm: (s === before ? 0 : 1) + (config().team?.warm === false ? 0 : warmVoice() + keepHelpersWarm()) };
+    return { warm: (s === before ? 0 : 1) + (config().team?.warm === false ? 0 : (onAgy() ? 0 : warmVoice()) + keepHelpersWarm()) };
   } catch {
     return { warm: 0 };
   }
@@ -404,7 +418,7 @@ export function stop() {
 export function madeByAgents(p, version) {
   let v = p.versions.find(x => x.n === version);
   for (let i = 0; v && /overwatch/.test(v.backend || '') && i < 50; i++) v = p.versions.find(x => x.n === v.from);
-  return /^claude agents/.test(v?.backend || '');
+  return /^(claude|agy) agents/.test(v?.backend || '');
 }
 
 // The lead's helpers at work, for the app's little robots: Agent calls started and finished.
@@ -643,7 +657,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     state.said = line;
     emit({ type: 'say', text: line });
   };
-  if (!fix) speakFirst({ history, text, alt, title }, sayNow).catch(err => log(`agents voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
+  if (!fix) (onAgy() ? agyVoice : speakFirst)({ history, text, alt, title }, sayNow).catch(err => log(`agents voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
 
   const known = s.turns > 0 && Boolean(page) && s.files === page;
   sync(s, page); // (its files hold the page as it is, for when it works on them while the kid plays)
@@ -664,7 +678,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     chars += n;
     emit({ type: 'progress', chars, helpers: crew.jobs.length + team.helpers.size, helpersDone: crew.done + team.done, team: true, leads: 1 });
   };
-  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
+  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: onAgy() ? 9000 : 5000, runner: onAgy() ? agyHelper : null, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
@@ -832,9 +846,9 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (asks && w.rules) fs.writeFileSync(rules, helperRules(w.rules));
     if (fix || !r.say) throw new Error(fix ? 'the fix changed nothing' : page ? 'it changed nothing' : "it didn't build anything");
     s.shown = sawPage === page || sees ? page : null; // (it saw the page, now or before, and changed nothing)
-    log(`ok   claude agents ${secs()} only talked, turn ${s.turns}`);
+    log(`ok   ${brainName()} agents ${secs()} only talked, turn ${s.turns}`);
     // (When the quick voice spoke first, the lead's answer is said too, as in team mode.)
-    return { say: state.said || r.say, done: state.said && state.said !== r.say ? r.say : '', title: r.title, emoji: r.emoji, html: null, edited: false, look, backend: 'claude agents' };
+    return { say: state.said || r.say, done: state.said && state.said !== r.say ? r.say : '', title: r.title, emoji: r.emoji, html: null, edited: false, look, backend: `${brainName()} agents` };
   }
 
   // Every script should parse before it's shown: what can be put right here is, the rest goes back
@@ -878,9 +892,9 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // (Starting programs takes the computer's attention: the helpers taken are replaced once the page is
   // ready, for the kid's next turn.)
   keepHelpersWarm();
-  log(`ok   claude agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, ${eventGaps(built) || 'no events'}, turn ${s.turns}`);
+  log(`ok   ${brainName()} agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, ${eventGaps(built) || 'no events'}, turn ${s.turns}`);
   const sameOne = Boolean(page) && (edited || sameCreation(page, built));
-  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: 'claude agents' };
+  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: `${brainName()} agents` };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -932,6 +946,7 @@ export async function check({ projectId, version, report, screenshot }) {
     rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
     fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ ...rules, freshLook: '', quick: false }));
     if (w.wire) return await wirePass({ s, w, p, page, report, shot, stale, took, before });
+    if (onAgy()) return { skipped: 'polished enough' }; // (growing and looking it over need Claude Code's tools)
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
@@ -983,7 +998,7 @@ export async function check({ projectId, version, report, screenshot }) {
       log(`AGENTS skip ${took()} ${why} (${probs ? "it didn't run" : 'stale'})`);
       return { skipped: probs ? "the change didn't run" : 'stale' };
     }
-    p = store.addVersion(store.currentProject(), built.html, { request: `(agents polish) ${why}`, backend: 'claude agents polish', continues: true });
+    p = store.addVersion(store.currentProject(), built.html, { request: `(agents polish) ${why}`, backend: `${brainName()} agents polish`, continues: true });
     s.files = built.html;
     w.lastPass = { version: p.current, grow, before };
     done();
@@ -1038,7 +1053,7 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     return { skipped: stale() ? 'stale' : "the change didn't run" };
   }
   const built = keepAsFiles(s.dir, html);
-  p = store.addVersion(store.currentProject(), built, { request: `(agents wire) ${why}`, backend: 'claude agents polish', continues: true });
+  p = store.addVersion(store.currentProject(), built, { request: `(agents wire) ${why}`, backend: `${brainName()} agents polish`, continues: true });
   s.files = built;
   s.shown = !fitted.failed.length && !fitted.fixed && html === fitted.html ? built : null;
   w.lastPass = { version: p.current, grow: false, wire: true, before };
@@ -1070,7 +1085,7 @@ const proposals = new Map();
 export async function repair({ version, errors, keep, accept = false }) {
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
-  if (!enabled() || p.current !== version || v?.backend !== 'claude agents') return { skipped: 'stale' };
+  if (!enabled() || p.current !== version || !/^(claude|agy) agents$/.test(v?.backend || '')) return { skipped: 'stale' };
   const key = `${p.id}:${version}`;
   if (accept) {
     const prop = proposals.get(key);

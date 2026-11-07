@@ -74,7 +74,7 @@ function publicConfig() {
     soloActive: solo.enabled(),
     agentsActive: agents.enabled(),
     // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
-    agyActive: !solo.enabled() && !team.enabled() && leadBrain() === 'agy',
+    agyActive: leadBrain() === 'agy' && !agents.enabled(), // (agy building the classic way)
     lead: leadBrain(), // (the first installed brain: it builds)
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
     // every look counts).
@@ -245,7 +245,7 @@ const routes = {
     store.dropVersion(p, version);
     ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
     if (/^claude solo/.test(v.backend)) solo.takenBack({ projectId, version, error });
-    if (/^claude agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
+    if (/^(claude|agy) agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
     return { dropped: true };
   },
 
