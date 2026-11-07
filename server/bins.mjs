@@ -66,14 +66,19 @@ export function leadBrain() {
 // everything it printed. Rejects on a non-zero exit, a timeout, or an abort.
 const runs = new Set(); // programs run() started that are still running
 
-// Build Buddy is quitting: they stop now.
+// Build Buddy is quitting: they stop now, and no program is started from then on (the brains' own
+// starters ask isQuitting() too), so no other brain takes over from the ones stopped.
+let quitting = false;
+export const isQuitting = () => quitting;
 export function stopRuns() {
+  quitting = true;
   for (const child of runs) child.kill('SIGKILL');
   runs.clear();
 }
 
 export function run(bin, args, { input = '', cwd, env, timeoutSec = 120, onStdout } = {}) {
   return new Promise((resolve, reject) => {
+    if (quitting) return reject(new Error('Build Buddy is quitting'));
     const child = spawn(bin, args, {
       cwd,
       env: { ...process.env, ...env },

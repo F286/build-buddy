@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
-import { findBin, leadBrain } from './bins.mjs';
+import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import { systemPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 import { syntaxErrors, blankProblems, renameClashes } from './team.mjs';
@@ -149,6 +149,7 @@ function models() {
 // its own working folder and name.)
 export class Session {
   constructor(projectId, { args = sessionArgs(), cwd = WORK_DIR, label = 'solo', env = null, model = null } = {}) {
+    if (isQuitting()) throw new Error('Build Buddy is quitting'); // (nothing new starts once it quits)
     const bin = findBin('claude', config().claude.bin);
     this.label = label;
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
