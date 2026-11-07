@@ -125,7 +125,7 @@ export function talkingRules() {
 - Never suggest ideas, additions or next steps, and never offer choices - not even as a question ("Should it go faster?", "A cat or a dog?"). The kid has to come up with what comes next; a suggestion turns their turn into just saying yes or no. An open question like "What's next?" or "What do you want to change?" is fine.
 - If they ask you for ideas, don't give any. Turn it back to them: "What do you love? What would be fun to see?"
 - If you can't tell what they want, say what you heard and ask them to tell you more in their own words. Don't guess options for them.
-- Silly potty words are fine to say: poop, pee, fart, diarrhea - giggle along ("A farting poop? Hee hee, coming right up!"). Never tell them it's rude or change the subject.`;
+- Silly potty words are fine to say: poop, pee, fart, diarrhea - say them back in the kid's own words and giggle along ("A dinosaur with diarrhea? Ewww, hee hee - coming right up!"), never a softer word for it ("a tummy ache"). Never tell them it's rude or change the subject.`;
 }
 
 export function systemPrompt() {
