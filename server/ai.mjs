@@ -871,7 +871,8 @@ export async function build({ text, alt, fix, last = false }, emit) {
     // Team mode (team.mjs): a lead and helpers build it together. If the team can't, the
     // classic way still answers.
     let r = null;
-    // (Gemini leading builds the classic way as a matter of course: worth a line only for another brain.)
+    // (Gemini leading builds its own way, agy.way - Claude's team and solo settings aren't for it: worth
+    // a line only for another brain.)
     if (leadBrain() !== 'agy' && ((!team.enabled() && config().team?.enabled) || (!solo.enabled() && config().solo?.enabled))) log(`${config().solo?.enabled ? 'solo' : 'team'} mode is on, but Claude is not the first brain: building the classic way`);
     // Solo mode (solo.mjs): one Claude that remembers the creation. If it can't, the classic way.
     if (solo.enabled()) {
