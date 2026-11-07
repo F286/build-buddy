@@ -554,10 +554,10 @@ export function agyVoice({ history, text, alt, title }, sayNow) {
 // One helper of the agent way's team, on agy (team.mjs helperCrew's runner): the same job and rules a
 // Claude helper gets, as one message - and, like one, given up once it goes quiet for stallSec after
 // it started writing.
-export function agyHelper({ system, prompt, onText, signal, stallSec }) {
+export function agyHelper({ system, prompt, onText, signal, timeoutSec = 150, stallSec }) {
   const c = config().agy;
   const content = `${system}\n\nDo not use any tools, run any commands or touch any files - just answer with your code.\n\n---\n\n${prompt}`;
-  return askAgy(c.helperModel || c.model || '', content, { onText, signal, timeoutSec: 150, stallSec }).then(text => ({ text }));
+  return askAgy(c.helperModel || c.model || '', content, { onText, signal, timeoutSec, stallSec }).then(text => ({ text }));
 }
 
 // A conversation with agy that goes on turn after turn (the agent way's lead, on agy): one agy program
