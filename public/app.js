@@ -651,7 +651,7 @@ function heard(text, alt = '') {
 // A stronger, slower model checks on the creation once the kid has played with it for a while,
 // then every few minutes while they keep playing it (or straight away if quick fixes didn't
 // help), and quietly fixes it if it's broken or stuck. See server/watch.mjs.
-const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '' };
+const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '', noteFor: null };
 
 async function checkCreation({ urgent = false } = {}) {
   const cfg = state.config.watch;
@@ -687,6 +687,7 @@ async function checkCreation({ urgent = false } = {}) {
     });
     overwatch.note = r.fixed ? `${r.verdict === 'polish' ? 'polished' : 'fixed'}: ${r.why}` : r.verdict ? `all good (${r.why})` : `skipped (${r.skipped})`;
     overwatch.note += `, ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    overwatch.noteFor = projectId; // (a new page or another creation has no note yet)
     if (r.fixed) await applyFix(projectId, version, r);
   } catch (err) {
     console.warn('overwatch check failed', err);
@@ -1520,7 +1521,7 @@ function showParentStatus() {
     (c.lead === 'agy' ? `Gemini (Antigravity) builds each creation${c.backends.slice(c.backends.indexOf('agy') + 1).length ? `; ${{ claude: 'Claude', codex: 'ChatGPT', command: 'your command' }[c.backends[c.backends.indexOf('agy') + 1]] || 'the next brain'} takes over if it fails` : ''}. ` : (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
-    (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
+    (overwatch.note && overwatch.noteFor === state.project?.id ? ` Overwatch: ${overwatch.note}.` : '') +
     (timeLeft() == null ? '' : timeLeft() > 0 ? ` Time left: ${clock(timeLeft())}.` : " Time's up.");
 }
 
