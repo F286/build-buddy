@@ -177,7 +177,7 @@ const routes = {
     const started = Date.now();
     const endsAt = timerEndsAt;
     try {
-      await ai.build({ text: text?.trim(), alt: alt?.trim(), fix }, emit);
+      await ai.build({ text: text?.trim(), alt: alt?.trim(), fix, last: Boolean(grace && timeIsUp()) }, emit);
     } catch (err) {
       console.error('build failed:', err.message);
       emit({ type: 'error', message: err.message, blocked: /safety filter/i.test(err.message) });

@@ -851,7 +851,7 @@ async function classic({ page, history, text, alt, fix }, emit, state) {
   return { ...r, html: newHtml, edited, backend: reply.backend };
 }
 
-export async function build({ text, alt, fix }, emit) {
+export async function build({ text, alt, fix, last = false }, emit) {
   if (busy) throw new Error('busy');
   busy = true;
   const state = { said: '' };
@@ -917,6 +917,8 @@ export async function build({ text, alt, fix }, emit) {
         }
       }
     }
+    // (Time's up and this was the last thing they could ask for: Sparky doesn't ask what's next.)
+    if (last && r.done) r = { ...r, done: r.done.replace(/\s*[^.!?]*\?\s*$/, '').trim() };
     const newHtml = r.html;
 
     // Changes to the same creation carry the kid's progress over (KB.keep). Edits always do; a
