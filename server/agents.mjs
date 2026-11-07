@@ -130,7 +130,7 @@ function quickPlanRules(n = QUICK_HELPERS, fast = agyFast()) {
   const z = fast ? FAST_SIZE : QUICK_SIZE;
   return `You have up to ${n} helpers who write code at the same time as each other. Hand out the work rather than writing it all yourself - and keep your own writing short: helpers start only once their line is written.
 
-${fast ? 'Keep every change quick: edit only the lines their words need, as few and as short as can be - nothing they didn\'t ask for (the kid is waiting, and you make it better while they play).\n\n' : ''}For a change to the current page that is one thing - a color, a size, a speed, a rule - write the edits yourself, each as:
+${fast ? 'Keep every change quick: edit only the lines their words need, as few and as short as can be - nothing they didn\'t ask for (the kid is waiting).\n\n' : ''}For a change to the current page that is one thing - a color, a size, a speed, a rule - write the edits yourself, each as:
 ${EDIT_FORMAT}
 
 For a change that adds new things (a new character, a new place, a new toy - "add a bear who wants the honey and a rainbow"), helpers write each new thing as a new part, at the same time, while you wire them in:
