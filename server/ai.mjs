@@ -458,7 +458,9 @@ export function keepAgyWarm(need, ms = AGY_WARM_MS) {
 
 // One message to agy; resolves with its reply once its turn is over (the program then exits on its
 // own). A turn Gemini's safety filter stopped is a failure (the next brain is tried), never a reply.
-function askAgy(model, content, { onText = () => {}, timeoutSec = 120, signal } = {}) {
+// stallSec: once it has started writing, a reply that goes quiet that long has stalled - it's
+// stopped, so it can be asked again (as a Claude helper is).
+function askAgy(model, content, { onText = () => {}, timeoutSec = 120, stallSec = 0, signal } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new Error('stopped'));
     let proc;
@@ -471,10 +473,12 @@ function askAgy(model, content, { onText = () => {}, timeoutSec = 120, signal } 
     let streamed = '';
     let result = null;
     let finished = false;
+    let quietSince = Date.now();
     const finish = err => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      clearInterval(stall);
       if (err) proc.child.kill('SIGKILL');
       proc.onClose = null;
       signal?.removeEventListener('abort', stop);
@@ -505,12 +509,14 @@ function askAgy(model, content, { onText = () => {}, timeoutSec = 120, signal } 
       }
     };
     const onData = chunk => {
+      quietSince = Date.now();
       buf += chunk;
       const lines = buf.split('\n');
       buf = lines.pop();
       lines.forEach(handle);
     };
     const timer = setTimeout(() => finish(new Error(`agy took longer than ${timeoutSec}s`)), timeoutSec * 1000);
+    const stall = stallSec ? setInterval(() => streamed && Date.now() - quietSince > stallSec * 1000 && finish(new Error(`agy stalled, quiet for ${stallSec}s`)), 1000) : null;
     const stop = () => finish(new Error('stopped'));
     signal?.addEventListener('abort', stop);
     proc.onData = onData;
@@ -546,11 +552,12 @@ export function agyVoice({ history, text, alt, title }, sayNow) {
 }
 
 // One helper of the agent way's team, on agy (team.mjs helperCrew's runner): the same job and rules a
-// Claude helper gets, as one message.
-export function agyHelper({ system, prompt, onText, signal }) {
+// Claude helper gets, as one message - and, like one, given up once it goes quiet for stallSec after
+// it started writing.
+export function agyHelper({ system, prompt, onText, signal, stallSec }) {
   const c = config().agy;
   const content = `${system}\n\nDo not use any tools, run any commands or touch any files - just answer with your code.\n\n---\n\n${prompt}`;
-  return askAgy(c.helperModel || c.model || '', content, { onText, signal, timeoutSec: 150 }).then(text => ({ text }));
+  return askAgy(c.helperModel || c.model || '', content, { onText, signal, timeoutSec: 150, stallSec }).then(text => ({ text }));
 }
 
 // A conversation with agy that goes on turn after turn (the agent way's lead, on agy): one agy program
@@ -871,6 +878,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
       try {
         r = await solo.build({ page, history, text, alt, fix }, emit, state);
       } catch (err) {
+        if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
         log(`FAIL claude solo ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
         emit({ type: 'progress', chars: 0, note: 'building the classic way' });
       }
@@ -878,9 +886,9 @@ export async function build({ text, alt, fix, last = false }, emit) {
       // (The agent way - agents.mjs - is team mode with one lead that keeps the creation in mind.)
       const way = agents.enabled() ? 'agents' : 'team';
       try {
-        if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
         r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
+        if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
         log(`FAIL ${leadBrain()} ${way} ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
         emit({ type: 'progress', chars: 0, note: 'the team got stuck, building the classic way' });
       }
@@ -888,7 +896,6 @@ export async function build({ text, alt, fix, last = false }, emit) {
     if (!r) {
       // With agy first, a quick voice answers out loud while agy builds (whichever line comes first
       // is said: the builder's own SAY isn't said twice).
-        if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
       let over = false;
       const voiced = !fix && leadBrain() === 'agy' && !state.said; // (not again after the agent way's own voice)
       if (voiced) {
