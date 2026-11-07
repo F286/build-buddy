@@ -183,20 +183,20 @@ let runMode =
           ? 'classic'
           : null;
 // (Team, the agent way and solo are Claude's ways of building, so asking for one puts Claude first;
-// --classic has Gemini build the classic way too. Both for this run only: brains, or a way for
-// Gemini, that a grown-up picks in the panel win, and the run's own are never saved.)
+// --classic has Gemini build the classic way too. Both last the whole run - picking how Claude builds
+// in the panel doesn't end them - unless a grown-up picks brains, or a way for Gemini, there: theirs
+// win, and the run's own are never saved.)
 const claudeFirst = list => ['claude', ...list.filter(b => b !== 'claude')];
-const picked = { brains: false, agyWay: false };
-const withRunTeam = c =>
-  runMode === null
-    ? c
-    : {
-        ...c,
-        ...(runMode !== 'classic' && !picked.brains && { backends: claudeFirst(c.backends) }),
-        ...(runMode === 'classic' && !picked.agyWay && { agy: { ...c.agy, way: 'classic' } }),
-        team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' },
-        solo: { ...c.solo, enabled: runMode === 'solo' },
-      };
+const run = { claudeFirst: runMode !== null && runMode !== 'classic', agyClassic: runMode === 'classic' };
+const withRunTeam = c => ({
+  ...c,
+  ...(run.claudeFirst && { backends: claudeFirst(c.backends) }),
+  ...(run.agyClassic && { agy: { ...c.agy, way: 'classic' } }),
+  ...(runMode !== null && {
+    team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' },
+    solo: { ...c.solo, enabled: runMode === 'solo' },
+  }),
+});
 
 let current = withRunTeam(merge(DEFAULTS, readUserConfig()));
 if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());
@@ -209,12 +209,12 @@ export function config() {
 // config.json holds only the user's own overrides; merge the patch into it.
 export function saveConfig(patch) {
   // (The brains in the order this run shows them, Claude first, are the run's: not kept.)
-  if (runMode && runMode !== 'classic' && !picked.brains && String(patch.backends) === String(current.backends)) {
+  if (run.claudeFirst && String(patch.backends) === String(current.backends)) {
     const { backends, ...rest } = patch;
     patch = rest;
   }
-  if (patch.backends) picked.brains = true;
-  if (patch.agy && 'way' in patch.agy) picked.agyWay = true;
+  if (patch.backends) run.claudeFirst = false;
+  if (patch.agy && 'way' in patch.agy) run.agyClassic = false;
   const user = merge(readUserConfig(), patch);
   fs.writeFileSync(FILE, JSON.stringify(user, null, 2) + '\n');
   if ((patch.team && 'enabled' in patch.team) || (patch.solo && 'enabled' in patch.solo)) runMode = null;
