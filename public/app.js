@@ -1511,6 +1511,22 @@ async function openParent() {
   if (state.html) tellPage({ type: 'fps?' }); // the answer fills in the frame rate
 }
 
+// Who builds each creation, and who takes over if it fails: the first brain in the list that's
+// installed, then the next one installed. (Brains before the one that leads aren't installed; if
+// the server doesn't say which are, the ones after it are taken to be.)
+function brainsSaid(c) {
+  const name = b => ({ agy: 'Gemini (Antigravity)', claude: 'Claude', codex: 'ChatGPT', command: 'your command' })[b] || b;
+  const at = c.backends.indexOf(c.lead);
+  const has = b => c.installed?.[b] ?? (at >= 0 && c.backends.indexOf(b) >= at);
+  const missing = has(c.lead) ? c.backends.slice(0, at).filter(b => !has(b)) : c.backends;
+  const next = c.backends.slice(at + 1).find(has);
+  const builds = `${name(c.lead)} builds each creation${next ? `; ${name(next)} takes over if it fails` : ''}. `;
+  const way = (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '';
+  if (!missing.length) return c.lead === 'agy' ? builds : way;
+  const names = missing.length > 1 ? `${missing.slice(0, -1).map(name).join(', ')} and ${name(missing.at(-1))} aren't` : `${name(missing[0])} isn't`;
+  return `${names} installed (run setup.sh), so ${has(c.lead) ? builds + (c.lead === 'agy' ? '' : way) : 'nothing can build. '}`;
+}
+
 function showParentStatus() {
   const c = state.config;
   const s = c.speech || {};
@@ -1518,7 +1534,7 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
-    (c.lead === 'agy' ? `Gemini (Antigravity) builds each creation${c.backends.slice(c.backends.indexOf('agy') + 1).length ? `; ${{ claude: 'Claude', codex: 'ChatGPT', command: 'your command' }[c.backends[c.backends.indexOf('agy') + 1]] || 'the next brain'} takes over if it fails` : ''}. ` : (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '') +
+    brainsSaid(c) +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
     (overwatch.note && overwatch.noteFor === state.project?.id ? ` Overwatch: ${overwatch.note}.` : '') +
