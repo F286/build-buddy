@@ -16,7 +16,7 @@ import * as watch from './watch.mjs';
 import * as team from './team.mjs';
 import * as solo from './solo.mjs';
 import * as agents from './agents.mjs';
-import { findBin, leadBrain, stopRuns } from './bins.mjs';
+import { findBin, leadBrain, installed, stopRuns } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
 const MIME = {
@@ -76,6 +76,7 @@ function publicConfig() {
     // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
     agyActive: leadBrain() === 'agy' && !agents.enabled(), // (agy building the classic way)
     lead: leadBrain(), // (the first installed brain: it builds)
+    installed: Object.fromEntries(ai.backendNames.map(n => [n, installed(n)])), // (is each brain installed? for the panel)
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
     // every look counts).
     polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : agents.enabled() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
