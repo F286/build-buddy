@@ -432,6 +432,9 @@ export function warmAgy() {
   return { warm: keepAgyWarm({ [c.agy.model || '']: 1, ...(c.agy.voiceModel ? { [c.agy.voiceModel]: (c.agy.voiceModel === (c.agy.model || '') ? 2 : 1) } : {}) }) };
 }
 
+// After the last thing at time's up, the agy programs still waiting are stopped (nothing will use them).
+export const coolAgy = () => agyPool.splice(0).forEach(w => (clearTimeout(w.timer), w.proc.child.kill()));
+
 // Have this many agy programs of each model started and waiting (each for a few minutes). Returns
 // how many were started.
 export function keepAgyWarm(need, ms = AGY_WARM_MS) {
@@ -879,7 +882,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
       // (The agent way - agents.mjs - is team mode with one lead that keeps the creation in mind.)
       const way = agents.enabled() ? 'agents' : 'team';
       try {
-        r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
+        r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore, last }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
         log(`FAIL ${leadBrain()} ${way} ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
         emit({ type: 'progress', chars: 0, note: 'the team got stuck, building the classic way' });

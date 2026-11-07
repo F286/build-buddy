@@ -860,12 +860,13 @@ export function applyCore(html, { find, replace }) {
 const showEdits = edits => edits.map(e => `<<<<<<< FIND\n${e.find}\n=======\n${e.replace}\n>>>>>>> REPLACE`).join('\n\n');
 
 // Apply edits; the ones that don't fit go to the fixer once, to be copied exactly from the page.
-// Returns the page and the edits that still don't fit.
-async function applyEditsWithFixer(page, edits, signal, tally) {
+// Returns the page and the edits that still don't fit. runner: who fixes them (the agent way on agy
+// passes agy's, as for its helpers); by default the claude fixer.
+async function applyEditsWithFixer(page, edits, signal, tally, runner = null) {
   const first = applySome(page, edits);
   if (!first.failed.length) return first;
   log(`team: ${first.failed.length} of ${edits.length} edits didn't fit, asking the fixer`);
-  const reply = await ask('fixer', {
+  const reply = await (runner || (o => ask('fixer', o)))({
     system: fixerSystem(),
     prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above). If they are all already done on the page, reply with just: DONE\n\n${showEdits(first.failed)}`,
     signal,
