@@ -19,7 +19,9 @@ export const DEFAULTS = {
   // and one that isn't installed is passed over (the first installed one leads: see bins.mjs).
   //   agy     - Google's Antigravity CLI, signed in with a Google account (Gemini 4 Argon). First by
   //             default: in blind tests on kids' own requests it made better creations than Claude
-  //             Opus, in about 100 s instead of 35 (see README, Gemini through Antigravity).
+  //             Opus. It builds the team way (agy.way below): about 38 s for something new and 23 s
+  //             for a change, where Claude's agent way took 33 s and 14 s, measured side by side
+  //             (see README, Gemini through Antigravity).
   //   claude  - Claude Code CLI, signed in with a Claude subscription (or ANTHROPIC_API_KEY)
   //   codex   - OpenAI Codex CLI, signed in with a ChatGPT subscription (or an OpenAI API key)
   //   command - any program that reads a prompt on stdin and prints the reply (ollama, llm, gemini, ...)
@@ -91,15 +93,16 @@ export const DEFAULTS = {
   // session then switches to the main model for everything else).
   solo: { enabled: false, polish: 3, model: '', firstModel: 'sonnet', effort: '', thinking: { build: 2000, look: 12000 } },
   codex: { bin: '', model: '', reasoning: 'low' },
-  // Antigravity (agy): model is any id `agy models` lists. It builds the classic way (one AI writes
-  // it all - the team, agent and solo ways are Claude's). voiceModel: a quick model that says the
+  // Antigravity (agy): model is any id `agy models` lists. It builds the team way by default (way,
+  // below; the team and solo settings above are Claude's). voiceModel: a quick model that says the
   // first line out loud while agy builds (Gemini Flash answers in about 2 s; the builder takes 5 to
   // 10 s to start writing); "" lets the builder's own first line be said. keepHistory: true runs agy
   // in your own agy home, so Build Buddy's runs are listed with your conversations (by default they
   // use one of their own, data/agy-home, sharing only the sign-in).
   // way: "agents" (the default) builds the agent way on agy - an Argon lead that remembers the
   // creation plans it, and Argon helpers (helperModel, "" for agy.model) write its parts at the same
-  // time (about 38 s for something new, 25 s for a change: a little slower than Claude's, better
+  // time (about 38 s for something new and 23 s for a change, where Claude's agent way took 33 s and
+  // 14 s, measured side by side: a little slower than Claude's, better
   // creations); "fast" is the same as quick as Claude's, with smaller parts and smaller changes;
   // "classic" has one Argon write the whole page (the best creations, about 100 s; `./start.sh
   // --classic` builds that way for one run).
