@@ -934,7 +934,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // (Starting programs takes the computer's attention: the helpers taken are replaced once the page is
   // ready, for the kid's next turn - on agy, not after the last thing they could ask for.)
   if (!(last && onAgy())) keepHelpersWarm();
-  log(`ok   ${brainName()} agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, ${eventGaps(built) || 'no events'}, turn ${s.turns}`);
+  // (agy's helpers don't say how many tokens they wrote.)
+  log(`ok   ${brainName()} agents ${secs()} ${how}, ${built.length} chars, ${onAgy() ? '' : `${spent.tokens} helper tokens, `}${eventGaps(built) || 'no events'}, turn ${s.turns}`);
   const sameOne = Boolean(page) && (edited || sameCreation(page, built));
   return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: `${brainName()} agents` };
 }
