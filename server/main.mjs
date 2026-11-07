@@ -485,7 +485,9 @@ server.listen(port, '127.0.0.1', () => {
   const building = solo.enabled()
     ? 'solo (one Claude that remembers the creation)'
     : agents.enabled()
-      ? 'a team, the agent way (a lead that remembers the creation, with helpers)'
+      ? leadBrain() === 'agy'
+        ? 'Gemini, the agent way (an Argon lead that remembers the creation, with Argon helpers)'
+        : 'a team, the agent way (a lead that remembers the creation, with helpers)'
       : team.enabled()
       ? `a team (lead + up to ${team.maxHelpers()} helpers)`
       : leadBrain() === 'agy'

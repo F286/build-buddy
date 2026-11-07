@@ -505,12 +505,15 @@ function addParts(html, parts) {
 // call is a crash.)
 function missingMethods(html) {
   const pieces = html.split(/^\/\/ ---- ([\w-]+)[ \t]*$/m); // text, name, code, name, code, ...
-  const code = pieces.join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1'); // (calls, not comments)
+  const uncomment = text => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1'); // (calls, not comments)
   const missing = [];
   for (let i = 1; i < pieces.length; i += 2) {
     const name = pieces[i];
     const own = pieces[i + 1];
     if (!new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*\\{`).test(own)) continue; // (an object of its own)
+    // (Not in a part that has a name of its own like it - a local const sky = ctx.createLinearGradient(...).)
+    const local = new RegExp(`\\b(?:const|let|var)\\s+${name}\\b|[(,]\\s*${name}\\s*[,)=]`);
+    const code = uncomment(pieces.filter((p, k) => k % 2 === 0 && (k === i + 1 || !local.test(p))).join('\n'));
     const called = new Set([...code.matchAll(new RegExp(`(?<![\\w$.])${name}\\.([A-Za-z_$][\\w$]*)\\s*\\(`, 'g'))].map(m => m[1]));
     for (const m of called) if (!new RegExp(`(?:^|[\\s,{;])(?:async\\s+)?${m.replace(/\$/g, '\\$')}\\s*(?:\\(|:)|\\.${m.replace(/\$/g, '\\$')}\\s*=(?!=)|\\[\\s*['"]${m}['"]\\s*\\]\\s*=(?!=)`, 'm').test(own)) missing.push(`${name}.${m}()`);
   }
@@ -881,7 +884,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   s.shown = mine ? built : null; // (its helpers' code it hasn't seen yet)
   if (asks) w.rules = asks;
   // Its helpers wrote code it hasn't seen: the next pass makes it fit first.
-  w.wire = crew.jobs.length > 0;
+  [w.wire, w.wireTries] = [crew.jobs.length > 0, 0];
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (!edited && r.title && r.title !== p.title && !sameCreation(page, built));
   if (fresh) {
@@ -1027,7 +1030,9 @@ export function wireNext(projectId) {
 
 // The wire pass (see WIRE): edits in text, with a look at the screenshot.
 async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
-  w.wire = false;
+  // (A wire turn that fails - a refusal, a stall - is tried once more on the next check.)
+  w.wireTries = (w.wireTries || 0) + 1;
+  if (w.wireTries >= 2) w.wire = false;
   const gaps = [...missingMethods(page), ...missingParts(page), eventGaps(page)].filter(x => x && !/all met$/.test(x));
   const prompt = [
     `<current_page>\n${page}\n</current_page>`,
@@ -1039,6 +1044,7 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
   await s.think(lead().thinking.wire);
   if (stale()) return { skipped: 'stale' };
   const reply = await s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' });
+  w.wire = false;
   const why = field(reply.text, 'WHY') || 'made its parts fit';
   const edits = parseReply(reply.text).edits;
   if (!edits.length || stale()) {

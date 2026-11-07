@@ -1318,6 +1318,7 @@ micBtn.addEventListener('pointercancel', releaseTalk);
 onPress($('#undoBtn'), async () => {
   if (state.busy) return say(line('wait'));
   hush();
+  checkRun++; // (the team's passes on what the kid went back from stop: they'd bring it back)
   const r = await api('/api/undo', {});
   if (!r.project) {
     sfx.oops();
