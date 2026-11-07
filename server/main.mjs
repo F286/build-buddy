@@ -466,12 +466,13 @@ function shutdown() {
   quitting = true;
   console.log('Bye!');
   browser?.kill();
-  // (Every brain's programs stop now, agy's first: no other brain takes over while it quits.)
+  // (Every brain's programs stop now. stopRuns() first: it says Build Buddy is quitting, so nothing new
+  // is started from here - no other brain takes over, and a build that stops isn't built another way.)
+  stopRuns();
   ai.stopAgy();
   agents.stop();
   solo.stop();
   team.stopPrograms();
-  stopRuns();
   server.close();
   setTimeout(() => process.exit(0), 300);
 }

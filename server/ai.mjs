@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { config, DATA, ROOT } from './config.mjs';
-import { findBin, run, installed, leadBrain } from './bins.mjs';
+import { findBin, run, installed, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import * as team from './team.mjs';
 import * as agents from './agents.mjs';
@@ -373,6 +373,7 @@ function pruneAgyHome(home) {
 }
 
 function startAgy(model) {
+  if (isQuitting()) throw new Error('Build Buddy is quitting'); // (nothing new starts once it quits)
   const bin = findBin('agy', config().agy.bin);
   if (!bin) throw new Error('Antigravity CLI (agy) not found (install it and run `agy` once to sign in)');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'buildbuddy-agy-'));
@@ -407,11 +408,9 @@ function takeAgy(model) {
   return w.proc;
 }
 
-// Build Buddy is quitting: its agy programs stop now, and their folders go with them (and no other
-// brain takes over from the ones stopped - see ask()).
-let quitting = false;
+// Build Buddy is quitting (bins.mjs stopRuns() says so first): its agy programs stop now, and their
+// folders go with them (and no other brain takes over from the ones stopped - see ask()).
 export function stopAgy() {
-  quitting = true;
   for (const w of agyPool) clearTimeout(w.timer);
   agyPool = [];
   for (const proc of agyLive) {
@@ -479,7 +478,7 @@ function askAgy(model, content, { onText = () => {}, timeoutSec = 120, signal } 
       if (err) proc.child.kill('SIGKILL');
       proc.onClose = null;
       signal?.removeEventListener('abort', stop);
-      if (quitting) return reject(new Error('Build Buddy is quitting'));
+      if (isQuitting()) return reject(new Error('Build Buddy is quitting'));
       if (err) return reject(err);
       if (!result) return reject(new Error(`agy returned no result${proc.closed?.code ? ` (exit ${proc.closed.code}: ${proc.err.trim().slice(-300)})` : ''}`));
       if (result.status !== 'SUCCESS') return reject(new Error(result.error || `agy ${result.status || 'failed'}`));
@@ -820,7 +819,7 @@ async function ask(prompt, emit, state) {
       log(`ok   ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${reply.length} chars${speed}`);
       return { text: reply, backend: name };
     } catch (err) {
-      if (quitting) throw err; // (no other brain is started while Build Buddy quits)
+      if (isQuitting()) throw err; // (no other brain is started while Build Buddy quits)
       lastErr = err;
       log(`FAIL ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${err.message.replace(/\s+/g, ' ').slice(0, 300)}`);
       if (config().backends.slice(config().backends.indexOf(name) + 1).some(installed)) emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
@@ -879,6 +878,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
       // (The agent way - agents.mjs - is team mode with one lead that keeps the creation in mind.)
       const way = agents.enabled() ? 'agents' : 'team';
       try {
+        if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
         r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
         log(`FAIL ${leadBrain()} ${way} ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
@@ -888,6 +888,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
     if (!r) {
       // With agy first, a quick voice answers out loud while agy builds (whichever line comes first
       // is said: the builder's own SAY isn't said twice).
+        if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
       let over = false;
       const voiced = !fix && leadBrain() === 'agy' && !state.said; // (not again after the agent way's own voice)
       if (voiced) {

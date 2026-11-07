@@ -25,7 +25,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
-import { findBin, leadBrain } from './bins.mjs';
+import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
@@ -365,6 +365,7 @@ function claudeArgs(name, system, tools = '') {
 }
 
 function start(args) {
+  if (isQuitting()) throw new Error('Build Buddy is quitting'); // (nothing new starts once it quits)
   const bin = findBin('claude', config().claude.bin);
   if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
   const child = spawn(bin, args, {
