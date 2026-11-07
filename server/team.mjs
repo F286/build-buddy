@@ -25,14 +25,14 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
-import { findBin } from './bins.mjs';
+import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
 // Team mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
   const c = config();
-  return Boolean(c.team?.enabled) && c.backends[0] === 'claude';
+  return Boolean(c.team?.enabled) && leadBrain() === 'claude';
 }
 
 // A role's settings. The lead, helpers and fixer default to the Claude model, effort and speed
@@ -334,6 +334,18 @@ FIND must be copied exactly from the page and match only once: include a couple 
 // stream-json message, so a program can be started early and wait (warm) until it's needed.
 
 let warmPool = []; // { key, proc, timer }
+const live = new Set(); // every claude program the team started that's still running
+
+// Build Buddy is quitting, or Claude stopped leading (warmOnly: only the ones waiting to be used):
+// the team's programs stop now rather than finish a turn nobody will see.
+export function stopPrograms({ warmOnly = false } = {}) {
+  for (const w of warmPool) {
+    clearTimeout(w.timer);
+    w.proc.child.kill('SIGKILL');
+  }
+  warmPool = [];
+  if (!warmOnly) for (const proc of live) proc.child.kill('SIGKILL');
+}
 const WARM_MS = 120000;
 
 function claudeArgs(name, system, tools = '') {
@@ -353,6 +365,7 @@ function claudeArgs(name, system, tools = '') {
 }
 
 function start(args) {
+  if (isQuitting()) throw new Error('Build Buddy is quitting'); // (nothing new starts once it quits)
   const bin = findBin('claude', config().claude.bin);
   if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
   const child = spawn(bin, args, {
@@ -362,16 +375,19 @@ function start(args) {
   });
   // Output that arrives before anyone listens (while warm) is kept for them.
   const proc = { child, early: [], onData: null, onClose: null, closed: null, err: '' };
+  live.add(proc);
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', d => (proc.onData ? proc.onData(d) : proc.early.push(d)));
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', d => (proc.err = (proc.err + d).slice(-2000)));
   child.on('error', e => {
     proc.closed ??= { code: -1, error: e };
+    live.delete(proc);
     proc.onClose?.();
   });
   child.on('close', code => {
     proc.closed ??= { code };
+    live.delete(proc);
     proc.onClose?.();
   });
   child.stdin.on('error', () => {}); // it may exit before reading
@@ -845,12 +861,13 @@ export function applyCore(html, { find, replace }) {
 const showEdits = edits => edits.map(e => `<<<<<<< FIND\n${e.find}\n=======\n${e.replace}\n>>>>>>> REPLACE`).join('\n\n');
 
 // Apply edits; the ones that don't fit go to the fixer once, to be copied exactly from the page.
-// Returns the page and the edits that still don't fit.
-async function applyEditsWithFixer(page, edits, signal, tally) {
+// Returns the page and the edits that still don't fit. runner: who fixes them (the agent way on agy
+// passes agy's, as for its helpers); by default the claude fixer.
+async function applyEditsWithFixer(page, edits, signal, tally, runner = null) {
   const first = applySome(page, edits);
   if (!first.failed.length) return first;
   log(`team: ${first.failed.length} of ${edits.length} edits didn't fit, asking the fixer`);
-  const reply = await ask('fixer', {
+  const reply = await (runner || (o => ask('fixer', o)))({
     system: fixerSystem(),
     prompt: `<page>\n${first.html}\n</page>\n\nThese edits didn't fit, because each FIND has to be copied exactly from the page. Write them again so they fit (copy FIND exactly from the page above). If they are all already done on the page, reply with just: DONE\n\n${showEdits(first.failed)}`,
     signal,
@@ -883,7 +900,8 @@ async function fix(html, problem, signal, tally) {
 // at most maxHelpers() at once. crew.running holds each job's part: { ...job, reply, code,
 // startedAt, doneAt }. Team mode and the agent way (agents.mjs) both build with it.
 
-export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity, twinFirst = false, kit = false }) {
+// runner: who writes each part (the agent way on agy passes agy's); by default a claude helper.
+export function helperCrew({ page, text, alt, look, signal, tally, progress = () => {}, size = PLAN_SIZE, hedgeMs = HEDGE_MS, max = maxHelpers(), maxHedges = Infinity, twinFirst = false, kit = false, runner = null }) {
   const jobs = [];
   let hedges = 0; // second tries started (each one is more for the computer and the service to do)
   const running = new Map();
@@ -917,7 +935,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
         const stops = [new AbortController(), new AbortController()];
         let wrote = false;
         const one = i =>
-          ask('helper', {
+          (runner || (o => ask('helper', o)))({
             system: helperSystem(kit),
             prompt,
             stallSec: 20,
@@ -954,7 +972,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
     // One more try if a helper fails.
     const part = write()
       .catch(err => {
-        if (signal.aborted) throw err;
+        if (signal.aborted || isQuitting()) throw err;
         log(`team helper ${job.name} failed (${err.message.replace(/\s+/g, ' ').slice(0, 120)}), trying again`);
         return write();
       })

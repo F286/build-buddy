@@ -16,7 +16,7 @@ import * as watch from './watch.mjs';
 import * as team from './team.mjs';
 import * as solo from './solo.mjs';
 import * as agents from './agents.mjs';
-import { findBin } from './bins.mjs';
+import { findBin, leadBrain, installed, stopRuns } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
 const MIME = {
@@ -74,7 +74,9 @@ function publicConfig() {
     soloActive: solo.enabled(),
     agentsActive: agents.enabled(),
     // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
-    agyActive: !solo.enabled() && !team.enabled() && c.backends[0] === 'agy',
+    agyActive: leadBrain() === 'agy' && !agents.enabled(), // (agy building the classic way)
+    lead: leadBrain(), // (the first installed brain: it builds)
+    installed: Object.fromEntries(ai.backendNames.map(n => [n, installed(n)])), // (is each brain installed? for the panel)
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
     // every look counts).
     polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : agents.enabled() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
@@ -82,6 +84,7 @@ function publicConfig() {
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     agyModel: c.agy.model,
+    agyWay: c.agy.way || 'agents',
     stt: c.stt,
     tts: c.tts,
     voice: c.kokoro.voice,
@@ -124,8 +127,10 @@ const timeIsUp = () => Boolean(timerEndsAt) && Date.now() >= timerEndsAt;
 // building when time ran out).
 const GRACE_MS = 5 * 60000;
 let graceUsedFor = 0;
+// (Is the last thing still to be asked for? Only looks; graceAllowed uses it up.)
+const graceOpen = () => Date.now() - timerEndsAt <= GRACE_MS && graceUsedFor !== timerEndsAt;
 function graceAllowed() {
-  if (Date.now() - timerEndsAt > GRACE_MS || graceUsedFor === timerEndsAt) return false;
+  if (!graceOpen()) return false;
   graceUsedFor = timerEndsAt;
   return true;
 }
@@ -164,8 +169,9 @@ const routes = {
   'POST /api/build': async (req, res) => {
     const { text, alt, fix, grace } = await readJson(req);
     if (!text?.trim() && !fix) return send(res, 400, { error: 'say something' });
-    if (timeIsUp() && !(grace && text && graceAllowed())) return send(res, 423, { error: 'time is up' });
+    // (Busy first: a request turned away while building mustn't use up the last thing.)
     if (ai.isBusy()) return send(res, 409, { error: 'busy' });
+    if (timeIsUp() && !(grace && text && graceAllowed())) return send(res, 423, { error: 'time is up' });
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
     const emit = ev => {
       if (!res.destroyed) res.write(JSON.stringify(ev) + '\n');
@@ -173,10 +179,10 @@ const routes = {
     const started = Date.now();
     const endsAt = timerEndsAt;
     try {
-      await ai.build({ text: text?.trim(), alt: alt?.trim(), fix }, emit);
+      await ai.build({ text: text?.trim(), alt: alt?.trim(), fix, last: Boolean(grace && timeIsUp()) }, emit);
     } catch (err) {
       console.error('build failed:', err.message);
-      emit({ type: 'error', message: err.message });
+      emit({ type: 'error', message: err.message, blocked: /safety filter/i.test(err.message) });
     }
     // Fixing a wobbly bit doesn't use up play time: add it back (unless a grown-up changed the
     // limit meanwhile).
@@ -189,7 +195,7 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => (solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : config().backends[0] === 'agy' ? ai.warmAgy() : team.warm()),
+  'POST /api/warm': () => (timeIsUp() && !graceOpen() ? { warm: 0 } : solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm()),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
   'POST /api/repair': async req => {
@@ -241,7 +247,7 @@ const routes = {
     store.dropVersion(p, version);
     ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
     if (/^claude solo/.test(v.backend)) solo.takenBack({ projectId, version, error });
-    if (/^claude agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
+    if (/^(claude|agy) agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
     return { dropped: true };
   },
 
@@ -272,6 +278,7 @@ const routes = {
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };
+    if (['agents', 'fast', 'classic'].includes(b.agyWay)) patch.agy = { ...patch.agy, way: b.agyWay };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
@@ -280,6 +287,7 @@ const routes = {
     saveConfig(patch);
     if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
     if (!agents.enabled()) agents.stop();
+    if (leadBrain() !== 'claude') team.stopPrograms({ warmOnly: true }); // (Claude's waiting helpers aren't needed)
     return publicConfig();
   },
 
@@ -459,7 +467,13 @@ function shutdown() {
   quitting = true;
   console.log('Bye!');
   browser?.kill();
+  // (Every brain's programs stop now. stopRuns() first: it says Build Buddy is quitting, so nothing new
+  // is started from here - no other brain takes over, and a build that stops isn't built another way.)
+  stopRuns();
   ai.stopAgy();
+  agents.stop();
+  solo.stop();
+  team.stopPrograms();
   server.close();
   setTimeout(() => process.exit(0), 300);
 }
@@ -475,14 +489,18 @@ server.listen(port, '127.0.0.1', () => {
   const building = solo.enabled()
     ? 'solo (one Claude that remembers the creation)'
     : agents.enabled()
-      ? 'a team, the agent way (a lead that remembers the creation, with helpers)'
+      ? leadBrain() === 'agy'
+        ? `Gemini, the agent way (an Argon lead that remembers the creation, with Argon helpers${config().agy?.way === 'fast' ? ', quicker changes' : ''})`
+        : 'a team, the agent way (a lead that remembers the creation, with helpers)'
       : team.enabled()
       ? `a team (lead + up to ${team.maxHelpers()} helpers)`
-      : config().team.enabled || config().solo?.enabled
-        ? 'classic (solo and team mode need claude first in backends)'
-        : 'classic';
+      : leadBrain() === 'agy'
+        ? 'Gemini (Antigravity), one AI writing it all'
+        : config().team.enabled || config().solo?.enabled
+          ? 'classic (solo and team mode are Claude\'s, and Claude isn\'t leading)'
+          : 'classic';
   console.log(`  building: ${building}`);
-  console.log(`  brains: ${config().backends.join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
+  console.log(`  brains: ${config().backends.map(b => (installed(b) ? b : `${b} (not installed)`)).join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();
   if (!args.has('--no-browser')) launchBrowser(!args.has('--window'));

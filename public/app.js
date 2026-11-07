@@ -118,6 +118,7 @@ const LINES = {
   fixing: ['Oops! Let me fix a wobbly bit.'],
   filler: ['Ooh! Let me think...', 'Okay! Building now...', 'Hmm, let me build that!'],
   tangled: ['Oh no, my brain got a little tangled. Can you say that again?', 'Hmm, that one was tricky. Can you try again?'],
+  blocked: ["Hmm, I can't build that one. Can you think of something else?"],
   queued: ["Okay! I'll do that next.", "Got it! That's next."],
   noMic: ["I can't hear you. Ask a grown-up to check the microphone."],
   muted: ['My ears are turned off! Ask a grown-up to turn on the microphone.'],
@@ -297,6 +298,11 @@ function showPage(html, { restore = null } = {}) {
   // While time is up, nothing runs: keep the page (and any progress for it) for later.
   if (state.timeUp && restore) state.resumeKeep = restore.keep;
   frame.srcdoc = state.html && !state.timeUp ? wrap(state.html, restore) : '';
+  // (An empty stage would keep the keys: the talk keys come back to the app.)
+  if (!state.html || state.timeUp) {
+    frame.blur();
+    window.focus();
+  }
 }
 
 // Ask the page something and wait (briefly) for its answer.
@@ -482,7 +488,8 @@ async function build(body) {
 
   // If the AI hasn't said anything after a few seconds, fill the silence.
   let heardBack = false;
-  const filler = setTimeout(() => !heardBack && !body.fix && !timer.overtime && say(line('filler')), 4000);
+  // (agy's quick voice takes 2 to 5 s: the filler waits a little longer for it.)
+  const filler = setTimeout(() => !heardBack && !body.fix && !timer.overtime && say(line('filler')), state.config?.lead === 'agy' ? 6000 : 4000);
 
   let result = null;
   try {
@@ -523,7 +530,7 @@ async function build(body) {
   // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
   // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
   state.fixing = false; // the server counted the fix's time back up to here; trying it is play time
-  if (result?.html && /^claude (team|solo|agents)$/.test(result.backend)) result = await repairFirst(result);
+  if (result?.html && /^(claude (team|solo|agents)|agy agents)$/.test(result.backend)) result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -542,7 +549,7 @@ async function build(body) {
     console.warn('build failed', result?.message);
     if (!quiet && !timer.overtime) {
       sfx.oops();
-      say(line('tangled'));
+      say(line(result?.blocked ? 'blocked' : 'tangled'));
     }
   } else {
     state.project = { ...state.project, title: result.title, emoji: result.emoji, version: result.version };
@@ -553,7 +560,7 @@ async function build(body) {
         cheer();
       }
       // (Solo mode and the agent way keep looking until the server says it's done.)
-      if (/^claude (team|solo|agents)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend !== 'claude team' });
+      if (/^(claude (team|solo|agents)|agy agents)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend !== 'claude team' });
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -584,7 +591,7 @@ async function repairFirst(result) {
   const keep = result.continues && state.kept?.projectId === state.project?.id ? state.kept.keep : null;
   // (The agent way's pages run on its kit, where a part that throws doesn't stop the rest: a
   // shorter look is enough.)
-  const look = result.backend === 'claude agents' ? 1000 : 1500;
+  const look = /^(claude|agy) agents$/.test(result.backend) ? 1000 : 1500;
   let errors = await tryPage(result.html, keep, look);
   let withKeep = false;
   if (errors.length && keep) {
@@ -644,12 +651,12 @@ function heard(text, alt = '') {
 // A stronger, slower model checks on the creation once the kid has played with it for a while,
 // then every few minutes while they keep playing it (or straight away if quick fixes didn't
 // help), and quietly fixes it if it's broken or stuck. See server/watch.mjs.
-const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '' };
+const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '', noteFor: null, busyUntil: 0 };
 
 async function checkCreation({ urgent = false } = {}) {
   const cfg = state.config.watch;
   if (!cfg?.enabled || !state.html || askingClosed() || timer.overtime || overwatch.running || !state.project?.version) return;
-  if (state.busy || mic.recording || mic.transcribing) return;
+  if (state.busy || mic.recording || mic.transcribing || Date.now() < overwatch.busyUntil) return;
   const { id: projectId, version } = state.project;
   const key = `${projectId}:${version}`;
   const last = overwatch.lastCheck.get(key);
@@ -678,8 +685,18 @@ async function checkCreation({ urgent = false } = {}) {
       screenshot,
       report: { ...rest, shownSec: (Date.now() - state.loadedAt) / 1000, errors: [...new Set([...(rest.errors || []), ...state.pageErrors])] },
     });
+    // (A pass of the builder's own was at work: this look didn't happen, so it's tried again in a
+    // little while.)
+    if (r.skipped === 'busy') {
+      if (last) overwatch.lastCheck.set(key, last);
+      else overwatch.lastCheck.delete(key);
+      overwatch.urgentDone.delete(key);
+      overwatch.busyUntil = Date.now() + 20000;
+      return;
+    }
     overwatch.note = r.fixed ? `${r.verdict === 'polish' ? 'polished' : 'fixed'}: ${r.why}` : r.verdict ? `all good (${r.why})` : `skipped (${r.skipped})`;
     overwatch.note += `, ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    overwatch.noteFor = projectId; // (a new page or another creation has no note yet)
     if (r.fixed) await applyFix(projectId, version, r);
   } catch (err) {
     console.warn('overwatch check failed', err);
@@ -929,6 +946,9 @@ async function timeIsUp() {
   state.resumeKeep = fresh?.keep ?? (state.kept?.projectId === state.project?.id ? state.kept.keep : null);
   expectLoad = true;
   frame.srcdoc = '';
+  // (The emptied stage would keep the keys: Ctrl+Shift+P and the space bar come back to the app.)
+  frame.blur();
+  window.focus();
   $('#timeUp').hidden = false;
   document.body.classList.add('time-is-up');
   sfx.timeUp();
@@ -1138,7 +1158,7 @@ function pressTalk() {
 // the moment the request arrives (see server/team.mjs).
 // Also while something is building: what the kid says now is built next, by a team that's ready.
 function warmTeam() {
-  if (state.config.teamActive || state.config.soloActive || state.config.agyActive) api('/api/warm', {}).catch(() => {});
+  if (state.config.teamActive || state.config.soloActive || state.config.agentsActive || state.config.agyActive) api('/api/warm', {}).catch(() => {});
 }
 
 function releaseTalk() {
@@ -1311,6 +1331,7 @@ micBtn.addEventListener('pointercancel', releaseTalk);
 onPress($('#undoBtn'), async () => {
   if (state.busy) return say(line('wait'));
   hush();
+  checkRun++; // (the team's passes on what the kid went back from stop: they'd bring it back)
   const r = await api('/api/undo', {});
   if (!r.project) {
     sfx.oops();
@@ -1460,8 +1481,15 @@ async function openParent() {
   const c = (state.config = await api('/api/config'));
   const f = $('#parentForm');
   const brains = c.backends.join(',');
-  // (A combination set in config.json that the list doesn't have is kept, not reset on save.)
-  if (![...f.brains.options].some(o => o.value === brains)) f.brains.append(new Option(`${c.backends.join(', then ')} (from config.json)`, brains));
+  // (A combination the list doesn't have - set in config.json, or for this run by --agents,
+  // --team, --solo or KIDBUILD_BACKENDS - is kept, not reset on save.)
+  f.brains.querySelector('option[data-extra]')?.remove();
+  if (![...f.brains.options].some(o => o.value === brains)) {
+    const name = b => ({ agy: 'Gemini (Antigravity)', claude: 'Claude', codex: 'ChatGPT', command: 'Custom command' })[b] || b;
+    const extra = new Option(`${c.backends.map(name).join(', then ')} (in use now: from config.json, or for this run only)`, brains);
+    extra.dataset.extra = '1';
+    f.brains.append(extra);
+  }
   f.brains.value = brains;
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
@@ -1470,6 +1498,7 @@ async function openParent() {
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
   f.agyModel.value = c.agyModel || '';
+  f.agyWay.value = c.agyWay || 'agents';
   f.stt.value = c.stt;
   f.tts.value = c.tts;
   const accent = { a: 'American', b: 'British' };
@@ -1498,6 +1527,27 @@ async function openParent() {
   if (state.html) tellPage({ type: 'fps?' }); // the answer fills in the frame rate
 }
 
+// Who builds each creation, and who takes over if it fails: the first brain in the list that's
+// installed, then the next one installed. (Brains before the one that leads aren't installed; if
+// the server doesn't say which are, the ones after it are taken to be.)
+function brainsSaid(c) {
+  const name = b => ({ agy: 'Gemini (Antigravity)', claude: 'Claude', codex: 'ChatGPT', command: 'your command' })[b] || b;
+  const at = c.backends.indexOf(c.lead);
+  const has = b => c.installed?.[b] ?? (at >= 0 && c.backends.indexOf(b) >= at);
+  const missing = has(c.lead) ? c.backends.slice(0, at).filter(b => !has(b)) : c.backends;
+  const next = c.backends.slice(at + 1).find(has);
+  const builds = `${name(c.lead)} builds each creation${next ? `; ${name(next)} takes over if it fails` : ''}. `;
+  const way = (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '';
+  if (!missing.length) return c.lead === 'agy' ? builds : way;
+  // (setup.sh says how to install each brain; a custom command is set in config.json.)
+  const absent = missing.filter(b => b !== 'command');
+  const said = [
+    absent.length && `${absent.length > 1 ? `${absent.slice(0, -1).map(name).join(', ')} and ${name(absent.at(-1))} aren't` : `${name(absent[0])} isn't`} installed (run setup.sh)`,
+    missing.includes('command') && "your command isn't set (command.cmd in config.json)",
+  ].filter(Boolean);
+  return `${said.join(' and ')}, so ${has(c.lead) ? builds + (c.lead === 'agy' ? '' : way) : 'nothing can build. '}`;
+}
+
 function showParentStatus() {
   const c = state.config;
   const s = c.speech || {};
@@ -1505,10 +1555,10 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
-    ((c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude as the first AI brain, so it builds the classic way. ` : '') +
+    brainsSaid(c) +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
-    (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
+    (overwatch.note && overwatch.noteFor === state.project?.id ? ` Overwatch: ${overwatch.note}.` : '') +
     (timeLeft() == null ? '' : timeLeft() > 0 ? ` Time left: ${clock(timeLeft())}.` : " Time's up.");
 }
 
@@ -1516,13 +1566,15 @@ $('#parentForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
   const c = await api('/api/config', {
-    backends: f.brains.value.split(','),
+    // (A brain order for one run - --agents, --team, --solo, KIDBUILD_BACKENDS - isn't saved unless changed here.)
+    ...(f.brains.value !== state.config.backends.join(',') && { backends: f.brains.value.split(',') }),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
     ...(f.building.value !== state.buildingShown && { team: ['team', 'agents'].includes(f.building.value), agents: f.building.value === 'agents', solo: f.building.value === 'solo' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
-    agyModel: f.agyModel.value,
+    ...(f.agyModel.value !== (state.config.agyModel || '') && { agyModel: f.agyModel.value }),
+    ...(f.agyWay.value !== (state.config.agyWay || 'agents') && { agyWay: f.agyWay.value }),
     stt: f.stt.value,
     tts: f.tts.value,
     voice: f.voice.value,

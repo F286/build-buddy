@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { resolvePath } from './config.mjs';
+import { config, resolvePath } from './config.mjs';
 
 function isExecutable(file) {
   try {
@@ -47,16 +47,46 @@ export function findBin(name, configured, extraDirs = []) {
   return null;
 }
 
+// Is this brain installed (its program found, or a command set)?
+export function installed(name) {
+  const c = config();
+  if (name === 'command') return Boolean(c.command?.cmd);
+  if (name === 'claude' || name === 'codex' || name === 'agy') return Boolean(findBin(name, c[name]?.bin));
+  return false;
+}
+
+// The brain that leads: the first one in `backends` that's installed. Gemini (agy) leads by default;
+// without agy, Claude does - and then Claude's own ways of building (team, agent, solo) apply.
+export function leadBrain() {
+  const c = config();
+  return c.backends.find(installed) || c.backends[0];
+}
+
 // Run a program, feed `input` on stdin, stream stdout chunks to onStdout, and resolve with
 // everything it printed. Rejects on a non-zero exit, a timeout, or an abort.
+const runs = new Set(); // programs run() started that are still running
+
+// Build Buddy is quitting: they stop now, and no program is started from then on (the brains' own
+// starters ask isQuitting() too), so no other brain takes over from the ones stopped.
+let quitting = false;
+export const isQuitting = () => quitting;
+export function stopRuns() {
+  quitting = true;
+  for (const child of runs) child.kill('SIGKILL');
+  runs.clear();
+}
+
 export function run(bin, args, { input = '', cwd, env, timeoutSec = 120, onStdout } = {}) {
   return new Promise((resolve, reject) => {
+    if (quitting) return reject(new Error('Build Buddy is quitting'));
     const child = spawn(bin, args, {
       cwd,
       env: { ...process.env, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: process.platform === 'win32' && /\.cmd$/i.test(bin),
     });
+    runs.add(child);
+    child.on('close', () => runs.delete(child));
     let out = '';
     let err = '';
     const timer = setTimeout(() => {

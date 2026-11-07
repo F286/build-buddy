@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
-import { findBin } from './bins.mjs';
+import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import { systemPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 import { syntaxErrors, blankProblems, renameClashes } from './team.mjs';
@@ -26,7 +26,7 @@ import { syntaxErrors, blankProblems, renameClashes } from './team.mjs';
 // Solo mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
   const c = config();
-  return Boolean(c.solo?.enabled) && c.backends[0] === 'claude';
+  return Boolean(c.solo?.enabled) && leadBrain() === 'claude';
 }
 
 // How many look-and-improve passes follow a creation (or a change).
@@ -149,6 +149,7 @@ function models() {
 // its own working folder and name.)
 export class Session {
   constructor(projectId, { args = sessionArgs(), cwd = WORK_DIR, label = 'solo', env = null, model = null } = {}) {
+    if (isQuitting()) throw new Error('Build Buddy is quitting'); // (nothing new starts once it quits)
     const bin = findBin('claude', config().claude.bin);
     this.label = label;
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
@@ -360,6 +361,8 @@ function sessionFor(projectId, { renew = false } = {}) {
 //   lastPass: the version its last pass made, and which pass it was
 //   note: something its next turn is told (why its last edits were taken back)
 let work = { projectId: null };
+// Is a pass at work on the creation? (The overwatch waits for it.)
+export const busy = () => Boolean(work.checking);
 function workFor(projectId) {
   if (work.projectId !== projectId) work = { projectId, grow: false, shine: false, passes: 0, tries: 0, lastPass: null, note: '' };
   return work;

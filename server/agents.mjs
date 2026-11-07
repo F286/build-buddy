@@ -18,19 +18,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
 import * as store from './store.mjs';
-import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
+import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR, AgySession, agyHelper, agyVoice, keepAgyWarm } from './ai.mjs';
 import { Session } from './solo.mjs';
+import { leadBrain } from './bins.mjs';
 import { kitApi, kitPage, KIT_NAMES } from './kit.mjs';
 import { syntaxErrors, blankProblems, speakFirst, warmVoice, warmHelpers, maxHelpers, polishPasses as teamPolish, EDIT_FORMAT, PlanReader, helperCrew, applyEditsWithFixer, assemble as teamAssemble, repairNames, renameClashes } from './team.mjs';
 
-// The agent way is team mode with team.agents on (Claude only; solo mode comes first).
+// The agent way is team mode with team.agents on, when Claude leads (solo mode comes first) - or,
+// when Gemini (agy) leads, how it builds unless agy.way is "classic": an Argon lead that remembers the
+// creation writes the plan, and Argon helpers write its parts at the same time (one Argon writing a
+// whole page took about 100 s; this way about 38 s, where Claude's took 33 s).
 export function enabled() {
   const c = config();
-  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && c.backends[0] === 'claude';
+  const brain = leadBrain();
+  if (brain === 'agy') return c.agy?.way !== 'classic';
+  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && brain === 'claude';
 }
+const onAgy = () => leadBrain() === 'agy';
+// agy.way "fast": the team way on agy with quicker changes - Argon changes more than the kid asked
+// for, and copies whole blocks of the page to change a little of them (about 22 s a change instead
+// of 24.5 s, a little less done; Claude's take about 15 s).
+const agyFast = () => onAgy() && config().agy?.way === 'fast';
+// (What its versions are called: 'claude agents' or 'agy agents'.)
+const brainName = () => (onAgy() ? 'agy' : 'claude');
 
-// Passes after something new or a change: growing it, then looking again (team.polish more).
-export const passes = () => 1 + teamPolish();
+// Passes after something new or a change: growing it, then looking again (team.polish more). On agy
+// there's only the wire pass (in text): growing and looking it over use Claude Code's tools.
+export const passes = () => (onAgy() ? 0 : 1 + teamPolish());
 
 // The Agent tool takes a model alias only (no full model names).
 const ALIASES = ['sonnet', 'opus', 'haiku', 'fable'];
@@ -41,6 +55,7 @@ function helperAlias(want) {
 
 function lead() {
   const c = config();
+  if (onAgy()) return { model: c.agy.model || '', effort: '', fast: false, args: [], helperModel: c.agy.helperModel || c.agy.model || '', firstModel: '', thinking: { build: 0, wire: 0, look: 0 } };
   const r = c.team?.agentLead || {};
   const model = r.model || c.claude.model || '';
   return {
@@ -62,10 +77,12 @@ function lead() {
 
 function leadSystem() {
   const helperModel = lead().helperModel;
+  // (On agy there are no tools: while the kid plays, it only makes its helpers' parts fit, in text.)
+  const agy = onAgy();
   return `${buddyIntro()}
 
 # You lead a building team, and you keep the creation in mind
-You make the creation with helpers, turn after turn: while the kid waits for it (something new, a change they asked for), and then while they play with it, when you grow it and look it over. The kid waits for every second you take while they're waiting, so then you only write - fast, in text, no tools - and your helpers write at the same time. While they play, you take your time with your tools.
+You make the creation with helpers, turn after turn: while the kid waits for it (something new, a change they asked for), and then while they play with it, when you ${agy ? 'make its parts fit' : 'grow it and look it over'}. The kid waits for every second you take while they're waiting, so then you only write - fast, in text, no tools - and your helpers write at the same time. While they play, you take your time${agy ? '' : ' with your tools'}.
 
 # While the kid waits: reply in text only - no tools
 Build Buddy reads your reply as you write it: each helper starts the moment its job line is written, and the page is put together and shown the moment your reply ends. Start writing straight away.
@@ -81,10 +98,10 @@ ${quickPlanRules()}
 
 When you change a page, its FIND lines are copied exactly from the current page you're shown (or, if you're told it's as you last saw it, from the page as you last saw it - your own last edits in).
 
-# While the kid plays: your tools and your helpers
+${agy ? AGY_PLAYING : `# While the kid plays: your tools and your helpers
 Then your working folder holds the creation: page.html is the page, with a line \`// @part <name>\` wherever a part's code goes, and parts/<name>.js holds each part (your helpers' parts from the plan; Build Buddy's kit, the shared code and the run([...]) line are in page.html). Build Buddy puts them together (each \`// @part\` line becomes that part's file) when your reply ends. rules.md holds the rules every helper follows and what the kid asked for - Build Buddy writes it, so never change it. If your helpers need to know something about the whole creation (the coordinates, how the parts talk to each other), say it in a short comment in page.html's shared code: they read it there.
 
-You'll be shown how it's running (a screenshot, the frame rate, any errors) and asked to grow it or look it over. Your helpers are then subagents (the Agent tool, subagent_type "general-purpose", model "${helperModel}"): hand out anything big, all in one message so they work at the same time - each helper owns different files (a new part, which you add a \`// @part\` line for and put in run([...]), or a part it extends or rewrites), never two on the same file. Each job is short - the helper reads rules.md and page.html itself: "Read rules.md and page.html, then write parts/<name>.js defining exactly: <what it defines>. <how it looks, sounds and feels, what it does when poked, the events it emits and answers, and the shared names and keep fields it reads>". Then Read what they wrote and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash - with the Edit tool. Small fixes you make yourself with Edit. Never rewrite what works just to tidy it. Anything new the kid can make progress in gets its default in page.html's \`KB.keep({ ... })\` - only those fields carry over, and only you can add them - and its job names that keep field. Counting, growing, goals and timers go in the rules part (parts/rules.js), which you change yourself - on a page without one, add a \`// @part rules\` line and put rules first in run([...]).
+You'll be shown how it's running (a screenshot, the frame rate, any errors) and asked to grow it or look it over. Your helpers are then subagents (the Agent tool, subagent_type "general-purpose", model "${helperModel}"): hand out anything big, all in one message so they work at the same time - each helper owns different files (a new part, which you add a \`// @part\` line for and put in run([...]), or a part it extends or rewrites), never two on the same file. Each job is short - the helper reads rules.md and page.html itself: "Read rules.md and page.html, then write parts/<name>.js defining exactly: <what it defines>. <how it looks, sounds and feels, what it does when poked, the events it emits and answers, and the shared names and keep fields it reads>". Then Read what they wrote and make it one creation that works: fix any name or call that doesn't match, anything missing or that would crash - with the Edit tool. Small fixes you make yourself with Edit. Never rewrite what works just to tidy it. Anything new the kid can make progress in gets its default in page.html's \`KB.keep({ ... })\` - only those fields carry over, and only you can add them - and its job names that keep field. Counting, growing, goals and timers go in the rules part (parts/rules.js), which you change yourself - on a page without one, add a \`// @part rules\` line and put rules first in run([...]).`}
 
 ${talkingRules()}
 
@@ -92,6 +109,10 @@ ${worldRules()}
 
 ${buildingRules()}`;
 }
+
+// On agy, what the lead does while the kid plays: the wire pass, in text (no tools, no screenshot).
+const AGY_PLAYING = `# While the kid plays
+Once it's on screen, you'll be shown the page and how it's running (the frame rate and any errors - there is no screenshot) and asked to make your helpers' parts fit together: always in text (no tools, no files), with the edits you're asked for. Never rewrite what works just to tidy it.`;
 
 // While the kid waits, every piece of the plan is small: the kid sees it sooner, and it's grown
 // while they play.
@@ -105,15 +126,29 @@ const WARM_HELPERS = QUICK_HELPERS + 3;
 // They wait a while: starting ten at once takes the computer's attention just when the kid asks, so
 // they're kept through the minutes the kid plays.
 const WARM_MS = 15 * 60000;
-const keepHelpersWarm = () => warmHelpers(WARM_HELPERS, WARM_MS, true);
+// (On agy: as many Argon helpers as write at once, and the quick voice, for a few minutes - one more
+// of the helpers' model when the voice is that model too. None with team.warm off, as for Claude's.)
+function keepHelpersWarm() {
+  if (!onAgy()) return warmHelpers(WARM_HELPERS, WARM_MS, true);
+  const c = config();
+  if (c.team?.warm === false) return 0;
+  const need = { [lead().helperModel]: QUICK_HELPERS };
+  if (c.agy.voiceModel) need[c.agy.voiceModel] = (need[c.agy.voiceModel] || 0) + 1;
+  return keepAgyWarm(need);
+}
+
+// Who writes for the team on agy - its helpers' parts, and the fixer's edits that didn't fit - is an
+// Argon helper (null: a Claude one). Like a helper, the fixer is given up once it goes quiet for 20 s
+// (and after its 60 s, as Claude's is).
+const runner = () => (onAgy() ? o => agyHelper({ stallSec: 20, ...o }) : null);
 
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
-function quickPlanRules(n = QUICK_HELPERS) {
+function quickPlanRules(n = QUICK_HELPERS, fast = agyFast()) {
   const z = QUICK_SIZE;
   return `You have up to ${n} helpers who write code at the same time as each other. Hand out the work rather than writing it all yourself - and keep your own writing short: helpers start only once their line is written.
 
-For a change to the current page that is one thing - a color, a size, a speed, a rule - write the edits yourself, each as:
+${fast ? 'Keep every change quick (the kid is waiting): edit only the lines their words need - nothing they didn\'t ask for. Each FIND is just enough to find the spot: usually one line that appears only once on the page, copied exactly. To add something, FIND the one line it goes after and REPLACE it with that line and the new ones. Never copy a whole block to change a little of it.\n\n' : ''}For a change to the current page that is one thing - a color, a size, a speed, a rule - write the edits yourself, each as:
 ${EDIT_FORMAT}
 
 For a change that adds new things (a new character, a new place, a new toy - "add a bear who wants the honey and a rainbow"), helpers write each new thing as a new part, at the same time, while you wire them in:
@@ -322,6 +357,22 @@ function sync(s, page) {
 
 const MAX_TURNS = 24;
 let session = null;
+// On agy, the kid's request ends a pass at work (agy can't stop a turn halfway), and with it the lead's
+// conversation: while they talk, a new one is started and waits, so their request doesn't wait for agy
+// to start. (Stopped if it isn't needed after all.)
+let spare = null;
+let warmedAt = 0; // (when the kid last started talking or typing: the app warms up then)
+function spareFor(s) {
+  if (!onAgy() || !['polish', 'repair'].includes(s.current?.kind) || (spare?.alive && spare.projectId === s.projectId && spare.key === s.key)) return 0;
+  spare?.end();
+  const mine = (spare = new AgySession(s.projectId, { system: leadSystem(), model: lead().model, label: 'agents' }));
+  setTimeout(() => spare === mine && dropSpare(), 3 * 60000);
+  return 1;
+}
+function dropSpare() {
+  spare?.end();
+  spare = null;
+}
 
 function sessionArgs() {
   const r = lead();
@@ -336,12 +387,20 @@ function sessionArgs() {
 function sessionFor(projectId, { renew = false } = {}) {
   const s = session;
   const usable = s?.alive && s.projectId === projectId;
-  if (usable && (s.kidWaiting || !renew || (s.turns < MAX_TURNS && s.key === JSON.stringify(sessionArgs())))) return s;
+  const key = onAgy() ? JSON.stringify(['agy', lead().model, leadSystem()]) : JSON.stringify(sessionArgs());
+  // (Never the other brain's for a pass - the brains were switched - unless the kid waits for it.)
+  const same = (s instanceof AgySession) === onAgy();
+  if (usable && (s.kidWaiting || (!renew && same) || (s.turns < MAX_TURNS && s.key === key))) return s;
   s?.end();
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
+  // (On agy, the one started while the kid talked, if it's for this creation.)
+  const ready = spare?.alive && spare.projectId === projectId && spare.key === key ? spare : null;
+  if (ready) spare = null;
   // (Helpers always work in the foreground: the lead's turn ends only once they're done.)
-  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
+  session = onAgy()
+    ? ready || new AgySession(projectId, { system: leadSystem(), model: lead().model, label: 'agents' })
+    : new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
   session.shown = null; // the page as it last saw it, every line (its own edits in): no need to show it again
@@ -357,6 +416,9 @@ function workFor(projectId) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// Is a pass (or a repair) at work on the creation? (The overwatch waits for it.)
+export const busy = () => Boolean(work.checking || work.repairing);
+
 // A pass still finishing (stopped for the kid): wait until it has put its files back.
 async function settled(w) {
   for (let i = 0; (w.checking || w.repairing) && i < 100; i++) await sleep(100);
@@ -364,14 +426,19 @@ async function settled(w) {
 
 // Its own changes were taken out of the files (a pass stopped or that didn't run, a repair that
 // didn't fix it): it's told, and it reads the files again before changing them.
+// (On agy there are no files - it's shown the page again - and a conversation that ended, stopped for
+// the kid, has nothing to be told: a new one takes over.)
 function undone(s, w, why) {
   s.files = null;
   s.shown = null;
-  w.note = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
+  if (!onAgy()) w.note = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
+  else if (s.alive) w.note = `Your last changes weren't used (${why}).`;
 }
 
-// What the kid says comes first: a pass at work stops, and any waiting are dropped.
+// What the kid says comes first: a pass at work stops (its fixer too), and any waiting are dropped.
+let fixing = null;
 function makeWay(s) {
+  fixing?.abort();
   if (s.current?.kind === 'polish' || s.current?.kind === 'repair') s.interrupt();
   for (const t of s.queue.filter(t => t.kind === 'polish' || t.kind === 'repair')) {
     s.queue.splice(s.queue.indexOf(t), 1);
@@ -380,12 +447,13 @@ function makeWay(s) {
 }
 
 export function warm() {
+  warmedAt = Date.now();
   if (!enabled()) return { warm: 0 };
   const before = session;
   try {
     const s = sessionFor(store.currentProject().id, { renew: true });
     // (Its helpers too: while the kid waits, they start on each job the moment it's written.)
-    return { warm: (s === before ? 0 : 1) + (config().team?.warm === false ? 0 : warmVoice() + keepHelpersWarm()) };
+    return { warm: (s === before ? 0 : 1) + spareFor(s) + (config().team?.warm === false ? 0 : (onAgy() ? 0 : warmVoice()) + keepHelpersWarm()) };
   } catch {
     return { warm: 0 };
   }
@@ -394,13 +462,14 @@ export function warm() {
 export function stop() {
   session?.end();
   session = null;
+  dropSpare();
 }
 
 // Was this version made by the agent way (itself, or an overwatch fix on top of one of its versions)?
 export function madeByAgents(p, version) {
   let v = p.versions.find(x => x.n === version);
   for (let i = 0; v && /overwatch/.test(v.backend || '') && i < 50; i++) v = p.versions.find(x => x.n === v.from);
-  return /^claude agents/.test(v?.backend || '');
+  return /^(claude|agy) agents/.test(v?.backend || '');
 }
 
 // The lead's helpers at work, for the app's little robots: Agent calls started and finished.
@@ -487,12 +556,19 @@ function addParts(html, parts) {
 // call is a crash.)
 function missingMethods(html) {
   const pieces = html.split(/^\/\/ ---- ([\w-]+)[ \t]*$/m); // text, name, code, name, code, ...
-  const code = pieces.join('\n').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1'); // (calls, not comments)
+  const uncomment = text => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1'); // (calls, not comments)
   const missing = [];
   for (let i = 1; i < pieces.length; i += 2) {
     const name = pieces[i];
     const own = pieces[i + 1];
     if (!new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*\\{`).test(own)) continue; // (an object of its own)
+    // (Not in a part that has a name of its own like it - a local const sky = ctx.createLinearGradient(...),
+    // or a parameter: (fish) => ..., update(dt, fish) { - but passing the part along, emit('ate', fish),
+    // is no name of its own.)
+    const word = new RegExp(`(?<![\\w$.])${name}(?![\\w$])`);
+    const params = p => [...p.matchAll(/(?<!\b(?:if|for|while|switch|with)\s*)\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:=>|\{)/g)].some(m => word.test(m[1].replace(/=[^,]*/g, '')));
+    const local = p => new RegExp(`\\b(?:const|let|var)\\s+${name}\\b|(?<![\\w$.])${name}\\s*=>`).test(p) || params(p);
+    const code = uncomment(pieces.filter((p, k) => k % 2 === 0 && (k === i + 1 || !local(p))).join('\n'));
     const called = new Set([...code.matchAll(new RegExp(`(?<![\\w$.])${name}\\.([A-Za-z_$][\\w$]*)\\s*\\(`, 'g'))].map(m => m[1]));
     for (const m of called) if (!new RegExp(`(?:^|[\\s,{;])(?:async\\s+)?${m.replace(/\$/g, '\\$')}\\s*(?:\\(|:)|\\.${m.replace(/\$/g, '\\$')}\\s*=(?!=)|\\[\\s*['"]${m}['"]\\s*\\]\\s*=(?!=)`, 'm').test(own)) missing.push(`${name}.${m}()`);
   }
@@ -615,19 +691,25 @@ async function problemsIn(built) {
 
 export { missingMethods, missingParts }; // (for tests)
 
-export async function build({ page, history, text, alt, fix, title = '', look = pickLook() }, emit, state) {
+export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), last = false }, emit, state) {
   const t0 = Date.now();
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
   const p = store.currentProject();
   const w = workFor(p.id);
-  const s = sessionFor(p.id, { renew: true });
+  let s = sessionFor(p.id, { renew: true });
   makeWay(s);
+  warmedAt = 0; // (the kid's talking that led here is used: only talking after it counts for a spare)
+  w.lastThing = last;
   await settled(w);
   // (Normally they're warm already: the app warms the team up while the kid talks.)
   keepHelpersWarm();
   await s.use(page ? lead().model : lead().firstModel || lead().model);
   await s.think(lead().thinking.build);
   makeWay(s); // (one that started meanwhile)
+  // (agy can't stop a turn halfway: making way for the kid ended its conversation, so a new one takes
+  // over - it's handed the page as it is.)
+  if (!s.alive) s = sessionFor(p.id, { renew: true });
+  dropSpare(); // (not needed after all: the pass had finished)
 
   const stopAll = new AbortController();
   const signal = stopAll.signal;
@@ -639,7 +721,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     state.said = line;
     emit({ type: 'say', text: line });
   };
-  if (!fix) speakFirst({ history, text, alt, title }, sayNow).catch(err => log(`agents voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
+  if (!fix) (onAgy() ? agyVoice : speakFirst)({ history, text, alt, title }, sayNow).catch(err => log(`agents voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
 
   const known = s.turns > 0 && Boolean(page) && s.files === page;
   sync(s, page); // (its files hold the page as it is, for when it works on them while the kid plays)
@@ -660,7 +742,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     chars += n;
     emit({ type: 'progress', chars, helpers: crew.jobs.length + team.helpers.size, helpersDone: crew.done + team.done, team: true, leads: 1 });
   };
-  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: 5000, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
+  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: onAgy() ? 9000 : 5000, runner: runner(), max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
@@ -785,7 +867,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     } else if (reader.adding && reader.jobs.length) {
       if (!page) throw new Error('new parts on a blank page');
       const parts = await Promise.all(reader.jobs.map(j => crew.running.get(j.name)));
-      const wired = r.edits.length ? await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent), r.edits) : page;
+      const wired = r.edits.length ? await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent, runner()), r.edits) : page;
       html = addParts(wired, parts);
       edited = true;
       how = `lead done ${secs(leadAt)} (${reply.text.length}c, ${r.edits.length} edits), ${parts.length} new parts${slowest(parts)}`;
@@ -794,12 +876,12 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       const changes = await Promise.all(reader.jobs.map(j => crew.running.get(j.name)));
       const edits = [...r.edits, ...changes.flatMap(c => parseReply(c.reply).edits)];
       if (!edits.length) throw new Error('the helpers wrote no changes');
-      html = await fitOrThrow(await applyEditsWithFixer(page, edits, signal, spent), edits);
+      html = await fitOrThrow(await applyEditsWithFixer(page, edits, signal, spent, runner()), edits);
       edited = true;
       how = `lead done ${secs(leadAt)}, ${changes.length} helpers changing it with ${edits.length} edits${slowest(changes)}`;
     } else if (r.edits.length) {
       if (!page) throw new Error('edits on a blank page');
-      html = await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent), r.edits);
+      html = await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent, runner()), r.edits);
       edited = true;
       how = `its own ${r.edits.length} edits, ${secs(leadAt)}`;
     } else if (r.html) {
@@ -828,9 +910,9 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (asks && w.rules) fs.writeFileSync(rules, helperRules(w.rules));
     if (fix || !r.say) throw new Error(fix ? 'the fix changed nothing' : page ? 'it changed nothing' : "it didn't build anything");
     s.shown = sawPage === page || sees ? page : null; // (it saw the page, now or before, and changed nothing)
-    log(`ok   claude agents ${secs()} only talked, turn ${s.turns}`);
+    log(`ok   ${brainName()} agents ${secs()} only talked, turn ${s.turns}`);
     // (When the quick voice spoke first, the lead's answer is said too, as in team mode.)
-    return { say: state.said || r.say, done: state.said && state.said !== r.say ? r.say : '', title: r.title, emoji: r.emoji, html: null, edited: false, look, backend: 'claude agents' };
+    return { say: state.said || r.say, done: state.said && state.said !== r.say ? r.say : '', title: r.title, emoji: r.emoji, html: null, edited: false, look, backend: `${brainName()} agents` };
   }
 
   // Every script should parse before it's shown: what can be put right here is, the rest goes back
@@ -847,7 +929,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     const fixReply = await s
       .ask(`<page_as_put_together>\n${html}\n</page_as_put_together>\n\nBefore it's shown: it doesn't run -\n${problems.join('\n')}\nReply with only FIND/REPLACE edits to the page above that fix just that (text only, no tools).`, { priority: true, timeoutSec: 90, stallSec: 45 })
       .catch(() => null);
-    const fixed = fixReply && parseReply(fixReply.text).edits.length ? await applyEditsWithFixer(html, parseReply(fixReply.text).edits, signal, spent).catch(() => null) : null;
+    const fixed = fixReply && parseReply(fixReply.text).edits.length ? await applyEditsWithFixer(html, parseReply(fixReply.text).edits, signal, spent, runner()).catch(() => null) : null;
     if (fixed) {
       const left = [...(await syntaxErrors(fixed.html)), ...blankProblems(fixed.html), ...repairNames(fixed.html).problems, ...missingMethods(fixed.html), ...missingParts(fixed.html)];
       log(`agents: ${left.length ? `still doesn't run (${left[0].slice(0, 120)})` : 'fixed'} at ${secs()}`);
@@ -862,8 +944,15 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   s.files = built;
   s.shown = mine ? built : null; // (its helpers' code it hasn't seen yet)
   if (asks) w.rules = asks;
-  // Its helpers wrote code it hasn't seen: the next pass makes it fit first.
-  w.wire = crew.jobs.length > 0;
+  // Its helpers wrote code it hasn't seen: the next pass makes it fit first. (On agy, where that pass is
+  // the only one, one still to come - stopped for the kid, or not run yet - stays to come after a change
+  // made with its own edits.)
+  // (The version it'll be: a pass still to come is for it and the versions made from it, not one undone -
+  // or still for an earlier one this was made from, whose helpers' code it hasn't seen either.)
+  const now = store.currentProject();
+  const earlier = w.wire && w.wireFor != null && wireIsFor(now, now.current, w);
+  if (crew.jobs.length || !(onAgy() && edited && w.wire)) [w.wire, w.wireTries] = [crew.jobs.length > 0, 0];
+  if (crew.jobs.length && !earlier) w.wireFor = now.versions.reduce((m, v) => Math.max(m, v.n), 0) + 1;
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (!edited && r.title && r.title !== p.title && !sameCreation(page, built));
   if (fresh) {
@@ -872,11 +961,13 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (page) fs.writeFileSync(rules, helperRules((w.rules = { asked: text, look })));
   } else [w.passes, w.tries] = [0, 0];
   // (Starting programs takes the computer's attention: the helpers taken are replaced once the page is
-  // ready, for the kid's next turn.)
-  keepHelpersWarm();
-  log(`ok   claude agents ${secs()} ${how}, ${built.length} chars, ${spent.tokens} helper tokens, ${eventGaps(built) || 'no events'}, turn ${s.turns}`);
+  // ready, for the kid's next turn - on agy, not after the last thing they could ask for: ai.build
+  // stops the ones still waiting then.)
+  if (!(last && onAgy())) keepHelpersWarm();
+  // (agy's helpers don't say how many tokens they wrote.)
+  log(`ok   ${brainName()} agents ${secs()} ${how}, ${built.length} chars, ${onAgy() ? '' : `${spent.tokens} helper tokens, `}${eventGaps(built) || 'no events'}, turn ${s.turns}`);
   const sameOne = Boolean(page) && (edited || sameCreation(page, built));
-  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: 'claude agents' };
+  return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built, edited: sameOne, look, backend: `${brainName()} agents` };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -887,7 +978,7 @@ function running(report, shot) {
   const r = report || {};
   const slow = r.fps != null && r.fps < 30 ? '\nIf that feels slow, make each frame lighter - never by taking away what the look asked for.' : '';
   return `<how_it_is_running>\nRunning at ${r.fps ?? '?'} frames per second${r.canvas ? ` on a ${r.canvas} canvas` : ''}.${slow}\nErrors while running: ${r.errors?.length ? r.errors.slice(-5).join(' | ') : 'none'}\n</how_it_is_running>\n\n${
-    shot ? `A screenshot of it right now is in the file ${shot} - look at it first (with the Read tool).` : 'There is no screenshot, so judge from the files.'
+    shot ? `A screenshot of it right now is in the file ${shot} - look at it first (with the Read tool).` : onAgy() ? 'There is no screenshot, so judge from the page above and how it runs.' : 'There is no screenshot, so judge from the files.'
   }`;
 }
 
@@ -904,7 +995,10 @@ export async function check({ projectId, version, report, screenshot }) {
   let p = store.currentProject();
   if (p.id !== projectId || p.current !== version || isBusy() || !madeByAgents(p, version)) return { skipped: 'stale' };
   const w = workFor(projectId);
-  if ((w.passes >= passes() && !w.grow) || w.tries >= passes() + 2) return { skipped: 'polished enough' };
+  // (On agy the wire pass is the only one: polished enough unless it's still to come for this version -
+  // answered before the lead is touched, so it still knows the page as it last saw it.)
+  if (onAgy() && w.wire && !wireIsFor(p, version, w)) w.wire = false;
+  if (onAgy() ? !w.wire : (w.passes >= passes() && !w.grow) || w.tries >= passes() + 2) return { skipped: 'polished enough' };
   if (w.checking || w.repairing) return { skipped: 'busy' };
   const s = sessionFor(projectId);
   const page = store.html(p);
@@ -917,7 +1011,7 @@ export async function check({ projectId, version, report, screenshot }) {
   w.checking = true;
   let before = null;
   let rules = null;
-  const shot = saveScreenshot(s.dir, screenshot);
+  const shot = onAgy() ? null : saveScreenshot(s.dir, screenshot); // (agy's lead has no tools to look at one)
   try {
     // (Its helpers wrote parts of it while the kid waited: it reads them before it changes them.)
     const unseen = s.shown !== page && "Some of its code you haven't seen yet (your helpers wrote it while the kid waited): Read page.html and the parts before you change them.";
@@ -928,6 +1022,7 @@ export async function check({ projectId, version, report, screenshot }) {
     rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
     fs.writeFileSync(path.join(s.dir, 'rules.md'), helperRules({ ...rules, freshLook: '', quick: false }));
     if (w.wire) return await wirePass({ s, w, p, page, report, shot, stale, took, before });
+    if (onAgy()) return { skipped: 'polished enough' }; // (growing and looking it over need Claude Code's tools)
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
@@ -979,7 +1074,7 @@ export async function check({ projectId, version, report, screenshot }) {
       log(`AGENTS skip ${took()} ${why} (${probs ? "it didn't run" : 'stale'})`);
       return { skipped: probs ? "the change didn't run" : 'stale' };
     }
-    p = store.addVersion(store.currentProject(), built.html, { request: `(agents polish) ${why}`, backend: 'claude agents polish', continues: true });
+    p = store.addVersion(store.currentProject(), built.html, { request: `(agents polish) ${why}`, backend: `${brainName()} agents polish`, continues: true });
     s.files = built.html;
     w.lastPass = { version: p.current, grow, before };
     done();
@@ -1003,12 +1098,25 @@ export async function check({ projectId, version, report, screenshot }) {
 // The next pass makes the page fit first (a page it hasn't read - the bench uses it to try the wire
 // pass on a page put in from outside).
 export function wireNext(projectId) {
-  workFor(projectId).wire = true;
+  Object.assign(workFor(projectId), { wire: true, wireFor: null });
 }
 
-// The wire pass (see WIRE): edits in text, with a look at the screenshot.
+// Is version n the one with its helpers' code the wire pass is for, or made from it? (Not after the kid
+// went back to before it.)
+function wireIsFor(p, n, w) {
+  if (w.wireFor == null) return true;
+  for (let v = p.versions.find(x => x.n === n), i = 0; v && i < 500; v = p.versions.find(x => x.n === v.from), i++) {
+    if (v.n === w.wireFor) return true;
+    if (v.n < w.wireFor) return false;
+  }
+  return false;
+}
+
+// The wire pass (see WIRE): edits in text, with a look at the screenshot (on agy, without one).
 async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
-  w.wire = false;
+  // (A wire turn that fails - a refusal, a stall - is tried once more on the next check.)
+  w.wireTries = (w.wireTries || 0) + 1;
+  if (w.wireTries >= 2) w.wire = false;
   const gaps = [...missingMethods(page), ...missingParts(page), eventGaps(page)].filter(x => x && !/all met$/.test(x));
   const prompt = [
     `<current_page>\n${page}\n</current_page>`,
@@ -1016,25 +1124,58 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     gaps.length && `Build Buddy noticed: ${gaps.join(' ')}`,
     WIRE,
   ].filter(Boolean).join('\n\n');
+  // (On agy, a pass that ends without its version - stopped for the kid - is still to come, after them.)
+  const later = () => onAgy() && ([w.wire, w.wireTries] = [true, w.wireTries - 1]);
   await s.use(lead().model);
   await s.think(lead().thinking.wire);
-  if (stale()) return { skipped: 'stale' };
-  const reply = await s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' });
-  const why = field(reply.text, 'WHY') || 'made its parts fit';
+  if (stale()) {
+    later();
+    return { skipped: 'stale' };
+  }
+  const asking = s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' }).catch(err => {
+    if (err.message === 'interrupted') later();
+    throw err;
+  });
+  // (The kid started talking just before it began: their request will end it, so a new lead waits.)
+  if (!w.lastThing && Date.now() - warmedAt < 30000) spareFor(s);
+  const reply = await asking;
   const edits = parseReply(reply.text).edits;
+  // (On agy, a reply with no edits that doesn't say OK - empty, or a tool it tried to use - is a turn
+  // that failed.)
+  if (onAgy() && !edits.length && !/^[ \t>*_`#]*OK\b/m.test(reply.text)) {
+    log(`AGENTS wire fail ${took()} ${reply.text.trim() ? 'no edits and no OK' : 'an empty reply'}${w.wire ? ', tried again on the next check' : ''}`);
+    return { skipped: 'failed' };
+  }
+  w.wire = false;
+  const why = field(reply.text, 'WHY') || 'made its parts fit';
   if (!edits.length || stale()) {
     s.shown = page;
+    if (edits.length) later();
     log(`AGENTS wire ${took()} ${edits.length ? 'stale' : 'OK'}`);
     return edits.length ? { skipped: 'stale' } : { ok: true };
   }
-  const fitted = await applyEditsWithFixer(page, edits);
+  const stop = (fixing = new AbortController());
+  const fitted = await applyEditsWithFixer(page, edits, stop.signal, null, runner())
+    .catch(err => (stop.signal.aborted ? null : Promise.reject(err)))
+    .finally(() => fixing === stop && (fixing = null));
+  if (!fitted) {
+    later();
+    log(`AGENTS wire stop ${took()} (the kid asked for something)`);
+    return { skipped: 'stale' };
+  }
   const html = await declareMissing(await renameClashes(fitted.html));
+  if (html === page) {
+    s.shown = page;
+    log(`AGENTS wire ${took()} OK (its edits were in already)`);
+    return { ok: true };
+  }
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
+    if (stale()) later();
     log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
     return { skipped: stale() ? 'stale' : "the change didn't run" };
   }
   const built = keepAsFiles(s.dir, html);
-  p = store.addVersion(store.currentProject(), built, { request: `(agents wire) ${why}`, backend: 'claude agents polish', continues: true });
+  p = store.addVersion(store.currentProject(), built, { request: `(agents wire) ${why}`, backend: `${brainName()} agents polish`, continues: true });
   s.files = built;
   s.shown = !fitted.failed.length && !fitted.fixed && html === fitted.html ? built : null;
   w.lastPass = { version: p.current, grow: false, wire: true, before };
@@ -1066,7 +1207,7 @@ const proposals = new Map();
 export async function repair({ version, errors, keep, accept = false }) {
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
-  if (!enabled() || p.current !== version || v?.backend !== 'claude agents') return { skipped: 'stale' };
+  if (!enabled() || p.current !== version || !/^(claude|agy) agents$/.test(v?.backend || '')) return { skipped: 'stale' };
   const key = `${p.id}:${version}`;
   if (accept) {
     const prop = proposals.get(key);
@@ -1102,7 +1243,7 @@ export async function repair({ version, errors, keep, accept = false }) {
       { priority: true, timeoutSec: 120, stallSec: 60, kind: 'repair' },
     );
     const edits = parseReply(reply.text).edits;
-    const fitted = edits.length ? await applyEditsWithFixer(page, edits) : null;
+    const fitted = edits.length ? await applyEditsWithFixer(page, edits, null, null, runner()) : null;
     // (Or it used its tools after all: what its files hold now.)
     const html = fitted && !fitted.failed.length ? fitted.html : assemble(s.dir)?.html;
     if (!html || html === page || (await syntaxErrors(html)).length > (await syntaxErrors(page)).length) {
