@@ -663,7 +663,8 @@ Buddy changes.
   anything, or touch the rest of the app. The only things they can load are the bundled Phaser and
   Three.js.
 - **What leaves your computer:** the text of each request and the current creation's code, sent to
-  Claude or ChatGPT. The overwatch (and in team mode the checker, in solo mode each pass) also
+  Gemini (Google, through Antigravity), Claude or ChatGPT - whichever brain is building. Gemini's agy
+  is only asked for text and can't run commands or touch your files, but it could search the web. The overwatch (and in team mode the checker, in solo mode each pass) also
   sends a small screenshot of the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
@@ -677,6 +678,7 @@ Buddy changes.
 |---|---|
 | **Sparky can't hear** | Usually the microphone is muted in the system settings, so the app receives silence. On Linux the app switches it on at startup; if it gets muted mid-session, Sparky says *"My ears are turned off!"* Each recording is logged in `data/log.txt` as a `HEAR` line with its length, loudness and what was understood. |
 | **No voice** | Check the system volume, and the *Talking* line in the Ctrl+Shift+P panel. If Kokoro isn't installed, Sparky falls back to Piper. |
+| **Gemini isn't used, or says it isn't signed in** | Run `agy` once in a terminal and sign in; `data/log.txt` shows `FAIL agy` with the reason, and Claude builds meanwhile. Build Buddy runs agy in an agy home of its own (`data/agy-home`, see `agy.keepHistory`); its own log is in `data/agy-home/.gemini/antigravity-cli/log`. |
 | **"My brain got a little tangled"** | The AI request failed. Check `data/log.txt`. Common causes are being offline, a usage limit, or needing to sign in to `agy` / `claude` / `codex` again (run it once in a terminal). |
 | **A game feels slow** | Ctrl+Shift+P shows its frame rate. Asking Sparky to *"make it simpler"* or *"make it faster"* helps. For 2D games Sparky should be using Phaser, and for 3D, Three.js. |
 | **"Port 4321 is busy"** | Build Buddy is already running, or set a different `port` in `config.json`. |

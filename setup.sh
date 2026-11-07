@@ -165,6 +165,10 @@ fi
 # ---------------------------------------------------------------------------- AI brains
 say "AI brains"
 found=0
+if have agy || [ -x "$HOME/.local/bin/agy" ]; then
+  echo "Antigravity (Gemini): found - Build Buddy's default brain. If you haven't yet, run 'agy' once and sign in with your Google account."
+  found=1
+fi
 if have claude || [ -x "$HOME/.local/bin/claude" ]; then
   echo "Claude Code: found. If you haven't yet, run 'claude' once and sign in with your Claude account."
   found=1
@@ -175,6 +179,7 @@ if have codex; then
 fi
 if [ $found = 0 ]; then
   echo "Install at least one:"
+  echo "  Antigravity:  from https://antigravity.google (the agy command)  (then run 'agy' to sign in) - the default"
   echo "  Claude Code:  curl -fsSL https://claude.ai/install.sh | bash   (then run 'claude' to sign in)"
   echo "  Codex:        npm install -g @openai/codex                     (then run 'codex login')"
 fi

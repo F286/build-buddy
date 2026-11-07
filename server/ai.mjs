@@ -358,7 +358,7 @@ function agyEnv() {
 // and so are agy's logs of them.
 function pruneAgyHome(home) {
   const old = Date.now() - AGY_KEEP_MS;
-  for (const sub of ['conversations', 'brain', 'presence', 'annotations', 'log', 'crashes']) {
+  for (const sub of ['conversations', 'brain', 'presence', 'annotations', 'implicit', 'log', 'crashes']) {
     let names = [];
     try {
       names = fs.readdirSync(path.join(home, sub));
