@@ -334,6 +334,18 @@ FIND must be copied exactly from the page and match only once: include a couple 
 // stream-json message, so a program can be started early and wait (warm) until it's needed.
 
 let warmPool = []; // { key, proc, timer }
+const live = new Set(); // every claude program the team started that's still running
+
+// Build Buddy is quitting, or Claude stopped leading (warmOnly: only the ones waiting to be used):
+// the team's programs stop now rather than finish a turn nobody will see.
+export function stopPrograms({ warmOnly = false } = {}) {
+  for (const w of warmPool) {
+    clearTimeout(w.timer);
+    w.proc.child.kill('SIGKILL');
+  }
+  warmPool = [];
+  if (!warmOnly) for (const proc of live) proc.child.kill('SIGKILL');
+}
 const WARM_MS = 120000;
 
 function claudeArgs(name, system, tools = '') {
@@ -362,16 +374,19 @@ function start(args) {
   });
   // Output that arrives before anyone listens (while warm) is kept for them.
   const proc = { child, early: [], onData: null, onClose: null, closed: null, err: '' };
+  live.add(proc);
   child.stdout.setEncoding('utf8');
   child.stdout.on('data', d => (proc.onData ? proc.onData(d) : proc.early.push(d)));
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', d => (proc.err = (proc.err + d).slice(-2000)));
   child.on('error', e => {
     proc.closed ??= { code: -1, error: e };
+    live.delete(proc);
     proc.onClose?.();
   });
   child.on('close', code => {
     proc.closed ??= { code };
+    live.delete(proc);
     proc.onClose?.();
   });
   child.stdin.on('error', () => {}); // it may exit before reading

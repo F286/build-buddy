@@ -610,6 +610,14 @@ export function applyEdits(page, edits) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Do two lines say much the same (the quick voice already answered what the builder answers)?
+function sameGist(a, b) {
+  const words = s => new Set(String(s).toLowerCase().match(/[a-z']{3,}/g) || []);
+  const [x, y] = [words(a), words(b)];
+  const shared = [...x].filter(w => y.has(w)).length;
+  return shared >= Math.min(x.size, y.size) * 0.5;
+}
+
 // One build = one turn of the conversation.
 
 let busy = false;
@@ -665,7 +673,7 @@ async function ask(prompt, emit, state) {
       if (quitting) throw err; // (no other brain is started while Build Buddy quits)
       lastErr = err;
       log(`FAIL ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${err.message.replace(/\s+/g, ' ').slice(0, 300)}`);
-      emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
+      if (config().backends.slice(config().backends.indexOf(name) + 1).some(installed)) emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
     }
   }
   throw lastErr || new Error('No AI backends configured');
@@ -745,7 +753,7 @@ export async function build({ text, alt, fix }, emit) {
         over = true;
       }
       // (If agy only talked - it asked what they meant, or answered a question - that's said too.)
-      if (voiced && state.said) r = { ...r, say: state.said, done: !r.html && !r.offFormat && r.say && r.say !== state.said ? [r.say, r.done].filter(Boolean).join(' ') : r.done };
+      if (voiced && state.said) r = { ...r, say: state.said, done: !r.html && !r.offFormat && r.say && !sameGist(r.say, state.said) ? [r.say, r.done].filter(Boolean).join(' ') : r.done };
       // A page that doesn't parse would only crash when shown: it's fixed first, once.
       if (r.html && !fix) {
         const broken = await team.syntaxErrors(r.html);

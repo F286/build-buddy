@@ -358,6 +358,9 @@ function workFor(projectId) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// Is a pass (or a repair) at work on the creation? (The overwatch waits for it.)
+export const busy = () => Boolean(work.checking || work.repairing);
+
 // A pass still finishing (stopped for the kid): wait until it has put its files back.
 async function settled(w) {
   for (let i = 0; (w.checking || w.repairing) && i < 100; i++) await sleep(100);

@@ -673,3 +673,8 @@ button {
   #micBtn { width: 90px; height: 90px; }
   .buddy { width: 78px; height: 82px; }
 }
+
+/* (The grown-ups' panel stays readable while the buddy talks.) */
+body:has(#parent:not([hidden])) .bubble {
+  z-index: 5;
+}

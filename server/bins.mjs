@@ -64,6 +64,14 @@ export function leadBrain() {
 
 // Run a program, feed `input` on stdin, stream stdout chunks to onStdout, and resolve with
 // everything it printed. Rejects on a non-zero exit, a timeout, or an abort.
+const runs = new Set(); // programs run() started that are still running
+
+// Build Buddy is quitting: they stop now.
+export function stopRuns() {
+  for (const child of runs) child.kill('SIGKILL');
+  runs.clear();
+}
+
 export function run(bin, args, { input = '', cwd, env, timeoutSec = 120, onStdout } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {
@@ -72,6 +80,8 @@ export function run(bin, args, { input = '', cwd, env, timeoutSec = 120, onStdou
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: process.platform === 'win32' && /\.cmd$/i.test(bin),
     });
+    runs.add(child);
+    child.on('close', () => runs.delete(child));
     let out = '';
     let err = '';
     const timer = setTimeout(() => {

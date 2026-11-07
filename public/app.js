@@ -118,6 +118,7 @@ const LINES = {
   fixing: ['Oops! Let me fix a wobbly bit.'],
   filler: ['Ooh! Let me think...', 'Okay! Building now...', 'Hmm, let me build that!'],
   tangled: ['Oh no, my brain got a little tangled. Can you say that again?', 'Hmm, that one was tricky. Can you try again?'],
+  blocked: ["Hmm, I can't build that one. Can you think of something else?"],
   queued: ["Okay! I'll do that next.", "Got it! That's next."],
   noMic: ["I can't hear you. Ask a grown-up to check the microphone."],
   muted: ['My ears are turned off! Ask a grown-up to turn on the microphone.'],
@@ -297,6 +298,11 @@ function showPage(html, { restore = null } = {}) {
   // While time is up, nothing runs: keep the page (and any progress for it) for later.
   if (state.timeUp && restore) state.resumeKeep = restore.keep;
   frame.srcdoc = state.html && !state.timeUp ? wrap(state.html, restore) : '';
+  // (An empty stage would keep the keys: the talk keys come back to the app.)
+  if (!state.html || state.timeUp) {
+    frame.blur();
+    window.focus();
+  }
 }
 
 // Ask the page something and wait (briefly) for its answer.
@@ -482,7 +488,8 @@ async function build(body) {
 
   // If the AI hasn't said anything after a few seconds, fill the silence.
   let heardBack = false;
-  const filler = setTimeout(() => !heardBack && !body.fix && !timer.overtime && say(line('filler')), 4000);
+  // (agy's quick voice takes 2 to 5 s: the filler waits a little longer for it.)
+  const filler = setTimeout(() => !heardBack && !body.fix && !timer.overtime && say(line('filler')), state.config?.lead === 'agy' ? 6000 : 4000);
 
   let result = null;
   try {
@@ -542,7 +549,7 @@ async function build(body) {
     console.warn('build failed', result?.message);
     if (!quiet && !timer.overtime) {
       sfx.oops();
-      say(line('tangled'));
+      say(line(result?.blocked ? 'blocked' : 'tangled'));
     }
   } else {
     state.project = { ...state.project, title: result.title, emoji: result.emoji, version: result.version };
@@ -1522,7 +1529,7 @@ $('#parentForm').addEventListener('submit', async e => {
     ...(f.building.value !== state.buildingShown && { team: ['team', 'agents'].includes(f.building.value), agents: f.building.value === 'agents', solo: f.building.value === 'solo' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
-    agyModel: f.agyModel.value,
+    ...(f.agyModel.value !== (state.config.agyModel || '') && { agyModel: f.agyModel.value }),
     stt: f.stt.value,
     tts: f.tts.value,
     voice: f.voice.value,

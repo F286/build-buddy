@@ -16,7 +16,7 @@ import * as watch from './watch.mjs';
 import * as team from './team.mjs';
 import * as solo from './solo.mjs';
 import * as agents from './agents.mjs';
-import { findBin, leadBrain } from './bins.mjs';
+import { findBin, leadBrain, stopRuns } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
 const MIME = {
@@ -125,8 +125,10 @@ const timeIsUp = () => Boolean(timerEndsAt) && Date.now() >= timerEndsAt;
 // building when time ran out).
 const GRACE_MS = 5 * 60000;
 let graceUsedFor = 0;
+// (Is the last thing still to be asked for? Only looks; graceAllowed uses it up.)
+const graceOpen = () => Date.now() - timerEndsAt <= GRACE_MS && graceUsedFor !== timerEndsAt;
 function graceAllowed() {
-  if (Date.now() - timerEndsAt > GRACE_MS || graceUsedFor === timerEndsAt) return false;
+  if (!graceOpen()) return false;
   graceUsedFor = timerEndsAt;
   return true;
 }
@@ -165,8 +167,9 @@ const routes = {
   'POST /api/build': async (req, res) => {
     const { text, alt, fix, grace } = await readJson(req);
     if (!text?.trim() && !fix) return send(res, 400, { error: 'say something' });
-    if (timeIsUp() && !(grace && text && graceAllowed())) return send(res, 423, { error: 'time is up' });
+    // (Busy first: a request turned away while building mustn't use up the last thing.)
     if (ai.isBusy()) return send(res, 409, { error: 'busy' });
+    if (timeIsUp() && !(grace && text && graceAllowed())) return send(res, 423, { error: 'time is up' });
     res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' });
     const emit = ev => {
       if (!res.destroyed) res.write(JSON.stringify(ev) + '\n');
@@ -177,7 +180,7 @@ const routes = {
       await ai.build({ text: text?.trim(), alt: alt?.trim(), fix }, emit);
     } catch (err) {
       console.error('build failed:', err.message);
-      emit({ type: 'error', message: err.message });
+      emit({ type: 'error', message: err.message, blocked: /safety filter/i.test(err.message) });
     }
     // Fixing a wobbly bit doesn't use up play time: add it back (unless a grown-up changed the
     // limit meanwhile).
@@ -190,7 +193,7 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => (solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm()),
+  'POST /api/warm': () => (timeIsUp() && !graceOpen() ? { warm: 0 } : solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm()),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
   'POST /api/repair': async req => {
@@ -281,6 +284,7 @@ const routes = {
     saveConfig(patch);
     if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
     if (!agents.enabled()) agents.stop();
+    if (leadBrain() !== 'claude') team.stopPrograms({ warmOnly: true }); // (Claude's waiting helpers aren't needed)
     return publicConfig();
   },
 
@@ -460,7 +464,12 @@ function shutdown() {
   quitting = true;
   console.log('Bye!');
   browser?.kill();
+  // (Every brain's programs stop now, agy's first: no other brain takes over while it quits.)
   ai.stopAgy();
+  agents.stop();
+  solo.stop();
+  team.stopPrograms();
+  stopRuns();
   server.close();
   setTimeout(() => process.exit(0), 300);
 }

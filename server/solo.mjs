@@ -360,6 +360,8 @@ function sessionFor(projectId, { renew = false } = {}) {
 //   lastPass: the version its last pass made, and which pass it was
 //   note: something its next turn is told (why its last edits were taken back)
 let work = { projectId: null };
+// Is a pass at work on the creation? (The overwatch waits for it.)
+export const busy = () => Boolean(work.checking);
 function workFor(projectId) {
   if (work.projectId !== projectId) work = { projectId, grow: false, shine: false, passes: 0, tries: 0, lastPass: null, note: '' };
   return work;
