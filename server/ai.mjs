@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { config, DATA, ROOT } from './config.mjs';
-import { findBin, run } from './bins.mjs';
+import { findBin, run, installed, leadBrain } from './bins.mjs';
 import * as store from './store.mjs';
 import * as team from './team.mjs';
 import * as agents from './agents.mjs';
@@ -427,7 +427,7 @@ export function stopAgy() {
 // builder and its voice started and waiting. Returns how many were started.
 export function warmAgy() {
   const c = config();
-  if (c.backends[0] !== 'agy' || !findBin('agy', c.agy.bin)) return { warm: 0 };
+  if (leadBrain() !== 'agy') return { warm: 0 };
   agyPool = agyPool.filter(w => !w.proc.closed);
   // (The builder, and the voice if there is one: how many of each model.)
   const need = {};
@@ -634,7 +634,8 @@ async function ask(prompt, emit, state) {
   let lastErr;
   for (const name of config().backends) {
     const backend = backends[name];
-    if (!backend) continue;
+    // (A brain that isn't installed is passed over quietly: Gemini comes first by default.)
+    if (!backend || !installed(name)) continue;
     let text = '';
     let speed = '';
     const started = Date.now();
@@ -729,7 +730,7 @@ export async function build({ text, alt, fix }, emit) {
       // With agy first, a quick voice answers out loud while agy builds (whichever line comes first
       // is said: the builder's own SAY isn't said twice).
       let over = false;
-      const voiced = !fix && config().backends[0] === 'agy';
+      const voiced = !fix && leadBrain() === 'agy';
       if (voiced) {
         agyVoice({ history, text, alt, title: titleBefore }, line => {
           if (over || state.said) return;

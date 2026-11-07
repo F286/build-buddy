@@ -15,12 +15,15 @@ export const DEFAULTS = {
   kidAge: 5,
   buddyName: 'Sparky',
 
-  // AI "brains", tried in order. If the first fails (offline, usage limit hit, ...) the next is used.
+  // AI "brains", tried in order. If the first fails (offline, usage limit hit, ...) the next is used,
+  // and one that isn't installed is passed over (the first installed one leads: see bins.mjs).
+  //   agy     - Google's Antigravity CLI, signed in with a Google account (Gemini 4 Argon). First by
+  //             default: in blind tests on kids' own requests it made better creations than Claude
+  //             Opus, in about 100 s instead of 35 (see README, Gemini through Antigravity).
   //   claude  - Claude Code CLI, signed in with a Claude subscription (or ANTHROPIC_API_KEY)
   //   codex   - OpenAI Codex CLI, signed in with a ChatGPT subscription (or an OpenAI API key)
-  //   agy     - Google's Antigravity CLI, signed in with a Google account (Gemini)
   //   command - any program that reads a prompt on stdin and prints the reply (ollama, llm, gemini, ...)
-  backends: ['claude', 'codex'],
+  backends: ['agy', 'claude', 'codex'],
   // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
   // richer pages in about the same time (25 s vs 21 s). Higher effort roughly doubles the wait.
   // fast: Claude's fast mode for the builder - the same model, answering much sooner. On a Claude
@@ -170,8 +173,17 @@ let runMode =
         : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
           ? 'classic'
           : null;
+// (Team, the agent way and solo are Claude's ways of building, so asking for one puts Claude first.)
+const claudeFirst = list => ['claude', ...list.filter(b => b !== 'claude')];
 const withRunTeam = c =>
-  runMode === null ? c : { ...c, team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' }, solo: { ...c.solo, enabled: runMode === 'solo' } };
+  runMode === null
+    ? c
+    : {
+        ...c,
+        ...(runMode !== 'classic' && { backends: claudeFirst(c.backends) }),
+        team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' },
+        solo: { ...c.solo, enabled: runMode === 'solo' },
+      };
 
 let current = withRunTeam(merge(DEFAULTS, readUserConfig()));
 if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());

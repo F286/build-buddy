@@ -16,7 +16,7 @@ import * as watch from './watch.mjs';
 import * as team from './team.mjs';
 import * as solo from './solo.mjs';
 import * as agents from './agents.mjs';
-import { findBin } from './bins.mjs';
+import { findBin, leadBrain } from './bins.mjs';
 
 const PUBLIC = path.join(ROOT, 'public');
 const MIME = {
@@ -74,7 +74,8 @@ function publicConfig() {
     soloActive: solo.enabled(),
     agentsActive: agents.enabled(),
     // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
-    agyActive: !solo.enabled() && !team.enabled() && c.backends[0] === 'agy',
+    agyActive: !solo.enabled() && !team.enabled() && leadBrain() === 'agy',
+    lead: leadBrain(), // (the first installed brain: it builds)
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
     // every look counts).
     polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : agents.enabled() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
@@ -189,7 +190,7 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => (solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : config().backends[0] === 'agy' ? ai.warmAgy() : team.warm()),
+  'POST /api/warm': () => (solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm()),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
   'POST /api/repair': async req => {
@@ -478,9 +479,11 @@ server.listen(port, '127.0.0.1', () => {
       ? 'a team, the agent way (a lead that remembers the creation, with helpers)'
       : team.enabled()
       ? `a team (lead + up to ${team.maxHelpers()} helpers)`
-      : config().team.enabled || config().solo?.enabled
-        ? 'classic (solo and team mode need claude first in backends)'
-        : 'classic';
+      : leadBrain() === 'agy'
+        ? 'Gemini (Antigravity), one AI writing it all'
+        : config().team.enabled || config().solo?.enabled
+          ? 'classic (solo and team mode are Claude\'s, and Claude isn\'t leading)'
+          : 'classic';
   console.log(`  building: ${building}`);
   console.log(`  brains: ${config().backends.join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');

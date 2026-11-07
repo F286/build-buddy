@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
-import { findBin } from './bins.mjs';
+import { findBin, leadBrain } from './bins.mjs';
 import * as store from './store.mjs';
 import { systemPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 import { syntaxErrors, blankProblems, renameClashes } from './team.mjs';
@@ -26,7 +26,7 @@ import { syntaxErrors, blankProblems, renameClashes } from './team.mjs';
 // Solo mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
   const c = config();
-  return Boolean(c.solo?.enabled) && c.backends[0] === 'claude';
+  return Boolean(c.solo?.enabled) && leadBrain() === 'claude';
 }
 
 // How many look-and-improve passes follow a creation (or a change).

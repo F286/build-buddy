@@ -25,14 +25,14 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
-import { findBin } from './bins.mjs';
+import { findBin, leadBrain } from './bins.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
 // Team mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
   const c = config();
-  return Boolean(c.team?.enabled) && c.backends[0] === 'claude';
+  return Boolean(c.team?.enabled) && leadBrain() === 'claude';
 }
 
 // A role's settings. The lead, helpers and fixer default to the Claude model, effort and speed

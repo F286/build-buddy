@@ -7,6 +7,7 @@ import path from 'node:path';
 import { config } from './config.mjs';
 import * as store from './store.mjs';
 import * as ai from './ai.mjs';
+import { installed } from './bins.mjs';
 
 let running = false;
 
@@ -68,7 +69,7 @@ function saveScreenshot(dataUrl) {
 // which judges from the page and how it's running.
 function watchers() {
   const c = config();
-  const order = [...c.backends.filter(b => b === 'claude' || b === 'codex'), ...c.backends.filter(b => b === 'agy')];
+  const order = [...c.backends.filter(b => b === 'claude' || b === 'codex'), ...c.backends.filter(b => b === 'agy')].filter(installed);
   return order.map(name =>
     name === 'claude'
       ? { name, opts: { model: c.watch.model, effort: c.watch.effort, fast: false, tools: 'Read' } }

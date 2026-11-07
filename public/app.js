@@ -1505,7 +1505,7 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
-    ((c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude as the first AI brain, so it builds the classic way. ` : '') +
+    (c.lead === 'agy' ? `Gemini (Antigravity) builds each creation${c.backends.slice(c.backends.indexOf('agy') + 1).length ? `; ${{ claude: 'Claude', codex: 'ChatGPT', command: 'your command' }[c.backends[c.backends.indexOf('agy') + 1]] || 'the next brain'} takes over if it fails` : ''}. ` : (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '') +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
     (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +

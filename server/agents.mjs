@@ -20,13 +20,14 @@ import { config } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
 import { Session } from './solo.mjs';
+import { leadBrain } from './bins.mjs';
 import { kitApi, kitPage, KIT_NAMES } from './kit.mjs';
 import { syntaxErrors, blankProblems, speakFirst, warmVoice, warmHelpers, maxHelpers, polishPasses as teamPolish, EDIT_FORMAT, PlanReader, helperCrew, applyEditsWithFixer, assemble as teamAssemble, repairNames, renameClashes } from './team.mjs';
 
 // The agent way is team mode with team.agents on (Claude only; solo mode comes first).
 export function enabled() {
   const c = config();
-  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && c.backends[0] === 'claude';
+  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && leadBrain() === 'claude';
 }
 
 // Passes after something new or a change: growing it, then looking again (team.polish more).

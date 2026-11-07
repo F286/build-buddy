@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { resolvePath } from './config.mjs';
+import { config, resolvePath } from './config.mjs';
 
 function isExecutable(file) {
   try {
@@ -45,6 +45,21 @@ export function findBin(name, configured, extraDirs = []) {
     }
   }
   return null;
+}
+
+// Is this brain installed (its program found, or a command set)?
+export function installed(name) {
+  const c = config();
+  if (name === 'command') return Boolean(c.command?.cmd);
+  if (name === 'claude' || name === 'codex' || name === 'agy') return Boolean(findBin(name, c[name]?.bin));
+  return false;
+}
+
+// The brain that leads: the first one in `backends` that's installed. Gemini (agy) leads by default;
+// without agy, Claude does - and then Claude's own ways of building (team, agent, solo) apply.
+export function leadBrain() {
+  const c = config();
+  return c.backends.find(installed) || c.backends[0];
 }
 
 // Run a program, feed `input` on stdin, stream stdout chunks to onStdout, and resolve with

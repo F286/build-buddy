@@ -124,6 +124,7 @@
     </div>
     <label>AI brain
       <select name="brains">
+        <option value="agy,claude,codex">Gemini (Antigravity), then Claude, then ChatGPT - recommended</option>
         <option value="claude,codex">Claude, then ChatGPT if Claude fails</option>
         <option value="codex,claude">ChatGPT, then Claude if ChatGPT fails</option>
         <option value="claude">Claude only</option>
@@ -133,7 +134,7 @@
         <option value="command">Custom command (config.json)</option>
       </select>
     </label>
-    <label>How Claude builds
+    <label>How Claude builds (when Claude leads)
       <select name="building"><option value="agents">A team led by one AI that remembers it (fastest, uses the most of your plan)</option><option value="team">A team of AIs at once (fast, uses more of your plan)</option><option value="solo">One AI that remembers it and keeps improving it</option><option value="">One AI writes it all (classic)</option></select>
     </label>
     <div class="row">
