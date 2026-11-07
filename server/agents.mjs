@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
 import * as store from './store.mjs';
-import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR, AgySession, agyHelper, agyVoice, keepAgyWarm } from './ai.mjs';
+import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR, AgySession, agyHelper, agyVoice, keepAgyWarm, coolAgy } from './ai.mjs';
 import { Session } from './solo.mjs';
 import { leadBrain } from './bins.mjs';
 import { kitApi, kitPage, KIT_NAMES } from './kit.mjs';
@@ -943,8 +943,10 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     if (page) fs.writeFileSync(rules, helperRules((w.rules = { asked: text, look })));
   } else [w.passes, w.tries] = [0, 0];
   // (Starting programs takes the computer's attention: the helpers taken are replaced once the page is
-  // ready, for the kid's next turn - on agy, not after the last thing they could ask for.)
+  // ready, for the kid's next turn - on agy, not after the last thing they could ask for: the ones
+  // still waiting are stopped then.)
   if (!(last && onAgy())) keepHelpersWarm();
+  else coolAgy();
   // (agy's helpers don't say how many tokens they wrote.)
   log(`ok   ${brainName()} agents ${secs()} ${how}, ${built.length} chars, ${onAgy() ? '' : `${spent.tokens} helper tokens, `}${eventGaps(built) || 'no events'}, turn ${s.turns}`);
   const sameOne = Boolean(page) && (edited || sameCreation(page, built));

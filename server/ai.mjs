@@ -432,6 +432,9 @@ export function warmAgy() {
   return { warm: keepAgyWarm({ [c.agy.model || '']: 1, ...(c.agy.voiceModel ? { [c.agy.voiceModel]: (c.agy.voiceModel === (c.agy.model || '') ? 2 : 1) } : {}) }) };
 }
 
+// After the last thing at time's up, the agy programs still waiting are stopped (nothing will use them).
+export const coolAgy = () => agyPool.splice(0).forEach(w => (clearTimeout(w.timer), w.proc.child.kill()));
+
 // Have this many agy programs of each model started and waiting (each for a few minutes). Returns
 // how many were started.
 export function keepAgyWarm(need, ms = AGY_WARM_MS) {
