@@ -799,9 +799,10 @@ export function log(line) {
 async function ask(prompt, emit, state, skip = null) {
   const system = systemPrompt();
   let lastErr;
-  for (const name of config().backends) {
+  // (skip: a brain tried last, after the others.)
+  const order = skip ? [...config().backends.filter(n => n !== skip), ...config().backends.filter(n => n === skip)] : config().backends;
+  for (const name of order) {
     const backend = backends[name];
-    if (name === skip) continue;
     // (A brain that isn't installed is passed over quietly: Gemini comes first by default.)
     if (!backend || !installed(name)) continue;
     let text = '';
@@ -833,14 +834,14 @@ async function ask(prompt, emit, state, skip = null) {
       if (isQuitting()) throw err; // (no other brain is started while Build Buddy quits)
       lastErr = err;
       log(`FAIL ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${err.message.replace(/\s+/g, ' ').slice(0, 300)}`);
-      if (config().backends.slice(config().backends.indexOf(name) + 1).some(n => n !== skip && installed(n))) emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
+      if (order.slice(order.indexOf(name) + 1).some(installed)) emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
     }
   }
   throw lastErr || new Error('No AI backends configured');
 }
 
 // The classic way: one AI writes the whole reply (with a full-page retry if its edits don't fit).
-// (skip: a brain passed over - Gemini, when its team just failed and another brain can take over.)
+// (skip: a brain tried last - Gemini, when its team just failed and another brain can take over.)
 async function classic({ page, history, text, alt, fix }, emit, state, skip = null) {
   let reply = await ask(userPrompt({ page, history, text, alt, fix }), emit, state, skip);
   let r = parseReply(reply.text);
@@ -877,7 +878,8 @@ export async function build({ text, alt, fix, last = false }, emit) {
     // classic way still answers.
     let r = null;
     // When Gemini's team fails, the next installed brain takes over (one Argon writing the whole page
-    // takes about 100 s, after the kid has already waited) - or, with Gemini alone, one Argon does.
+    // takes about 100 s, after the kid has already waited) - or, with Gemini alone or if that brain
+    // fails too, one Argon does.
     let skip = null;
     // (Gemini leading builds its own way, agy.way - Claude's team and solo settings aren't for it: worth
     // a line only for another brain.)
@@ -964,5 +966,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
     });
   } finally {
     busy = false;
+    // (The last thing they could ask for: agy's waiting programs won't be needed again.)
+    if (last && leadBrain() === 'agy') coolAgy();
   }
 }

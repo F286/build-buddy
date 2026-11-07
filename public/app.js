@@ -685,6 +685,13 @@ async function checkCreation({ urgent = false } = {}) {
       screenshot,
       report: { ...rest, shownSec: (Date.now() - state.loadedAt) / 1000, errors: [...new Set([...(rest.errors || []), ...state.pageErrors])] },
     });
+    // (A pass of the builder's own was at work: this look didn't happen, so it's tried again soon.)
+    if (r.skipped === 'busy') {
+      if (last) overwatch.lastCheck.set(key, last);
+      else overwatch.lastCheck.delete(key);
+      overwatch.urgentDone.delete(key);
+      return;
+    }
     overwatch.note = r.fixed ? `${r.verdict === 'polish' ? 'polished' : 'fixed'}: ${r.why}` : r.verdict ? `all good (${r.why})` : `skipped (${r.skipped})`;
     overwatch.note += `, ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     overwatch.noteFor = projectId; // (a new page or another creation has no note yet)
@@ -1474,7 +1481,13 @@ async function openParent() {
   const brains = c.backends.join(',');
   // (A combination the list doesn't have - set in config.json, or for this run by --agents,
   // --team, --solo or KIDBUILD_BACKENDS - is kept, not reset on save.)
-  if (![...f.brains.options].some(o => o.value === brains)) f.brains.append(new Option(`${c.backends.join(', then ')} (in use now: from config.json, or for this run only)`, brains));
+  f.brains.querySelector('option[data-extra]')?.remove();
+  if (![...f.brains.options].some(o => o.value === brains)) {
+    const name = b => ({ agy: 'Gemini (Antigravity)', claude: 'Claude', codex: 'ChatGPT', command: 'Custom command' })[b] || b;
+    const extra = new Option(`${c.backends.map(name).join(', then ')} (in use now: from config.json, or for this run only)`, brains);
+    extra.dataset.extra = '1';
+    f.brains.append(extra);
+  }
   f.brains.value = brains;
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';

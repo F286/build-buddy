@@ -490,7 +490,7 @@ server.listen(port, '127.0.0.1', () => {
     ? 'solo (one Claude that remembers the creation)'
     : agents.enabled()
       ? leadBrain() === 'agy'
-        ? 'Gemini, the agent way (an Argon lead that remembers the creation, with Argon helpers)'
+        ? `Gemini, the agent way (an Argon lead that remembers the creation, with Argon helpers${config().agy?.way === 'fast' ? ', quicker changes' : ''})`
         : 'a team, the agent way (a lead that remembers the creation, with helpers)'
       : team.enabled()
       ? `a team (lead + up to ${team.maxHelpers()} helpers)`
@@ -500,7 +500,7 @@ server.listen(port, '127.0.0.1', () => {
           ? 'classic (solo and team mode are Claude\'s, and Claude isn\'t leading)'
           : 'classic';
   console.log(`  building: ${building}`);
-  console.log(`  brains: ${config().backends.join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
+  console.log(`  brains: ${config().backends.map(b => (installed(b) ? b : `${b} (not installed)`)).join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();
   if (!args.has('--no-browser')) launchBrowser(!args.has('--window'));
