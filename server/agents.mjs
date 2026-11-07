@@ -914,7 +914,7 @@ function running(report, shot) {
   const r = report || {};
   const slow = r.fps != null && r.fps < 30 ? '\nIf that feels slow, make each frame lighter - never by taking away what the look asked for.' : '';
   return `<how_it_is_running>\nRunning at ${r.fps ?? '?'} frames per second${r.canvas ? ` on a ${r.canvas} canvas` : ''}.${slow}\nErrors while running: ${r.errors?.length ? r.errors.slice(-5).join(' | ') : 'none'}\n</how_it_is_running>\n\n${
-    shot ? `A screenshot of it right now is in the file ${shot} - look at it first (with the Read tool).` : 'There is no screenshot, so judge from the files.'
+    shot ? `A screenshot of it right now is in the file ${shot} - look at it first (with the Read tool).` : onAgy() ? 'There is no screenshot, so judge from the page above and how it runs.' : 'There is no screenshot, so judge from the files.'
   }`;
 }
 
@@ -944,7 +944,7 @@ export async function check({ projectId, version, report, screenshot }) {
   w.checking = true;
   let before = null;
   let rules = null;
-  const shot = saveScreenshot(s.dir, screenshot);
+  const shot = onAgy() ? null : saveScreenshot(s.dir, screenshot); // (agy's lead has no tools to look at one)
   try {
     // (Its helpers wrote parts of it while the kid waited: it reads them before it changes them.)
     const unseen = s.shown !== page && "Some of its code you haven't seen yet (your helpers wrote it while the kid waited): Read page.html and the parts before you change them.";
@@ -1034,7 +1034,7 @@ export function wireNext(projectId) {
   workFor(projectId).wire = true;
 }
 
-// The wire pass (see WIRE): edits in text, with a look at the screenshot.
+// The wire pass (see WIRE): edits in text, with a look at the screenshot (on agy, without one).
 async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
   // (A wire turn that fails - a refusal, a stall - is tried once more on the next check.)
   w.wireTries = (w.wireTries || 0) + 1;
@@ -1050,9 +1050,15 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
   await s.think(lead().thinking.wire);
   if (stale()) return { skipped: 'stale' };
   const reply = await s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' });
+  const edits = parseReply(reply.text).edits;
+  // (On agy, a reply with no edits that doesn't say OK - empty, or a tool it tried to use - is a turn
+  // that failed.)
+  if (onAgy() && !edits.length && !/^[ \t>*_`#]*OK\b/m.test(reply.text)) {
+    log(`AGENTS wire fail ${took()} ${reply.text.trim() ? 'no edits and no OK' : 'an empty reply'}${w.wire ? ', tried again on the next check' : ''}`);
+    return { skipped: 'failed' };
+  }
   w.wire = false;
   const why = field(reply.text, 'WHY') || 'made its parts fit';
-  const edits = parseReply(reply.text).edits;
   if (!edits.length || stale()) {
     s.shown = page;
     log(`AGENTS wire ${took()} ${edits.length ? 'stale' : 'OK'}`);
