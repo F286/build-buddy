@@ -1523,8 +1523,13 @@ function brainsSaid(c) {
   const builds = `${name(c.lead)} builds each creation${next ? `; ${name(next)} takes over if it fails` : ''}. `;
   const way = (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '';
   if (!missing.length) return c.lead === 'agy' ? builds : way;
-  const names = missing.length > 1 ? `${missing.slice(0, -1).map(name).join(', ')} and ${name(missing.at(-1))} aren't` : `${name(missing[0])} isn't`;
-  return `${names} installed (run setup.sh), so ${has(c.lead) ? builds + (c.lead === 'agy' ? '' : way) : 'nothing can build. '}`;
+  // (setup.sh says how to install each brain; a custom command is set in config.json.)
+  const absent = missing.filter(b => b !== 'command');
+  const said = [
+    absent.length && `${absent.length > 1 ? `${absent.slice(0, -1).map(name).join(', ')} and ${name(absent.at(-1))} aren't` : `${name(absent[0])} isn't`} installed (run setup.sh)`,
+    missing.includes('command') && "your command isn't set (command.cmd in config.json)",
+  ].filter(Boolean);
+  return `${said.join(' and ')}, so ${has(c.lead) ? builds + (c.lead === 'agy' ? '' : way) : 'nothing can build. '}`;
 }
 
 function showParentStatus() {
