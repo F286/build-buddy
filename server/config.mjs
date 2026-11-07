@@ -101,7 +101,8 @@ export const DEFAULTS = {
   // creation plans it, and Argon helpers (helperModel, "" for agy.model) write its parts at the same
   // time (about 38 s for something new, 25 s for a change: a little slower than Claude's, better
   // creations); "fast" is the same as quick as Claude's, with smaller parts and smaller changes;
-  // "classic" has one Argon write the whole page (the best creations, about 100 s).
+  // "classic" has one Argon write the whole page (the best creations, about 100 s; `./start.sh
+  // --classic` builds that way for one run).
   agy: { bin: '', model: 'gemini-4-argon-low', way: 'agents', helperModel: '', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },
   command: { cmd: '', args: [] },
 
@@ -178,14 +179,18 @@ let runMode =
         : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
           ? 'classic'
           : null;
-// (Team, the agent way and solo are Claude's ways of building, so asking for one puts Claude first.)
+// (Team, the agent way and solo are Claude's ways of building, so asking for one puts Claude first;
+// --classic has Gemini build the classic way too. Both for this run only: brains, or a way for
+// Gemini, that a grown-up picks in the panel win, and the run's own are never saved.)
 const claudeFirst = list => ['claude', ...list.filter(b => b !== 'claude')];
+const picked = { brains: false, agyWay: false };
 const withRunTeam = c =>
   runMode === null
     ? c
     : {
         ...c,
-        ...(runMode !== 'classic' && { backends: claudeFirst(c.backends) }),
+        ...(runMode !== 'classic' && !picked.brains && { backends: claudeFirst(c.backends) }),
+        ...(runMode === 'classic' && !picked.agyWay && { agy: { ...c.agy, way: 'classic' } }),
         team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' },
         solo: { ...c.solo, enabled: runMode === 'solo' },
       };
@@ -200,6 +205,13 @@ export function config() {
 
 // config.json holds only the user's own overrides; merge the patch into it.
 export function saveConfig(patch) {
+  // (The brains in the order this run shows them, Claude first, are the run's: not kept.)
+  if (runMode && runMode !== 'classic' && !picked.brains && String(patch.backends) === String(current.backends)) {
+    const { backends, ...rest } = patch;
+    patch = rest;
+  }
+  if (patch.backends) picked.brains = true;
+  if (patch.agy && 'way' in patch.agy) picked.agyWay = true;
   const user = merge(readUserConfig(), patch);
   fs.writeFileSync(FILE, JSON.stringify(user, null, 2) + '\n');
   if ((patch.team && 'enabled' in patch.team) || (patch.solo && 'enabled' in patch.solo)) runMode = null;
