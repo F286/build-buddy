@@ -73,12 +73,15 @@ function publicConfig() {
     teamActive: team.enabled() && !solo.enabled(),
     soloActive: solo.enabled(),
     agentsActive: agents.enabled(),
+    // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
+    agyActive: !solo.enabled() && !team.enabled() && c.backends[0] === 'agy',
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
     // every look counts).
     polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : agents.enabled() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
     creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
+    agyModel: c.agy.model,
     stt: c.stt,
     tts: c.tts,
     voice: c.kokoro.voice,
@@ -186,7 +189,7 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => (solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : team.warm()),
+  'POST /api/warm': () => (solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : config().backends[0] === 'agy' ? ai.warmAgy() : team.warm()),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
   'POST /api/repair': async req => {
@@ -268,6 +271,7 @@ const routes = {
     if (typeof b.agents === 'boolean') patch.team = { ...patch.team, agents: b.agents };
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
+    if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
@@ -455,6 +459,7 @@ function shutdown() {
   quitting = true;
   console.log('Bye!');
   browser?.kill();
+  ai.stopAgy();
   server.close();
   setTimeout(() => process.exit(0), 300);
 }

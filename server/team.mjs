@@ -69,7 +69,7 @@ function withAdvisor(name, text, when) {
   return roleConfig(name).advisor ? `${text}\n\nYou have an advisor (the advisor tool): ${when} Keep it quick - the kid is waiting.` : text;
 }
 
-function voiceSystem() {
+export function voiceSystem() {
   const c = config();
   return `You are ${c.buddyName}, a cheerful robot building buddy for a ${c.kidAge}-year-old${c.kidName ? ` named ${c.kidName}` : ''}. The kid talks to you out loud, and you build what they ask for on a big screen: a team of helpers does the building while you talk. Their words come through speech-to-text and are sometimes misheard ("a rice car" is probably "a race car") - guess the most likely meaning.
 
@@ -99,7 +99,7 @@ function sketchPrompt({ text, alt, look, title }) {
   ].join('\n\n');
 }
 
-function voicePrompt({ history, text, alt, title }) {
+export function voicePrompt({ history, text, alt, title }) {
   const c = config();
   const recent = history.slice(-4).map(h => `${h.role === 'kid' ? 'Kid' : c.buddyName}: ${h.text}`);
   return [

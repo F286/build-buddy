@@ -11,7 +11,7 @@ of describing an idea, seeing it, and making it better is the skill Build Buddy 
 things with AI. Whatever they ask for comes out as a little world that works: a simulation they can
 poke and watch, with a spark of joy, and a game only when they ask for one.
 
-It runs on your own computer and uses the **Claude or ChatGPT subscription you already have**. Your
+It runs on your own computer and uses the **Claude or ChatGPT subscription (or Google account, through Antigravity) you already have**. Your
 kid's voice is understood and spoken on the computer itself, so their voice never leaves it.
 
 | Hold space and talk | Sparky builds it |
@@ -135,7 +135,7 @@ won all 16 judgments against it, 9 of them clearly.
 5. **They keep building, without starting over.** Changes take a few seconds and slot into what
    they're playing: where they were and what they made come back. If they don't like something,
    the back button undoes it.
-6. **A careful helper keeps watch.** Once they've played for a bit, a stronger AI looks at what they
+6. **A careful helper keeps watch.** Once they've played for a bit, a careful AI looks at what they
    made and quietly fixes it if it's broken or stuck.
 
 ## Install
@@ -147,6 +147,7 @@ You need:
 - **At least one AI "brain"**, signed in once:
   - **Claude:** install [Claude Code](https://claude.com/claude-code), then run `claude` once and sign in with your Claude account.
   - **ChatGPT:** install Codex (`npm install -g @openai/codex`), then run `codex login` with your ChatGPT account.
+  - **Gemini:** install Google's Antigravity CLI (`agy`, from [antigravity.google](https://antigravity.google)), then run `agy` once and sign in with your Google account.
 - To build the speech recognizer: `git`, `cmake` and a C++ compiler (on a Mac, `brew install whisper-cpp` instead).
   Optional: `WHISPER_GPU=1 ./setup.sh` also builds the GPU version (on Linux it needs Vulkan drivers
   and `glslc`) and fetches the larger speech model; see `whisper.gpu` below.
@@ -244,7 +245,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `kidName` | `""` | Sparky greets them by name. |
 | `kidAge` | `5` | Sparky pitches words and games to this age. |
 | `buddyName` | `"Sparky"` | The robot's name. |
-| `backends` | `["claude", "codex"]` | Which AI to use, in order. If the first fails (offline, usage limit), the next takes over. |
+| `backends` | `["claude", "codex"]` | Which AI to use, in order (`claude`, `codex`, `agy`, `command`). If the first fails (offline, usage limit), the next takes over. |
 | `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. |
 | `claude.fast` | `false` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for building: the same model, answering much sooner. On a Claude subscription it's paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. Also in the panel as *Claude speed*. |
 | `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` (or `--team`). Needs `claude` first in `backends`. |
@@ -265,18 +266,53 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
+| `agy.model` | `"gemini-4-argon-low"` | Model for Antigravity (`agy`): any id `agy models` lists (Gemini 4 Argon at low, medium or high effort, Gemini Flash, ...). With `"backends": ["agy", "claude"]` Gemini builds and Claude takes over if it fails (or if Gemini's safety filter stops a request); also in the panel as *AI brain* and *Gemini model*. It builds the classic way (team, agent and solo building are Claude's), and a page whose scripts don't parse is fixed once before it's shown. While the kid talks, agy's builder and its voice are started and wait (starting one takes about 3 s), and a quick model says Sparky's first line while the builder works (see `agy.voiceModel`): in the app, Sparky answered after about 2.5 s and the page appeared after 70 to 110 s. In blind tests on the kids' own requests it made better creations than Claude Opus (see [Gemini through Antigravity](#gemini-through-antigravity)), more slowly. Medium effort scored the same and wasn't quicker; a `-medium` or `-high` model thinks before it writes (Flash medium wrote nothing for 38 s). agy runs in an empty folder of its own, outside Build Buddy's, with its strictest permissions and a sandboxed terminal, and is only asked for text: it can't run commands or read or write files outside that folder (it could still search the web). |
+| `agy.voiceModel` | `"gemini-3.8-flash-low"` | The quick model that says Sparky's first line out loud while agy builds, with team mode's voice instructions: about 2 to 3 s, against 5 to 12 s for the builder's own first line. `""` lets the builder's own first line be said. |
+| `agy.keepHistory` | `false` | agy keeps every run as a conversation (in its list and on your phone, about half a megabyte each). Build Buddy's runs use an agy home of their own (`data/agy-home`, sharing only your sign-in), so they're never listed with yours, and runs over an hour old are cleared out of it. `true` runs them in your own agy home. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
 | `stt` | `"both"` | Speech-to-text: `both` (whisper and Parakeet together, the AI gets both versions), `whisper`, `parakeet`, or `browser` (Chrome's online speech service; macOS/Windows Chrome only). |
 | `tts` | `"kokoro"` | Voice: `kokoro` (natural), `piper` (faster), `browser` (the system's voices), or `off`. |
 | `kokoro.voice` / `kokoro.speed` | `"af_heart"` / `1.0` | One of 28 English voices; preview them in the Ctrl+Shift+P panel. |
-| `watch.enabled` | `true` | The overwatch: a stronger AI that checks on the game while they play and fixes it if it's broken or stuck. |
+| `watch.enabled` | `true` | The overwatch: a careful AI that checks on the game while they play and fixes it if it's broken or stuck (Claude or Codex if one is listed, looking at a screenshot; with agy alone, Argon, judging from the page). |
 | `watch.model` / `watch.effort` | `"opus"` / `"medium"` | Model and effort for the overwatch (with Claude; with Codex it uses high reasoning). |
+| `watch.agyModel` | `"gemini-4-argon-low"` | The overwatch's model when agy is the only brain it can use (with Claude or Codex listed too, they watch: they can look at the screenshot). agy can't be shown the screenshot, so it judges from the page and how it's running (frame rate, errors, kept values, a blank screen). Argon high took 1 to 5 minutes a look, and hit the 5-minute limit once in 4. |
 | `watch.firstAfterSec` / `watch.everySec` | `25` / `180` | First check after this much play, then this often while they keep playing the same version. |
 | `creationsButton` | `false` | Show the ⭐ *My creations* button, so the kid can go back to anything they've made. Also in the Ctrl+Shift+P panel. |
 | `unmuteMic` | `true` | Linux: switch the microphone on at startup if it's muted in the system settings. |
 | `keepOpen` | `false` | Kid-proof mode: reopen the window if it's closed. Quit with Ctrl+Shift+P instead. |
 | `port` | `4321` | Local port for the app. |
 | `browser` | auto | Path to the browser, if it isn't found automatically. |
+
+### Gemini through Antigravity
+
+With `"backends": ["agy", "claude"]` (*Gemini (Antigravity), then Claude if Gemini fails* in the
+Ctrl+Shift+P panel), Gemini 4 Argon builds every creation through Google's Antigravity CLI, the
+classic way (one AI writes the whole page), and Claude takes over if it fails. It makes better
+creations than Claude Opus, and makes the kid wait longer for them.
+
+Measured blind on the kids' own requests (14 new creations and 8 changes, from what they actually
+said), built fresh by each, put on a stage like the app's and played with, and each pair judged
+twice, both ways round, by Opus judges and by Gemini judges:
+
+| Argon against | Opus judges | Gemini judges |
+|---|---|---|
+| Claude's default way (the agent way, after its wire pass): new creations | won 24 of 28, 7.4 against 5.5 | won 24 of 28, 8.0 against 5.4 |
+| the same, the kids' changes | won 14 of 16, 6.0 against 5.1 | won 14 of 16, 7.0 against 5.4 |
+| Opus writing it all (classic): new creations | won 25 of 28, 7.3 against 4.9 | won 24 of 28, 8.1 against 5.0 |
+| the same, the kids' changes | won 11 of 16, 5.7 against 5.4 | won 10 of 16, 6.3 against 5.9 |
+
+The judges said Argon's were fuller worlds where things work on their own: its bees fly to the
+flowers, bring nectar home and fill the honey, where the agent way's circle the hive; its plane flies
+around a spinning globe with airports, fuel and whales. Opus won a big cat (bigger, in the middle,
+with the comic words asked for), and writing it all, a paint shop. A still picture doesn't show most of that:
+
+![Argon (left) and Claude Opus's agent way (right) on six of the kids' own requests](docs/argon-vs-opus.jpg)
+
+The price is waiting: about 100 s for something new (80 to 135 s; the agent way about 35 s plus 15 s
+for its wire pass, Opus classic about 60 s) and 15 to 65 s for a change (the agent way 8 to 36 s).
+Sparky answers out loud after about 2.5 s all the same: agy is started while the kid talks, and a
+quick model says the first line. The agent way also keeps growing a creation for minutes after it
+appears, which these tests don't count.
 
 ### Team mode
 
@@ -558,7 +594,7 @@ Buddy changes.
   can't be pushed into a state it doesn't understand. In team mode a new version is tried out of
   sight first: if it crashes only with the kid's progress, it's repaired to carry on from there;
   if that doesn't work out, it quietly starts fresh instead.
-- **Your subscription is the brain.** Build Buddy runs the official `claude` or `codex` command-line
+- **Your subscription is the brain.** Build Buddy runs the official `claude`, `codex` or `agy` command-line
   tools in non-interactive mode on your computer, so each request counts against your plan's normal
   usage, just as if you'd typed it yourself. It doesn't extract or reuse login tokens.
 - **Fast feedback.** With Claude, the AI's first sentence is spoken while the rest is still being written.
@@ -601,7 +637,8 @@ Buddy changes.
   and asks the AI to fix it, at most twice in a row.
 - **An overwatch looks after it, quietly.** After the kid has played a version for 25 seconds, and
   every 3 minutes after that while they keep playing it, Opus takes a careful look: a screenshot of
-  the game, its frame rate, recent errors and kept values. It fixes problems that don't show up as
+  the game, its frame rate, recent errors and kept values (with agy as the only brain, Argon does,
+  from the page and those numbers: agy can't be shown the screenshot). It fixes problems that don't show up as
   errors, like a player who's invisible or stuck, a frozen screen, or a request that didn't take.
   If everything works, it may give that version one tiny polish (something cut off at the edge, too
   small to see, a missing bounce), but it never adds new things or changes what the kid chose, so
@@ -651,7 +688,7 @@ but `setup.sh` needs WSL, or use `"stt": "browser", "tts": "browser"` with Chrom
 
 ```
 server/main.mjs      web server, API, full-screen browser launcher
-server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
+server/ai.mjs        Sparky's instructions, AI backends (claude / codex / agy / command), reply parsing
 server/team.mjs      team mode: a lead and helpers that build a creation together, at the same time
 server/agents.mjs    team mode, the agent way: one lead that remembers the creation, helpers for its parts
 server/kit.mjs       the agent way's kit: canvas or 3D scene, input, sounds and the loop for every part

@@ -18,6 +18,7 @@ export const DEFAULTS = {
   // AI "brains", tried in order. If the first fails (offline, usage limit hit, ...) the next is used.
   //   claude  - Claude Code CLI, signed in with a Claude subscription (or ANTHROPIC_API_KEY)
   //   codex   - OpenAI Codex CLI, signed in with a ChatGPT subscription (or an OpenAI API key)
+  //   agy     - Google's Antigravity CLI, signed in with a Google account (Gemini)
   //   command - any program that reads a prompt on stdin and prints the reply (ollama, llm, gemini, ...)
   backends: ['claude', 'codex'],
   // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
@@ -87,6 +88,13 @@ export const DEFAULTS = {
   // session then switches to the main model for everything else).
   solo: { enabled: false, polish: 3, model: '', firstModel: 'sonnet', effort: '', thinking: { build: 2000, look: 12000 } },
   codex: { bin: '', model: '', reasoning: 'low' },
+  // Antigravity (agy): model is any id `agy models` lists. It builds the classic way (one AI writes
+  // it all - the team, agent and solo ways are Claude's). voiceModel: a quick model that says the
+  // first line out loud while agy builds (Gemini Flash answers in about 2 s; the builder takes 5 to
+  // 10 s to start writing); "" lets the builder's own first line be said. keepHistory: true runs agy
+  // in your own agy home, so Build Buddy's runs are listed with your conversations (by default they
+  // use one of their own, data/agy-home, sharing only the sign-in).
+  agy: { bin: '', model: 'gemini-4-argon-low', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },
   command: { cmd: '', args: [] },
 
   // Speech in: both (whisper and Parakeet listen together and the AI gets both versions; whisper
@@ -109,8 +117,9 @@ export const DEFAULTS = {
   // The overwatch: a careful model that checks on a creation once the kid has played with it for
   // firstAfterSec, then every everySec while they keep playing the same version. It fixes it if
   // it's broken or stuck, and otherwise may make a tiny polish (once per version). Uses the first
-  // of claude/codex in backends.
-  watch: { enabled: true, model: 'opus', effort: 'medium', codexModel: '', firstAfterSec: 25, everySec: 180, timeoutSec: 300 },
+  // of claude/codex in backends, which can look at a screenshot, or else agy (with agyModel; it
+  // judges from the page and how it's running: Argon high took 1 to 5 minutes, so low).
+  watch: { enabled: true, model: 'opus', effort: 'medium', codexModel: '', agyModel: 'gemini-4-argon-low', firstAfterSec: 25, everySec: 180, timeoutSec: 300 },
 
   // The ⭐ button that opens My creations (every creation they've made, to pick one and carry on).
   // Hidden unless a grown-up turns it on.

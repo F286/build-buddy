@@ -128,6 +128,8 @@
         <option value="codex,claude">ChatGPT, then Claude if ChatGPT fails</option>
         <option value="claude">Claude only</option>
         <option value="codex">ChatGPT only</option>
+        <option value="agy,claude">Gemini (Antigravity), then Claude if Gemini fails</option>
+        <option value="agy">Gemini only (Antigravity)</option>
         <option value="command">Custom command (config.json)</option>
       </select>
     </label>
@@ -140,7 +142,10 @@
         <select name="claudeFast"><option value="">Normal</option><option value="fast">Fast (extra usage)</option></select>
       </label>
     </div>
-    <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
+    <div class="row">
+      <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
+      <label>Gemini model <input name="agyModel" placeholder="(agy default)"></label>
+    </div>
     <div class="row">
       <label>Listening
         <select name="stt"><option value="both">whisper + Parakeet</option><option value="whisper">whisper only</option><option value="parakeet">Parakeet only</option><option value="browser">Browser speech service</option></select>
