@@ -889,8 +889,10 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   s.files = built;
   s.shown = mine ? built : null; // (its helpers' code it hasn't seen yet)
   if (asks) w.rules = asks;
-  // Its helpers wrote code it hasn't seen: the next pass makes it fit first.
-  [w.wire, w.wireTries] = [crew.jobs.length > 0, 0];
+  // Its helpers wrote code it hasn't seen: the next pass makes it fit first. (On agy, where that pass is
+  // the only one, one still to come - stopped for the kid, or not run yet - stays to come after a change
+  // made with its own edits.)
+  if (crew.jobs.length || !(onAgy() && edited && w.wire)) [w.wire, w.wireTries] = [crew.jobs.length > 0, 0];
   // Something new: it's grown into its full version in the next pass.
   const fresh = !page || (!edited && r.title && r.title !== p.title && !sameCreation(page, built));
   if (fresh) {
@@ -931,7 +933,8 @@ export async function check({ projectId, version, report, screenshot }) {
   let p = store.currentProject();
   if (p.id !== projectId || p.current !== version || isBusy() || !madeByAgents(p, version)) return { skipped: 'stale' };
   const w = workFor(projectId);
-  if ((w.passes >= passes() && !w.grow) || w.tries >= passes() + 2) return { skipped: 'polished enough' };
+  // (On agy the wire pass is the only one: while it's still to come, it's never polished enough.)
+  if (!(onAgy() && w.wire) && ((w.passes >= passes() && !w.grow) || w.tries >= passes() + 2)) return { skipped: 'polished enough' };
   if (w.checking || w.repairing) return { skipped: 'busy' };
   const s = sessionFor(projectId);
   const page = store.html(p);
@@ -1049,7 +1052,11 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
   await s.use(lead().model);
   await s.think(lead().thinking.wire);
   if (stale()) return { skipped: 'stale' };
-  const reply = await s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' });
+  const reply = await s.ask(prompt, { timeoutSec: 240, stallSec: 90, kind: 'polish' }).catch(err => {
+    // (On agy, one stopped for the kid hasn't run: it's still to come, after their change.)
+    if (onAgy() && err.message === 'interrupted') [w.wire, w.wireTries] = [true, w.wireTries - 1];
+    throw err;
+  });
   const edits = parseReply(reply.text).edits;
   // (On agy, a reply with no edits that doesn't say OK - empty, or a tool it tried to use - is a turn
   // that failed.)
