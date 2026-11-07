@@ -130,6 +130,10 @@ function keepHelpersWarm() {
   return keepAgyWarm(need);
 }
 
+// Who writes for the team on agy - its helpers' parts, and the fixer's edits that didn't fit - is an
+// Argon helper (null: a Claude one).
+const runner = () => (onAgy() ? agyHelper : null);
+
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
 function quickPlanRules(n = QUICK_HELPERS, fast = agyFast()) {
@@ -375,7 +379,9 @@ function sessionFor(projectId, { renew = false } = {}) {
   const s = session;
   const usable = s?.alive && s.projectId === projectId;
   const key = onAgy() ? JSON.stringify(['agy', lead().model, leadSystem()]) : JSON.stringify(sessionArgs());
-  if (usable && (s.kidWaiting || !renew || (s.turns < MAX_TURNS && s.key === key))) return s;
+  // (Never the other brain's for a pass - the brains were switched - unless the kid waits for it.)
+  const same = (s instanceof AgySession) === onAgy();
+  if (usable && (s.kidWaiting || (!renew && same) || (s.turns < MAX_TURNS && s.key === key))) return s;
   s?.end();
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
@@ -722,7 +728,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     chars += n;
     emit({ type: 'progress', chars, helpers: crew.jobs.length + team.helpers.size, helpersDone: crew.done + team.done, team: true, leads: 1 });
   };
-  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: onAgy() ? 9000 : 5000, runner: onAgy() ? agyHelper : null, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
+  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: onAgy() ? 9000 : 5000, runner: runner(), max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
@@ -847,7 +853,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     } else if (reader.adding && reader.jobs.length) {
       if (!page) throw new Error('new parts on a blank page');
       const parts = await Promise.all(reader.jobs.map(j => crew.running.get(j.name)));
-      const wired = r.edits.length ? await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent), r.edits) : page;
+      const wired = r.edits.length ? await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent, runner()), r.edits) : page;
       html = addParts(wired, parts);
       edited = true;
       how = `lead done ${secs(leadAt)} (${reply.text.length}c, ${r.edits.length} edits), ${parts.length} new parts${slowest(parts)}`;
@@ -856,12 +862,12 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
       const changes = await Promise.all(reader.jobs.map(j => crew.running.get(j.name)));
       const edits = [...r.edits, ...changes.flatMap(c => parseReply(c.reply).edits)];
       if (!edits.length) throw new Error('the helpers wrote no changes');
-      html = await fitOrThrow(await applyEditsWithFixer(page, edits, signal, spent), edits);
+      html = await fitOrThrow(await applyEditsWithFixer(page, edits, signal, spent, runner()), edits);
       edited = true;
       how = `lead done ${secs(leadAt)}, ${changes.length} helpers changing it with ${edits.length} edits${slowest(changes)}`;
     } else if (r.edits.length) {
       if (!page) throw new Error('edits on a blank page');
-      html = await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent), r.edits);
+      html = await fitOrThrow(await applyEditsWithFixer(page, r.edits, signal, spent, runner()), r.edits);
       edited = true;
       how = `its own ${r.edits.length} edits, ${secs(leadAt)}`;
     } else if (r.html) {
@@ -909,7 +915,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     const fixReply = await s
       .ask(`<page_as_put_together>\n${html}\n</page_as_put_together>\n\nBefore it's shown: it doesn't run -\n${problems.join('\n')}\nReply with only FIND/REPLACE edits to the page above that fix just that (text only, no tools).`, { priority: true, timeoutSec: 90, stallSec: 45 })
       .catch(() => null);
-    const fixed = fixReply && parseReply(fixReply.text).edits.length ? await applyEditsWithFixer(html, parseReply(fixReply.text).edits, signal, spent).catch(() => null) : null;
+    const fixed = fixReply && parseReply(fixReply.text).edits.length ? await applyEditsWithFixer(html, parseReply(fixReply.text).edits, signal, spent, runner()).catch(() => null) : null;
     if (fixed) {
       const left = [...(await syntaxErrors(fixed.html)), ...blankProblems(fixed.html), ...repairNames(fixed.html).problems, ...missingMethods(fixed.html), ...missingParts(fixed.html)];
       log(`agents: ${left.length ? `still doesn't run (${left[0].slice(0, 120)})` : 'fixed'} at ${secs()}`);
@@ -1107,7 +1113,7 @@ async function wirePass({ s, w, p, page, report, shot, stale, took, before }) {
     log(`AGENTS wire ${took()} ${edits.length ? 'stale' : 'OK'}`);
     return edits.length ? { skipped: 'stale' } : { ok: true };
   }
-  const fitted = await applyEditsWithFixer(page, edits);
+  const fitted = await applyEditsWithFixer(page, edits, null, null, runner());
   const html = await declareMissing(await renameClashes(fitted.html));
   if ((await syntaxErrors(html)).length > (await syntaxErrors(page)).length || stale()) {
     log(`AGENTS wire skip ${took()} ${why} (${stale() ? 'stale' : "it didn't run"})`);
@@ -1182,7 +1188,7 @@ export async function repair({ version, errors, keep, accept = false }) {
       { priority: true, timeoutSec: 120, stallSec: 60, kind: 'repair' },
     );
     const edits = parseReply(reply.text).edits;
-    const fitted = edits.length ? await applyEditsWithFixer(page, edits) : null;
+    const fitted = edits.length ? await applyEditsWithFixer(page, edits, null, null, runner()) : null;
     // (Or it used its tools after all: what its files hold now.)
     const html = fitted && !fitted.failed.length ? fitted.html : assemble(s.dir)?.html;
     if (!html || html === page || (await syntaxErrors(html)).length > (await syntaxErrors(page)).length) {
