@@ -4,6 +4,7 @@
 // text in the reply format described in systemPrompt(). That keeps backends interchangeable:
 // adding one is just "run something that takes a prompt and returns text".
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { config, DATA, ROOT } from './config.mjs';
 import { findBin, run } from './bins.mjs';
@@ -283,6 +284,66 @@ const backends = {
     }
   },
 
+  // Google's Antigravity CLI, signed in with a Google account: Gemini (or any model `agy models`
+  // lists). agy is an agent with tools, so it runs in an empty folder of its own with its strictest
+  // permissions and a sandboxed terminal, and is asked only for text. Its reply streams in.
+  async agy({ system, prompt, onText = () => {}, model, timeoutSec }) {
+    const c = config().agy;
+    const bin = findBin('agy', c.bin);
+    if (!bin) throw new Error('Antigravity CLI (agy) not found (install it and run `agy` once to sign in)');
+    const dir = fs.mkdtempSync(path.join(WORK, 'agy-'));
+    const args = [
+      '-p=', '--input-format', 'stream-json', '--output-format', 'stream-json', '--sandbox',
+      '--settings', JSON.stringify({ toolPermission: 'strict', allowNonWorkspaceAccess: false, enableTerminalSandbox: true }),
+    ];
+    if (model || c.model) args.push('--model', model || c.model);
+    const content = `${system}\n\nDo not use any tools, run any commands or touch any files - just answer in the reply format above.\n\n---\n\n${prompt}`;
+    let buf = '';
+    let streamed = '';
+    let result = null;
+    let id = '';
+    const handle = line => {
+      if (!line.trim()) return;
+      let ev;
+      try {
+        ev = JSON.parse(line);
+      } catch {
+        return;
+      }
+      const step = ev.step_update;
+      if (ev.event === 'init') id = ev.conversation_id || '';
+      else if (step?.step_type === 'agent_response' && step.text_delta) {
+        streamed += step.text_delta;
+        onText(step.text_delta);
+      } else if (ev.event === 'result') result = ev.result;
+    };
+    try {
+      await run(bin, args, {
+        input: JSON.stringify({ event: 'user', message: { role: 'user', content } }) + '\n',
+        cwd: dir,
+        timeoutSec: timeoutSec || config().timeoutSec,
+        onStdout: chunk => {
+          buf += chunk;
+          const lines = buf.split('\n');
+          buf = lines.pop();
+          lines.forEach(handle);
+        },
+      }).catch(err => {
+        handle(buf);
+        throw new Error(result?.error || err.message);
+      });
+      handle(buf);
+      if (!result) throw new Error('agy returned no result');
+      if (result.status !== 'SUCCESS') throw new Error(result.error || `agy ${result.status || 'failed'}`);
+      const text = result.response?.trim() ? result.response : streamed;
+      if (!text.trim()) throw new Error('agy returned an empty reply');
+      return text;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      if (!c.keepHistory) await forgetAgy(id || result?.conversation_id);
+    }
+  },
+
   async command({ system, prompt, onText }) {
     const c = config().command;
     if (!c.cmd) throw new Error('No custom command set (config.json → command.cmd)');
@@ -295,6 +356,27 @@ const backends = {
     });
   },
 };
+
+// agy keeps every run as a conversation (half a megabyte or so each, listed with the grown-up's own
+// in agy and on their phone). Build Buddy's are throwaway, so it removes its own afterwards.
+async function forgetAgy(id) {
+  if (!/^[0-9a-f-]{36}$/i.test(id || '')) return;
+  const home = path.join(os.homedir(), '.gemini', 'antigravity-cli');
+  for (const f of [`conversations/${id}.db`, `conversations/${id}.db-wal`, `conversations/${id}.db-shm`, `brain/${id}`, `presence/${id}.lock`, `annotations/${id}.pbtxt`]) {
+    fs.rmSync(path.join(home, f), { recursive: true, force: true });
+  }
+  try {
+    const { DatabaseSync } = await import('node:sqlite'); // (Node 22.5 and later)
+    const db = new DatabaseSync(path.join(home, 'conversation_summaries.db'));
+    try {
+      db.exec('PRAGMA busy_timeout = 2000');
+      db.prepare('DELETE FROM conversation_summaries WHERE conversation_id = ?').run(id);
+      db.prepare('DELETE FROM conversations_fts WHERE conversation_id = ?').run(id);
+    } finally {
+      db.close();
+    }
+  } catch {} // an older Node, or agy changed how it keeps its list: only the list entry stays
+}
 
 export const backendNames = Object.keys(backends);
 export const runBackend = (name, opts) => backends[name](opts);

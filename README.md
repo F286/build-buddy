@@ -11,7 +11,7 @@ of describing an idea, seeing it, and making it better is the skill Build Buddy 
 things with AI. Whatever they ask for comes out as a little world that works: a simulation they can
 poke and watch, with a spark of joy, and a game only when they ask for one.
 
-It runs on your own computer and uses the **Claude or ChatGPT subscription you already have**. Your
+It runs on your own computer and uses the **Claude or ChatGPT subscription (or Google account, through Antigravity) you already have**. Your
 kid's voice is understood and spoken on the computer itself, so their voice never leaves it.
 
 | Hold space and talk | Sparky builds it |
@@ -147,6 +147,7 @@ You need:
 - **At least one AI "brain"**, signed in once:
   - **Claude:** install [Claude Code](https://claude.com/claude-code), then run `claude` once and sign in with your Claude account.
   - **ChatGPT:** install Codex (`npm install -g @openai/codex`), then run `codex login` with your ChatGPT account.
+  - **Gemini:** install Google's Antigravity CLI (`agy`, from [antigravity.google](https://antigravity.google)), then run `agy` once and sign in with your Google account.
 - To build the speech recognizer: `git`, `cmake` and a C++ compiler (on a Mac, `brew install whisper-cpp` instead).
   Optional: `WHISPER_GPU=1 ./setup.sh` also builds the GPU version (on Linux it needs Vulkan drivers
   and `glslc`) and fetches the larger speech model; see `whisper.gpu` below.
@@ -244,7 +245,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `kidName` | `""` | Sparky greets them by name. |
 | `kidAge` | `5` | Sparky pitches words and games to this age. |
 | `buddyName` | `"Sparky"` | The robot's name. |
-| `backends` | `["claude", "codex"]` | Which AI to use, in order. If the first fails (offline, usage limit), the next takes over. |
+| `backends` | `["claude", "codex"]` | Which AI to use, in order (`claude`, `codex`, `agy`, `command`). If the first fails (offline, usage limit), the next takes over. |
 | `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. |
 | `claude.fast` | `false` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for building: the same model, answering much sooner. On a Claude subscription it's paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. Also in the panel as *Claude speed*. |
 | `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` (or `--team`). Needs `claude` first in `backends`. |
@@ -265,6 +266,8 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
+| `agy.model` | `"gemini-4-argon-low"` | Model for Antigravity (`agy`): any id `agy models` lists (Gemini 4 Argon at low, medium or high effort, Gemini Flash, ...). With `"backends": ["agy", "claude"]` Gemini builds and Claude takes over if it fails; also in the panel as *AI brain* and *Gemini model*. It builds the classic way (team, agent and solo building are Claude's), and the overwatch uses Claude or Codex if one is listed. agy runs in an empty folder of its own with its strictest permissions and a sandboxed terminal, and is only asked for text. |
+| `agy.keepHistory` | `false` | agy keeps every run as a conversation (in its list and on your phone, about half a megabyte each); Build Buddy removes its own afterwards unless this is `true`. |
 | `command.cmd` / `command.args` | | Any program that reads a prompt on stdin and prints a reply, e.g. `"ollama"`, `["run", "qwen3"]`. Use it with `"backends": ["command"]`. |
 | `stt` | `"both"` | Speech-to-text: `both` (whisper and Parakeet together, the AI gets both versions), `whisper`, `parakeet`, or `browser` (Chrome's online speech service; macOS/Windows Chrome only). |
 | `tts` | `"kokoro"` | Voice: `kokoro` (natural), `piper` (faster), `browser` (the system's voices), or `off`. |
@@ -558,7 +561,7 @@ Buddy changes.
   can't be pushed into a state it doesn't understand. In team mode a new version is tried out of
   sight first: if it crashes only with the kid's progress, it's repaired to carry on from there;
   if that doesn't work out, it quietly starts fresh instead.
-- **Your subscription is the brain.** Build Buddy runs the official `claude` or `codex` command-line
+- **Your subscription is the brain.** Build Buddy runs the official `claude`, `codex` or `agy` command-line
   tools in non-interactive mode on your computer, so each request counts against your plan's normal
   usage, just as if you'd typed it yourself. It doesn't extract or reuse login tokens.
 - **Fast feedback.** With Claude, the AI's first sentence is spoken while the rest is still being written.
@@ -651,7 +654,7 @@ but `setup.sh` needs WSL, or use `"stt": "browser", "tts": "browser"` with Chrom
 
 ```
 server/main.mjs      web server, API, full-screen browser launcher
-server/ai.mjs        Sparky's instructions, AI backends (claude / codex / command), reply parsing
+server/ai.mjs        Sparky's instructions, AI backends (claude / codex / agy / command), reply parsing
 server/team.mjs      team mode: a lead and helpers that build a creation together, at the same time
 server/agents.mjs    team mode, the agent way: one lead that remembers the creation, helpers for its parts
 server/kit.mjs       the agent way's kit: canvas or 3D scene, input, sounds and the loop for every part

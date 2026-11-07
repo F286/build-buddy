@@ -18,6 +18,7 @@ export const DEFAULTS = {
   // AI "brains", tried in order. If the first fails (offline, usage limit hit, ...) the next is used.
   //   claude  - Claude Code CLI, signed in with a Claude subscription (or ANTHROPIC_API_KEY)
   //   codex   - OpenAI Codex CLI, signed in with a ChatGPT subscription (or an OpenAI API key)
+  //   agy     - Google's Antigravity CLI, signed in with a Google account (Gemini)
   //   command - any program that reads a prompt on stdin and prints the reply (ollama, llm, gemini, ...)
   backends: ['claude', 'codex'],
   // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
@@ -87,6 +88,10 @@ export const DEFAULTS = {
   // session then switches to the main model for everything else).
   solo: { enabled: false, polish: 3, model: '', firstModel: 'sonnet', effort: '', thinking: { build: 2000, look: 12000 } },
   codex: { bin: '', model: '', reasoning: 'low' },
+  // Antigravity (agy): model is any id `agy models` lists. It builds the classic way (one AI writes
+  // it all - the team, agent and solo ways are Claude's). keepHistory: false removes Build Buddy's
+  // runs from agy's own conversation list afterwards.
+  agy: { bin: '', model: 'gemini-4-argon-low', keepHistory: false },
   command: { cmd: '', args: [] },
 
   // Speech in: both (whisper and Parakeet listen together and the AI gets both versions; whisper

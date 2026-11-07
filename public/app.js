@@ -1467,6 +1467,7 @@ async function openParent() {
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
+  f.agyModel.value = c.agyModel || '';
   f.stt.value = c.stt;
   f.tts.value = c.tts;
   const accent = { a: 'American', b: 'British' };
@@ -1519,6 +1520,7 @@ $('#parentForm').addEventListener('submit', async e => {
     ...(f.building.value !== state.buildingShown && { team: ['team', 'agents'].includes(f.building.value), agents: f.building.value === 'agents', solo: f.building.value === 'solo' }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
+    agyModel: f.agyModel.value,
     stt: f.stt.value,
     tts: f.tts.value,
     voice: f.voice.value,
