@@ -146,7 +146,7 @@ You need:
 - **Google Chrome, Chromium, Edge or Brave**
 - **At least one AI "brain"**, signed in once (Build Buddy uses the first one installed, in this order):
   - **Gemini** (the default, and the best creations in our tests): install Google's Antigravity CLI (`agy`, from [antigravity.google](https://antigravity.google)), then run `agy` once and sign in with your Google account.
-  - **Claude:** install [Claude Code](https://claude.com/claude-code), then run `claude` once and sign in with your Claude account. It takes over if Gemini fails, and leads if `agy` isn't installed - then with its own quicker ways of building (team mode).
+  - **Claude:** install [Claude Code](https://claude.com/claude-code), then run `claude` once and sign in with your Claude account. It takes over if Gemini fails (offline, out of usage, its safety filter, or its team getting stuck), and leads if `agy` isn't installed - then with its own quicker ways of building (team mode).
   - **ChatGPT:** install Codex (`npm install -g @openai/codex`), then run `codex login` with your ChatGPT account.
 - To build the speech recognizer: `git`, `cmake` and a C++ compiler (on a Mac, `brew install whisper-cpp` instead).
   Optional: `WHISPER_GPU=1 ./setup.sh` also builds the GPU version (on Linux it needs Vulkan drivers
@@ -178,13 +178,13 @@ cd build-buddy
 ./start.sh --window         # in a normal window, for grown-ups trying it out
 ./start.sh --no-browser     # just the server; open http://127.0.0.1:4321 yourself
 ./start.sh --window --debug # also lets Chrome DevTools tools attach on port 9222
-./start.sh --classic        # one AI writes each creation by itself (what Gemini does anyway)
+./start.sh --classic        # one AI writes each creation by itself (Gemini too: one Argon writes the page)
 ./start.sh --solo           # Claude first: one Claude that remembers the creation and keeps improving it (see Solo mode)
 ./start.sh --agents         # Claude first: a team led by one Claude that remembers it (see Team mode, the agent way)
 ./start.sh --team           # Claude first: team mode's usual way
 ```
 
-**Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, how Claude builds, voice, names), the
+**Grown-up controls:** press **Ctrl+Shift+P** for settings (time limit, AI brain, how Gemini builds, how Claude builds, voice, names), the
 current creation's frame rate, and the **Quit** button. Press **Enter** to type a request instead of
 talking.
 
@@ -248,7 +248,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `backends` | `["agy", "claude", "codex"]` | Which AI to use, in order (`agy`, `claude`, `codex`, `command`). The first one installed leads: Gemini (`agy`) by default, or Claude if `agy` isn't installed. If it fails (offline, usage limit), the next takes over. Also in the panel as *AI brain*. |
 | `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. |
 | `claude.fast` | `false` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for building: the same model, answering much sooner. On a Claude subscription it's paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. Also in the panel as *Claude speed*. |
-| `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` (or `--team`, which puts Claude first for that run). Used when Claude leads (the first installed brain in `backends`). |
+| `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` (which makes Gemini build the classic way too, for that run) or `--team` (which puts Claude first for that run). Used when Claude leads (the first installed brain in `backends`). |
 | `team.helpers` | `6` | The most helpers working on one creation at a time (1 to 8). |
 | `team.leads` | `3` | How many leads start on each request at once (1 to 3). How long a lead takes before it starts writing varies a lot, so the first one to start a plan is used and the others stop: it saves the slow starts, for a little more of your plan. |
 | `team.lead` / `team.helper` / `team.fixer` / `team.checker` / `team.polisher` / `team.tester` / `team.voice` / `team.sketch` | see [Team mode](#team-mode) | How each member of the team runs Claude Code: `model`, `effort`, `fast`, `advisor` and `args`. |
@@ -266,7 +266,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `solo.thinking` | `{ "build": 2000, "look": 12000 }` | How long it may think (in tokens) while the kid waits, and when it goes back to a creation while they play. |
 | `whisper.model` / `whisper.gpu` | `"small.en"` / `false` | Speech model, and whether it may use the GPU. `{ "model": "large-v3-turbo-q5_0", "gpu": true }` makes about a quarter fewer mistakes with little kids (after `WHISPER_GPU=1 ./setup.sh`), but games stutter for a moment after each request while it uses the GPU. |
 | `codex.model` / `codex.reasoning` | Codex default / `"low"` | Model and reasoning effort for Codex. |
-| `agy.model` | `"gemini-4-argon-low"` | Model for Antigravity (`agy`): any id `agy models` lists (Gemini 4 Argon at low, medium or high effort, Gemini Flash, ...). By default Gemini builds and Claude takes over if it fails (or if Gemini's safety filter stops a request); also in the panel as *AI brain* and *Gemini model*. It builds the team way (`agy.way`): Argon leads and its helpers write the parts at the same time, about 38 s for something new and 25 s for a change in our tests; it's better than Claude Opus's agent way and a little slower (see [Gemini through Antigravity](#gemini-through-antigravity)). While the kid talks, agy's lead, helpers and voice are started and wait (starting one takes about 3 s), and a quick model says Sparky's first line while they build (see `agy.voiceModel`). Medium effort scored the same and wasn't quicker; a `-medium` or `-high` model thinks before it writes (Flash medium wrote nothing for 38 s). agy runs in an empty folder of its own, outside Build Buddy's, with its strictest permissions and a sandboxed terminal, and is only asked for text: it can't run commands or read or write files outside that folder (it could still search the web). |
+| `agy.model` | `"gemini-4-argon-low"` | Model for Antigravity (`agy`): any id `agy models` lists (Gemini 4 Argon at low, medium or high effort, Gemini Flash, ...). By default Gemini builds and Claude takes over if it fails (or if Gemini's safety filter stops a request; with Gemini alone, one Argon writes the page instead); also in the panel as *AI brain* and *Gemini model*. It builds the team way (`agy.way`): Argon leads and its helpers write the parts at the same time, about 38 s for something new and 23 s for a change in our tests (Claude's agent way: 33 s and 14 s); it's better than Claude Opus's agent way and a little slower (see [Gemini through Antigravity](#gemini-through-antigravity)). While the kid talks, agy's lead, helpers and voice are started and wait (starting one takes about 3 s), and a quick model says Sparky's first line while they build (see `agy.voiceModel`). Medium effort scored the same and wasn't quicker; a `-medium` or `-high` model thinks before it writes (Flash medium wrote nothing for 38 s). agy runs in an empty folder of its own, outside Build Buddy's, with its strictest permissions and a sandboxed terminal, and is only asked for text: it can't run commands or read or write files outside that folder (it could still search the web). |
 | `agy.way` / `agy.helperModel` | `"agents"` / `""` | How agy builds: `"agents"`, the team way (an Argon lead that remembers the creation plans it on Build Buddy's kit, helpers write its parts at the same time, a wire pass makes them fit), or `"classic"` (one Argon writes the whole page: the best creations, about 100 s). `helperModel` is the helpers' model (`""` uses `agy.model`); Gemini Flash helpers were as quick as Claude's but made much weaker creations. |
 | `agy.voiceModel` | `"gemini-3.8-flash-low"` | The quick model that says Sparky's first line out loud while agy builds, with team mode's voice instructions: about 2 to 3 s, against 5 to 12 s for the builder's own first line. `""` lets the builder's own first line be said. |
 | `agy.keepHistory` | `false` | agy keeps every run as a conversation (in its list and on your phone, about half a megabyte each). Build Buddy's runs use an agy home of their own (`data/agy-home`, sharing only your sign-in), so they're never listed with yours, and runs over an hour old are cleared out of it. `true` runs them in your own agy home. |
@@ -288,7 +288,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 
 By default (`"backends": ["agy", "claude", "codex"]`, *Gemini (Antigravity), then Claude, then
 ChatGPT* in the Ctrl+Shift+P panel), Gemini 4 Argon builds every creation through Google's
-Antigravity CLI, and Claude takes over if it fails. It builds the team way, like Claude's
+Antigravity CLI, and Claude takes over if it fails (with Gemini alone, one Argon writes the page instead). It builds the team way, like Claude's
 [agent way](#team-mode-the-agent-way): an Argon lead that remembers the creation writes the plan on
 Build Buddy's kit, Argon helpers write its parts at the same time, and a wire pass makes them fit
 once it's on screen. It makes better creations than Claude Opus, and the kid waits a little longer
@@ -298,25 +298,28 @@ for them. Without `agy` installed, Claude leads, with its own ways of building
 Measured blind on the kids' own requests (14 new creations and 8 changes, from what they actually
 said), built fresh by each, put on a stage like the app's and played with, and each pair judged
 twice, both ways round, by Opus judges and by Gemini judges. Argon's team way against Claude's agent
-way (Opus leading, Sonnet helpers), built side by side, both after their wire pass:
+way (Opus leading, Sonnet helpers), built side by side - new creations after Claude's wire pass (Argon's
+wire pass didn't run in these tests: a bug, fixed since):
 
 | Argon's team way against Claude's agent way | Opus judges | Gemini judges | Waiting |
 |---|---|---|---|
 | New creations | won 25 of 28, 6.9 against 5.4 | won 19 of 28, 7.0 against 5.9 | about 38 s against 33 s |
-| The kids' changes | won 11 of 16, 5.9 against 5.1 (none lost clearly) | won 13 of 16, 6.6 against 5.2 | about 25 s against 14 s |
+| The kids' changes | won 11 of 16, 5.9 against 5.1 (none lost clearly) | won 13 of 16, 6.6 against 5.2 | about 23 s against 14 s |
 
 The judges said Argon's were fuller worlds where things work on their own: its bees fly to the
 flowers, bring nectar home and fill the honey, where Opus's circle the hive; its plane flies around a
-spinning globe with airports, fuel and whales. Opus won a big cat (bigger, in the middle, with the
-comic words asked for). A still picture doesn't show most of that:
+spinning globe with airports, fuel and whales. Opus's monster truck won clearly with both judges, and
+the Gemini judges preferred its big cat (bigger, in the middle, with the comic words asked for). A
+still picture doesn't show most of that:
 
 ![Argon (left) and Claude Opus's agent way (right) on six of the kids' own requests](docs/argon-vs-opus.jpg)
 
 Argon is a little slower: its first word comes 3 to 5 s after Opus's, and its changes are bigger,
 so they take longer to write. Sparky still answers out loud after about 2.5 s: agy is started while
 the kid talks, and a quick model (Gemini Flash) says the first line. Flash was also tried for the
-parts and for changes: it matched Opus's speed, but lost to Opus every time (16 of 16 changes; it
-often didn't do what the kid asked), so it only speaks.
+parts and for changes: it matched Opus's speed, but lost - its parts lost to Opus 24 of 28 times
+(Opus judges) and 21 of 26 (Gemini judges), and to all-Argon 26 of 28; its changes lost all 16
+judgments with both judges (it often didn't do what the kid asked) - so it only speaks.
 
 With `"agy": { "way": "classic" }`, one Argon writes the whole page instead: the best creations
 measured (Opus judges preferred them to Argon's team way 19 of 28 times, mostly for being solid,
@@ -674,7 +677,10 @@ Buddy changes.
   Three.js.
 - **What leaves your computer:** the text of each request and the current creation's code, sent to
   Gemini (Google, through Antigravity), Claude or ChatGPT - whichever brain is building. Gemini's agy
-  is only asked for text and can't run commands or touch your files, but it could search the web. The overwatch (and in team mode the checker, in solo mode each pass) also
+  is only asked for text and can't run commands or touch your files, but it could search the web. The
+  overwatch uses Claude or ChatGPT whenever one is installed, even while Gemini builds (it needs to see
+  the screenshot): it gets the creation's code, the kid's last few requests and what they've made
+  progress in. The overwatch (and in team mode the checker, in solo mode each pass) also
   sends a small screenshot of the creation itself, drawn from inside it (never the camera or the rest of the screen). Listening and speaking happen on the computer itself.
 - **What's kept:** creations, conversations and a log live in `data/` on your computer.
   `data/log.txt` shows every request: what was heard, which AI answered, and how long it took.
