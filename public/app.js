@@ -1478,6 +1478,7 @@ async function openParent() {
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
   f.agyModel.value = c.agyModel || '';
+  f.agyWay.value = c.agyWay || 'agents';
   f.stt.value = c.stt;
   f.tts.value = c.tts;
   const accent = { a: 'American', b: 'British' };
@@ -1531,6 +1532,7 @@ $('#parentForm').addEventListener('submit', async e => {
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     ...(f.agyModel.value !== (state.config.agyModel || '') && { agyModel: f.agyModel.value }),
+    ...(f.agyWay.value !== (state.config.agyWay || 'agents') && { agyWay: f.agyWay.value }),
     stt: f.stt.value,
     tts: f.tts.value,
     voice: f.voice.value,

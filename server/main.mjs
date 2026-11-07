@@ -83,6 +83,7 @@ function publicConfig() {
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     agyModel: c.agy.model,
+    agyWay: c.agy.way || 'agents',
     stt: c.stt,
     tts: c.tts,
     voice: c.kokoro.voice,
@@ -276,6 +277,7 @@ const routes = {
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };
+    if (['agents', 'fast', 'classic'].includes(b.agyWay)) patch.agy = { ...patch.agy, way: b.agyWay };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;

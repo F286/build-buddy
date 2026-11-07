@@ -99,7 +99,9 @@ export const DEFAULTS = {
   // use one of their own, data/agy-home, sharing only the sign-in).
   // way: "agents" (the default) builds the agent way on agy - an Argon lead that remembers the
   // creation plans it, and Argon helpers (helperModel, "" for agy.model) write its parts at the same
-  // time, about as quick as Claude's; "classic" has one Argon write the whole page (about 100 s).
+  // time (about 38 s for something new, 25 s for a change: a little slower than Claude's, better
+  // creations); "fast" is the same as quick as Claude's, with smaller parts and smaller changes;
+  // "classic" has one Argon write the whole page (the best creations, about 100 s).
   agy: { bin: '', model: 'gemini-4-argon-low', way: 'agents', helperModel: '', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },
   command: { cmd: '', args: [] },
 

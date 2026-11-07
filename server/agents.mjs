@@ -35,6 +35,9 @@ export function enabled() {
   return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && brain === 'claude';
 }
 const onAgy = () => leadBrain() === 'agy';
+// agy.way "fast": the team way on agy as quick as Claude's - smaller parts and smaller changes (Argon
+// writes its parts two or three times bigger than asked, and changes more than the kid asked for).
+const agyFast = () => onAgy() && config().agy?.way === 'fast';
 // (What its versions are called: 'claude agents' or 'agy agents'.)
 const brainName = () => (onAgy() ? 'agy' : 'claude');
 
@@ -107,6 +110,8 @@ ${buildingRules()}`;
 // While the kid waits, every piece of the plan is small: the kid sees it sooner, and it's grown
 // while they play.
 const QUICK_SIZE = { shared: 10, jobWords: 20, main: '15-25', partLines: 18, partChars: 1400, maxChars: 2000 };
+const FAST_SIZE = { shared: 8, jobWords: 16, main: '15-25', partLines: 12, partChars: 900, maxChars: 1400 };
+const quickSize = () => (agyFast() ? FAST_SIZE : QUICK_SIZE);
 // How many helpers write at once while the kid waits (more, smaller parts: the kid waits for the
 // slowest), and how many are kept started and waiting: three more, for the first job's twin and
 // second tries on slow jobs.
@@ -121,11 +126,11 @@ const keepHelpersWarm = () => (onAgy() ? keepAgyWarm({ [lead().helperModel]: QUI
 
 // How it hands out the work while the kid waits: the plan for something new (on the kit, so it only
 // writes what's this creation's own), edits or new parts for a change.
-function quickPlanRules(n = QUICK_HELPERS) {
-  const z = QUICK_SIZE;
+function quickPlanRules(n = QUICK_HELPERS, fast = agyFast()) {
+  const z = fast ? FAST_SIZE : QUICK_SIZE;
   return `You have up to ${n} helpers who write code at the same time as each other. Hand out the work rather than writing it all yourself - and keep your own writing short: helpers start only once their line is written.
 
-For a change to the current page that is one thing - a color, a size, a speed, a rule - write the edits yourself, each as:
+${fast ? 'Keep every change quick: edit only the lines their words need, as few and as short as can be - nothing they didn\'t ask for (the kid is waiting, and you make it better while they play).\n\n' : ''}For a change to the current page that is one thing - a color, a size, a speed, a rule - write the edits yourself, each as:
 ${EDIT_FORMAT}
 
 For a change that adds new things (a new character, a new place, a new toy - "add a bear who wants the honey and a rainbow"), helpers write each new thing as a new part, at the same time, while you wire them in:
@@ -684,7 +689,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     chars += n;
     emit({ type: 'progress', chars, helpers: crew.jobs.length + team.helpers.size, helpersDone: crew.done + team.done, team: true, leads: 1 });
   };
-  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: QUICK_SIZE, hedgeMs: onAgy() ? 9000 : 5000, runner: onAgy() ? agyHelper : null, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
+  const crew = helperCrew({ page, text: text || '(fixing a crash)', alt, look, signal, tally: spent, progress, size: quickSize(), hedgeMs: agyFast() ? 7000 : onAgy() ? 9000 : 5000, runner: onAgy() ? agyHelper : null, max: QUICK_HELPERS, maxHedges: 2, twinFirst: true, kit: true });
   // A plan on the kit: its helpers are told what the kit gives them, along with the shared code.
   let own = null;
   const kind = () => (/^[ \t>*_#]*PLAN[*_]*:[ \t]*3d/im.test(reader.text) ? '3d' : '2d');
