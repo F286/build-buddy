@@ -429,10 +429,11 @@ export function warmAgy() {
   const c = config();
   if (leadBrain() !== 'agy') return { warm: 0 };
   // (The builder, and the voice if there is one.)
-  return keepAgyWarm({ [c.agy.model || '']: 1, ...(c.agy.voiceModel ? { [c.agy.voiceModel]: (c.agy.voiceModel === (c.agy.model || '') ? 2 : 1) } : {}) });
+  return { warm: keepAgyWarm({ [c.agy.model || '']: 1, ...(c.agy.voiceModel ? { [c.agy.voiceModel]: (c.agy.voiceModel === (c.agy.model || '') ? 2 : 1) } : {}) }) };
 }
 
-// Have this many agy programs of each model started and waiting (each for a few minutes).
+// Have this many agy programs of each model started and waiting (each for a few minutes). Returns
+// how many were started.
 export function keepAgyWarm(need, ms = AGY_WARM_MS) {
   agyPool = agyPool.filter(w => !w.proc.closed);
   let started = 0;
@@ -442,7 +443,7 @@ export function keepAgyWarm(need, ms = AGY_WARM_MS) {
       try {
         proc = startAgy(model);
       } catch {
-        return { warm: started };
+        return started;
       }
       const w = { model, proc };
       w.timer = setTimeout(() => {
@@ -453,7 +454,7 @@ export function keepAgyWarm(need, ms = AGY_WARM_MS) {
       started++;
     }
   }
-  return { warm: started };
+  return started;
 }
 
 // One message to agy; resolves with its reply once its turn is over (the program then exits on its
