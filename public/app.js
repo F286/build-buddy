@@ -1472,8 +1472,9 @@ async function openParent() {
   const c = (state.config = await api('/api/config'));
   const f = $('#parentForm');
   const brains = c.backends.join(',');
-  // (A combination set in config.json that the list doesn't have is kept, not reset on save.)
-  if (![...f.brains.options].some(o => o.value === brains)) f.brains.append(new Option(`${c.backends.join(', then ')} (from config.json)`, brains));
+  // (A combination the list doesn't have - set in config.json, or for this run by --agents,
+  // --team, --solo or KIDBUILD_BACKENDS - is kept, not reset on save.)
+  if (![...f.brains.options].some(o => o.value === brains)) f.brains.append(new Option(`${c.backends.join(', then ')} (in use now: from config.json, or for this run only)`, brains));
   f.brains.value = brains;
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
