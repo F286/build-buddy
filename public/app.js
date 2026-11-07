@@ -651,7 +651,7 @@ function heard(text, alt = '') {
 // A stronger, slower model checks on the creation once the kid has played with it for a while,
 // then every few minutes while they keep playing it (or straight away if quick fixes didn't
 // help), and quietly fixes it if it's broken or stuck. See server/watch.mjs.
-const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '' };
+const overwatch = { running: false, lastCheck: new Map(), urgentDone: new Set(), note: '', noteFor: null };
 
 async function checkCreation({ urgent = false } = {}) {
   const cfg = state.config.watch;
@@ -687,6 +687,7 @@ async function checkCreation({ urgent = false } = {}) {
     });
     overwatch.note = r.fixed ? `${r.verdict === 'polish' ? 'polished' : 'fixed'}: ${r.why}` : r.verdict ? `all good (${r.why})` : `skipped (${r.skipped})`;
     overwatch.note += `, ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    overwatch.noteFor = projectId; // (a new page or another creation has no note yet)
     if (r.fixed) await applyFix(projectId, version, r);
   } catch (err) {
     console.warn('overwatch check failed', err);
@@ -936,6 +937,9 @@ async function timeIsUp() {
   state.resumeKeep = fresh?.keep ?? (state.kept?.projectId === state.project?.id ? state.kept.keep : null);
   expectLoad = true;
   frame.srcdoc = '';
+  // (The emptied stage would keep the keys: Ctrl+Shift+P and the space bar come back to the app.)
+  frame.blur();
+  window.focus();
   $('#timeUp').hidden = false;
   document.body.classList.add('time-is-up');
   sfx.timeUp();
@@ -1468,8 +1472,9 @@ async function openParent() {
   const c = (state.config = await api('/api/config'));
   const f = $('#parentForm');
   const brains = c.backends.join(',');
-  // (A combination set in config.json that the list doesn't have is kept, not reset on save.)
-  if (![...f.brains.options].some(o => o.value === brains)) f.brains.append(new Option(`${c.backends.join(', then ')} (from config.json)`, brains));
+  // (A combination the list doesn't have - set in config.json, or for this run by --agents,
+  // --team, --solo or KIDBUILD_BACKENDS - is kept, not reset on save.)
+  if (![...f.brains.options].some(o => o.value === brains)) f.brains.append(new Option(`${c.backends.join(', then ')} (in use now: from config.json, or for this run only)`, brains));
   f.brains.value = brains;
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
@@ -1507,6 +1512,27 @@ async function openParent() {
   if (state.html) tellPage({ type: 'fps?' }); // the answer fills in the frame rate
 }
 
+// Who builds each creation, and who takes over if it fails: the first brain in the list that's
+// installed, then the next one installed. (Brains before the one that leads aren't installed; if
+// the server doesn't say which are, the ones after it are taken to be.)
+function brainsSaid(c) {
+  const name = b => ({ agy: 'Gemini (Antigravity)', claude: 'Claude', codex: 'ChatGPT', command: 'your command' })[b] || b;
+  const at = c.backends.indexOf(c.lead);
+  const has = b => c.installed?.[b] ?? (at >= 0 && c.backends.indexOf(b) >= at);
+  const missing = has(c.lead) ? c.backends.slice(0, at).filter(b => !has(b)) : c.backends;
+  const next = c.backends.slice(at + 1).find(has);
+  const builds = `${name(c.lead)} builds each creation${next ? `; ${name(next)} takes over if it fails` : ''}. `;
+  const way = (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '';
+  if (!missing.length) return c.lead === 'agy' ? builds : way;
+  // (setup.sh says how to install each brain; a custom command is set in config.json.)
+  const absent = missing.filter(b => b !== 'command');
+  const said = [
+    absent.length && `${absent.length > 1 ? `${absent.slice(0, -1).map(name).join(', ')} and ${name(absent.at(-1))} aren't` : `${name(absent[0])} isn't`} installed (run setup.sh)`,
+    missing.includes('command') && "your command isn't set (command.cmd in config.json)",
+  ].filter(Boolean);
+  return `${said.join(' and ')}, so ${has(c.lead) ? builds + (c.lead === 'agy' ? '' : way) : 'nothing can build. '}`;
+}
+
 function showParentStatus() {
   const c = state.config;
   const s = c.speech || {};
@@ -1514,10 +1540,10 @@ function showParentStatus() {
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
-    (c.lead === 'agy' ? `Gemini (Antigravity) builds each creation${c.backends.slice(c.backends.indexOf('agy') + 1).length ? `; ${{ claude: 'Claude', codex: 'ChatGPT', command: 'your command' }[c.backends[c.backends.indexOf('agy') + 1]] || 'the next brain'} takes over if it fails` : ''}. ` : (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '') +
+    brainsSaid(c) +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
-    (overwatch.note ? ` Overwatch: ${overwatch.note}.` : '') +
+    (overwatch.note && overwatch.noteFor === state.project?.id ? ` Overwatch: ${overwatch.note}.` : '') +
     (timeLeft() == null ? '' : timeLeft() > 0 ? ` Time left: ${clock(timeLeft())}.` : " Time's up.");
 }
 
@@ -1525,7 +1551,8 @@ $('#parentForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
   const c = await api('/api/config', {
-    backends: f.brains.value.split(','),
+    // (A brain order for one run - --agents, --team, --solo, KIDBUILD_BACKENDS - isn't saved unless changed here.)
+    ...(f.brains.value !== state.config.backends.join(',') && { backends: f.brains.value.split(',') }),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
     ...(f.building.value !== state.buildingShown && { team: ['team', 'agents'].includes(f.building.value), agents: f.building.value === 'agents', solo: f.building.value === 'solo' }),
