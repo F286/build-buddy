@@ -550,9 +550,7 @@ export function agyVoice({ history, text, alt, title }, sayNow) {
 // Claude helper gets, as one message.
 export function agyHelper({ system, prompt, onText, signal }) {
   const c = config().agy;
-  // (In agy.way "fast", the size the job gives is a hard limit: the kid waits for the slowest part.)
-  const fast = c.way === 'fast' ? '\n\nStay within the size your job gives - a hard limit: the kid is waiting for the slowest part.' : '';
-  const content = `${system}\n\nDo not use any tools, run any commands or touch any files - just answer with your code.${fast}\n\n---\n\n${prompt}`;
+  const content = `${system}\n\nDo not use any tools, run any commands or touch any files - just answer with your code.\n\n---\n\n${prompt}`;
   return askAgy(c.helperModel || c.model || '', content, { onText, signal, timeoutSec: 150 }).then(text => ({ text }));
 }
 
