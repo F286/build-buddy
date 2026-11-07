@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { config, DATA, ROOT } from './config.mjs';
 import { findBin, run } from './bins.mjs';
@@ -287,62 +288,11 @@ const backends = {
 
   // Google's Antigravity CLI, signed in with a Google account: Gemini (or any model `agy models`
   // lists). agy is an agent with tools, so it runs in an empty folder of its own with its strictest
-  // permissions and a sandboxed terminal, and is asked only for text. Its reply streams in.
+  // permissions and a sandboxed terminal, and is asked only for text. Its reply streams in. (One
+  // started while the kid talks is used if there is one - see warmAgy.)
   async agy({ system, prompt, onText = () => {}, model, timeoutSec }) {
-    const c = config().agy;
-    const bin = findBin('agy', c.bin);
-    if (!bin) throw new Error('Antigravity CLI (agy) not found (install it and run `agy` once to sign in)');
-    const dir = fs.mkdtempSync(path.join(WORK, 'agy-'));
-    const args = [
-      '-p=', '--input-format', 'stream-json', '--output-format', 'stream-json', '--sandbox',
-      '--settings', JSON.stringify({ toolPermission: 'strict', allowNonWorkspaceAccess: false, enableTerminalSandbox: true }),
-    ];
-    if (model || c.model) args.push('--model', model || c.model);
     const content = `${system}\n\nDo not use any tools, run any commands or touch any files - just answer in the reply format above.\n\n---\n\n${prompt}`;
-    let buf = '';
-    let streamed = '';
-    let result = null;
-    let id = '';
-    const handle = line => {
-      if (!line.trim()) return;
-      let ev;
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        return;
-      }
-      const step = ev.step_update;
-      if (ev.event === 'init') id = ev.conversation_id || '';
-      else if (step?.step_type === 'agent_response' && step.text_delta) {
-        streamed += step.text_delta;
-        onText(step.text_delta);
-      } else if (ev.event === 'result') result = ev.result;
-    };
-    try {
-      await run(bin, args, {
-        input: JSON.stringify({ event: 'user', message: { role: 'user', content } }) + '\n',
-        cwd: dir,
-        timeoutSec: timeoutSec || config().timeoutSec,
-        onStdout: chunk => {
-          buf += chunk;
-          const lines = buf.split('\n');
-          buf = lines.pop();
-          lines.forEach(handle);
-        },
-      }).catch(err => {
-        handle(buf);
-        throw new Error(result?.error || err.message);
-      });
-      handle(buf);
-      if (!result) throw new Error('agy returned no result');
-      if (result.status !== 'SUCCESS') throw new Error(result.error || `agy ${result.status || 'failed'}`);
-      const text = result.response?.trim() ? result.response : streamed;
-      if (!text.trim()) throw new Error('agy returned an empty reply');
-      return text;
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-      if (!c.keepHistory) await forgetAgy(id || result?.conversation_id);
-    }
+    return askAgy(model || config().agy.model, content, { onText, timeoutSec: timeoutSec || config().timeoutSec });
   },
 
   async command({ system, prompt, onText }) {
@@ -357,6 +307,168 @@ const backends = {
     });
   },
 };
+
+// ---------------------------------------------------------------------------------------------
+// Antigravity (agy): each run is one agy program in an empty folder of its own, reading one message
+// as stream-json. Starting one takes about 3 s, so while the kid talks (POST /api/warm) the builder
+// and the voice are started and wait for their message; they're closed after a few minutes unused.
+
+const AGY_SETTINGS = JSON.stringify({ toolPermission: 'strict', allowNonWorkspaceAccess: false, enableTerminalSandbox: true });
+const agyArgs = model => ['-p=', '--input-format', 'stream-json', '--output-format', 'stream-json', '--sandbox', '--settings', AGY_SETTINGS, ...(model ? ['--model', model] : [])];
+const AGY_WARM_MS = 3 * 60000;
+let agyPool = []; // { model, proc, timer }
+
+function startAgy(model) {
+  const bin = findBin('agy', config().agy.bin);
+  if (!bin) throw new Error('Antigravity CLI (agy) not found (install it and run `agy` once to sign in)');
+  const dir = fs.mkdtempSync(path.join(WORK, 'agy-'));
+  const child = spawn(bin, agyArgs(model), { cwd: dir, stdio: ['pipe', 'pipe', 'pipe'], shell: process.platform === 'win32' && /\.cmd$/i.test(bin) });
+  // (Output that comes before anyone listens - while it waits - is kept for them.)
+  const proc = { child, dir, early: [], onData: null, onClose: null, closed: null, err: '' };
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', d => (proc.onData ? proc.onData(d) : proc.early.push(d)));
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', d => (proc.err = (proc.err + d).slice(-2000)));
+  const closed = info => {
+    if (proc.closed) return;
+    proc.closed = info;
+    // (Its folder goes with it: a run whose folder is gone is over, so forgetAgy may remove it.)
+    fs.rmSync(dir, { recursive: true, force: true });
+    proc.onClose?.();
+  };
+  child.on('error', error => closed({ code: -1, error }));
+  child.on('close', code => closed({ code }));
+  child.stdin.on('error', () => {}); // it may exit before reading
+  return proc;
+}
+
+function takeAgy(model) {
+  const i = agyPool.findIndex(w => w.model === model && !w.proc.closed);
+  if (i < 0) return null;
+  const [w] = agyPool.splice(i, 1);
+  clearTimeout(w.timer);
+  return w.proc;
+}
+
+// The kid started talking: with agy as the first brain (and so building the classic way), have its
+// builder and its voice started and waiting. Returns how many were started.
+export function warmAgy() {
+  const c = config();
+  if (c.backends[0] !== 'agy' || !findBin('agy', c.agy.bin)) return { warm: 0 };
+  agyPool = agyPool.filter(w => !w.proc.closed);
+  // (The builder, and the voice if there is one: how many of each model.)
+  const need = {};
+  for (const m of [c.agy.model || '', ...(c.agy.voiceModel ? [c.agy.voiceModel] : [])]) need[m] = (need[m] || 0) + 1;
+  let started = 0;
+  for (const [model, count] of Object.entries(need)) {
+    for (let n = agyPool.filter(w => w.model === model).length; n < count; n++) {
+      let proc;
+      try {
+        proc = startAgy(model);
+      } catch {
+        return { warm: started };
+      }
+      const w = { model, proc };
+      w.timer = setTimeout(() => {
+        agyPool = agyPool.filter(x => x !== w);
+        proc.child.kill();
+      }, AGY_WARM_MS);
+      agyPool.push(w);
+      started++;
+    }
+  }
+  return { warm: started };
+}
+
+// One message to agy; resolves with its reply once its turn is over (the program then exits on its
+// own, and is removed from agy's conversation list unless agy.keepHistory).
+function askAgy(model, content, { onText = () => {}, timeoutSec = 120 } = {}) {
+  return new Promise((resolve, reject) => {
+    let proc;
+    try {
+      proc = takeAgy(model || '') || startAgy(model || '');
+    } catch (err) {
+      return reject(err);
+    }
+    let buf = '';
+    let streamed = '';
+    let result = null;
+    let id = '';
+    let finished = false;
+    const forget = () => {
+      if (!config().agy.keepHistory) forgetAgy(id || result?.conversation_id).catch(() => {});
+    };
+    const finish = err => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      if (err) proc.child.kill('SIGKILL');
+      // (Once it has exited and its folder is gone, it's taken out of agy's list.)
+      if (proc.closed) forget();
+      else proc.onClose = forget;
+      if (err) return reject(err);
+      if (!result) return reject(new Error(`agy returned no result${proc.closed?.code ? ` (exit ${proc.closed.code}: ${proc.err.trim().slice(-300)})` : ''}`));
+      if (result.status !== 'SUCCESS') return reject(new Error(result.error || `agy ${result.status || 'failed'}`));
+      const text = result.response?.trim() ? result.response : streamed;
+      if (!text.trim()) return reject(new Error('agy returned an empty reply'));
+      resolve(text);
+    };
+    const handle = line => {
+      if (!line.trim()) return;
+      let ev;
+      try {
+        ev = JSON.parse(line);
+      } catch {
+        return;
+      }
+      const step = ev.step_update;
+      if (ev.event === 'init') id = ev.conversation_id || id;
+      else if (step?.step_type === 'agent_response' && step.text_delta) {
+        streamed += step.text_delta;
+        onText(step.text_delta);
+      } else if (ev.event === 'result') {
+        result = ev.result || {};
+        finish();
+      }
+    };
+    const onData = chunk => {
+      buf += chunk;
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      lines.forEach(handle);
+    };
+    const timer = setTimeout(() => finish(new Error(`agy took longer than ${timeoutSec}s`)), timeoutSec * 1000);
+    proc.onData = onData;
+    proc.early.splice(0).forEach(onData);
+    proc.onClose = () => {
+      handle(buf);
+      finish();
+    };
+    if (proc.closed) return proc.onClose();
+    proc.child.stdin.end(`${JSON.stringify({ event: 'user', message: { role: 'user', content } })}\n`);
+  });
+}
+
+// While agy builds the classic way, a quick model (agy.voiceModel, Gemini Flash: about 2 s to its
+// first word, where the builder takes 5 to 10) says the first line out loud, as team mode's voice
+// does - with the same instructions. sayNow(line) gets it the moment it's written.
+export function agyVoice({ history, text, alt, title }, sayNow) {
+  const voiceModel = config().agy.voiceModel;
+  if (!voiceModel) return Promise.resolve();
+  let said = '';
+  const content = `${team.voiceSystem()}\n\nDo not use any tools, run any commands or touch any files - just answer with the one line.\n\n---\n\n${team.voicePrompt({ history, text, alt, title })}`;
+  return askAgy(voiceModel, content, {
+    timeoutSec: 60,
+    onText: chunk => {
+      said += chunk;
+      const m = said.match(/^[ \t>*_]*SAY:[*_]*\s*(.+)\n/m);
+      if (m) sayNow(m[1].replace(/[*_]+$/, '').trim());
+    },
+  }).then(reply => {
+    const line = field(reply, 'SAY');
+    if (line) sayNow(line);
+  });
+}
 
 // agy keeps every run as a conversation (half a megabyte or so each, listed with the grown-up's own
 // in agy and on their phone). Build Buddy's are throwaway, so it removes its own afterwards - and
@@ -578,7 +690,25 @@ export async function build({ text, alt, fix }, emit) {
         emit({ type: 'progress', chars: 0, note: 'the team got stuck, building the classic way' });
       }
     }
-    r ||= await classic({ page, history, text, alt, fix }, emit, state);
+    if (!r) {
+      // With agy first, a quick voice answers out loud while agy builds (whichever line comes first
+      // is said: the builder's own SAY isn't said twice).
+      let over = false;
+      const voiced = !fix && config().backends[0] === 'agy';
+      if (voiced) {
+        agyVoice({ history, text, alt, title: titleBefore }, line => {
+          if (over || state.said) return;
+          state.said = line;
+          emit({ type: 'say', text: line });
+        }).catch(err => log(`agy voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
+      }
+      try {
+        r = await classic({ page, history, text, alt, fix }, emit, state);
+      } finally {
+        over = true;
+      }
+      if (voiced && state.said) r = { ...r, say: state.said };
+    }
     const newHtml = r.html;
 
     // Changes to the same creation carry the kid's progress over (KB.keep). Edits always do; a
