@@ -641,7 +641,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
   const p = store.currentProject();
   const w = workFor(p.id);
-  const s = sessionFor(p.id, { renew: true });
+  let s = sessionFor(p.id, { renew: true });
   makeWay(s);
   await settled(w);
   // (Normally they're warm already: the app warms the team up while the kid talks.)
@@ -649,6 +649,9 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   await s.use(page ? lead().model : lead().firstModel || lead().model);
   await s.think(lead().thinking.build);
   makeWay(s); // (one that started meanwhile)
+  // (agy can't stop a turn halfway: making way for the kid ended its conversation, so a new one takes
+  // over - it's handed the page as it is.)
+  if (!s.alive) s = sessionFor(p.id, { renew: true });
 
   const stopAll = new AbortController();
   const signal = stopAll.signal;
