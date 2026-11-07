@@ -544,9 +544,13 @@ function missingMethods(html) {
     const name = pieces[i];
     const own = pieces[i + 1];
     if (!new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*\\{`).test(own)) continue; // (an object of its own)
-    // (Not in a part that has a name of its own like it - a local const sky = ctx.createLinearGradient(...).)
-    const local = new RegExp(`\\b(?:const|let|var)\\s+${name}\\b|[(,]\\s*${name}\\s*[,)=]`);
-    const code = uncomment(pieces.filter((p, k) => k % 2 === 0 && (k === i + 1 || !local.test(p))).join('\n'));
+    // (Not in a part that has a name of its own like it - a local const sky = ctx.createLinearGradient(...),
+    // or a parameter: (fish) => ..., update(dt, fish) { - but passing the part along, emit('ate', fish),
+    // is no name of its own.)
+    const word = new RegExp(`(?<![\\w$.])${name}(?![\\w$])`);
+    const params = p => [...p.matchAll(/(?<!\b(?:if|for|while|switch|with)\s*)\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*(?:=>|\{)/g)].some(m => word.test(m[1].replace(/=[^,]*/g, '')));
+    const local = p => new RegExp(`\\b(?:const|let|var)\\s+${name}\\b|(?<![\\w$.])${name}\\s*=>`).test(p) || params(p);
+    const code = uncomment(pieces.filter((p, k) => k % 2 === 0 && (k === i + 1 || !local(p))).join('\n'));
     const called = new Set([...code.matchAll(new RegExp(`(?<![\\w$.])${name}\\.([A-Za-z_$][\\w$]*)\\s*\\(`, 'g'))].map(m => m[1]));
     for (const m of called) if (!new RegExp(`(?:^|[\\s,{;])(?:async\\s+)?${m.replace(/\$/g, '\\$')}\\s*(?:\\(|:)|\\.${m.replace(/\$/g, '\\$')}\\s*=(?!=)|\\[\\s*['"]${m}['"]\\s*\\]\\s*=(?!=)`, 'm').test(own)) missing.push(`${name}.${m}()`);
   }
