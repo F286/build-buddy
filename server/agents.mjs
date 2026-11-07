@@ -337,6 +337,21 @@ function sync(s, page) {
 
 const MAX_TURNS = 24;
 let session = null;
+// On agy, the kid's request ends a pass at work (agy can't stop a turn halfway), and with it the lead's
+// conversation: while they talk, a new one is started and waits, so their request doesn't wait for agy
+// to start. (Stopped if it isn't needed after all.)
+let spare = null;
+function spareFor(s) {
+  if (!onAgy() || !['polish', 'repair'].includes(s.current?.kind) || (spare?.alive && spare.projectId === s.projectId && spare.key === s.key)) return 0;
+  spare?.end();
+  const mine = (spare = new AgySession(s.projectId, { system: leadSystem(), model: lead().model, label: 'agents' }));
+  setTimeout(() => spare === mine && dropSpare(), 3 * 60000);
+  return 1;
+}
+function dropSpare() {
+  spare?.end();
+  spare = null;
+}
 
 function sessionArgs() {
   const r = lead();
@@ -356,9 +371,12 @@ function sessionFor(projectId, { renew = false } = {}) {
   s?.end();
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
+  // (On agy, the one started while the kid talked, if it's for this creation.)
+  const ready = spare?.alive && spare.projectId === projectId && spare.key === key ? spare : null;
+  if (ready) spare = null;
   // (Helpers always work in the foreground: the lead's turn ends only once they're done.)
   session = onAgy()
-    ? new AgySession(projectId, { system: leadSystem(), model: lead().model, label: 'agents' })
+    ? ready || new AgySession(projectId, { system: leadSystem(), model: lead().model, label: 'agents' })
     : new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
@@ -385,10 +403,13 @@ async function settled(w) {
 
 // Its own changes were taken out of the files (a pass stopped or that didn't run, a repair that
 // didn't fix it): it's told, and it reads the files again before changing them.
+// (On agy there are no files - it's shown the page again - and a conversation that ended, stopped for
+// the kid, has nothing to be told: a new one takes over.)
 function undone(s, w, why) {
   s.files = null;
   s.shown = null;
-  w.note = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
+  if (!onAgy()) w.note = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
+  else if (s.alive) w.note = `Your last changes weren't used (${why}).`;
 }
 
 // What the kid says comes first: a pass at work stops, and any waiting are dropped.
@@ -406,7 +427,7 @@ export function warm() {
   try {
     const s = sessionFor(store.currentProject().id, { renew: true });
     // (Its helpers too: while the kid waits, they start on each job the moment it's written.)
-    return { warm: (s === before ? 0 : 1) + (config().team?.warm === false ? 0 : (onAgy() ? 0 : warmVoice()) + keepHelpersWarm()) };
+    return { warm: (s === before ? 0 : 1) + spareFor(s) + (config().team?.warm === false ? 0 : (onAgy() ? 0 : warmVoice()) + keepHelpersWarm()) };
   } catch {
     return { warm: 0 };
   }
@@ -415,6 +436,7 @@ export function warm() {
 export function stop() {
   session?.end();
   session = null;
+  dropSpare();
 }
 
 // Was this version made by the agent way (itself, or an overwatch fix on top of one of its versions)?
@@ -655,6 +677,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   // (agy can't stop a turn halfway: making way for the kid ended its conversation, so a new one takes
   // over - it's handed the page as it is.)
   if (!s.alive) s = sessionFor(p.id, { renew: true });
+  dropSpare(); // (not needed after all: the pass had finished)
 
   const stopAll = new AbortController();
   const signal = stopAll.signal;
