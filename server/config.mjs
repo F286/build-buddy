@@ -103,7 +103,9 @@ export const DEFAULTS = {
   // creation plans it, and Argon helpers (helperModel, "" for agy.model) write its parts at the same
   // time (about 38 s for something new and 23 s for a change, where Claude's agent way took 33 s and
   // 14 s, measured side by side: a little slower than Claude's, better
-  // creations); "fast" is the same as quick as Claude's, with smaller parts and smaller changes;
+  // creations); "fast" is the team way with quicker changes - only the lines the kid's words need,
+  // about 22 s instead of 24.5 s, a little less done per change (no all-Argon way is as quick as
+  // Claude's: Argon's first word takes at least 4 s, Opus's about 1);
   // "classic" has one Argon write the whole page (the best creations, about 100 s; `./start.sh
   // --classic` builds that way for one run).
   agy: { bin: '', model: 'gemini-4-argon-low', way: 'agents', helperModel: '', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },

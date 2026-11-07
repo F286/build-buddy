@@ -972,7 +972,7 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
     // One more try if a helper fails.
     const part = write()
       .catch(err => {
-        if (signal.aborted) throw err;
+        if (signal.aborted || isQuitting()) throw err;
         log(`team helper ${job.name} failed (${err.message.replace(/\s+/g, ' ').slice(0, 120)}), trying again`);
         return write();
       })

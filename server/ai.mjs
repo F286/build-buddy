@@ -796,11 +796,12 @@ export function log(line) {
 // Try each configured backend in order until one answers. While text streams in, report
 // progress and announce the SAY line as soon as it is complete, so the kid hears a reply
 // within a couple of seconds even when the page takes much longer to build.
-async function ask(prompt, emit, state) {
+async function ask(prompt, emit, state, skip = null) {
   const system = systemPrompt();
   let lastErr;
   for (const name of config().backends) {
     const backend = backends[name];
+    if (name === skip) continue;
     // (A brain that isn't installed is passed over quietly: Gemini comes first by default.)
     if (!backend || !installed(name)) continue;
     let text = '';
@@ -832,15 +833,16 @@ async function ask(prompt, emit, state) {
       if (isQuitting()) throw err; // (no other brain is started while Build Buddy quits)
       lastErr = err;
       log(`FAIL ${name} ${((Date.now() - started) / 1000).toFixed(1)}s ${err.message.replace(/\s+/g, ' ').slice(0, 300)}`);
-      if (config().backends.slice(config().backends.indexOf(name) + 1).some(installed)) emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
+      if (config().backends.slice(config().backends.indexOf(name) + 1).some(n => n !== skip && installed(n))) emit({ type: 'progress', chars: 0, note: `${name} failed, trying the next brain` });
     }
   }
   throw lastErr || new Error('No AI backends configured');
 }
 
 // The classic way: one AI writes the whole reply (with a full-page retry if its edits don't fit).
-async function classic({ page, history, text, alt, fix }, emit, state) {
-  let reply = await ask(userPrompt({ page, history, text, alt, fix }), emit, state);
+// (skip: a brain passed over - Gemini, when its team just failed and another brain can take over.)
+async function classic({ page, history, text, alt, fix }, emit, state, skip = null) {
+  let reply = await ask(userPrompt({ page, history, text, alt, fix }), emit, state, skip);
   let r = parseReply(reply.text);
   let newHtml = r.html;
   let edited = false;
@@ -851,7 +853,7 @@ async function classic({ page, history, text, alt, fix }, emit, state) {
       edited = true;
     } catch (err) {
       log(`edit failed (${err.message}), asking for the full page`);
-      reply = await ask(userPrompt({ page, history, text, alt, fix, fullOnly: true }), emit, state);
+      reply = await ask(userPrompt({ page, history, text, alt, fix, fullOnly: true }), emit, state, skip);
       const again = parseReply(reply.text);
       newHtml = again.html;
       r = { ...again, say: r.say || again.say, done: again.done || r.done, title: r.title || again.title, emoji: r.emoji || again.emoji };
@@ -874,6 +876,9 @@ export async function build({ text, alt, fix, last = false }, emit) {
     // Team mode (team.mjs): a lead and helpers build it together. If the team can't, the
     // classic way still answers.
     let r = null;
+    // When Gemini's team fails, the next installed brain takes over (one Argon writing the whole page
+    // takes about 100 s, after the kid has already waited) - or, with Gemini alone, one Argon does.
+    let skip = null;
     // (Gemini leading builds its own way, agy.way - Claude's team and solo settings aren't for it: worth
     // a line only for another brain.)
     if (leadBrain() !== 'agy' && ((!team.enabled() && config().team?.enabled) || (!solo.enabled() && config().solo?.enabled))) log(`${config().solo?.enabled ? 'solo' : 'team'} mode is on, but Claude is not the first brain: building the classic way`);
@@ -893,15 +898,17 @@ export async function build({ text, alt, fix, last = false }, emit) {
         r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore, last }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
         if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
-        log(`FAIL ${leadBrain()} ${way} ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - building the classic way instead`);
-        emit({ type: 'progress', chars: 0, note: 'the team got stuck, building the classic way' });
+        const next = leadBrain() === 'agy' && config().backends.find(n => n !== 'agy' && backends[n] && installed(n));
+        if (next) skip = 'agy';
+        log(`FAIL ${leadBrain()} ${way} ${err.message.replace(/\s+/g, ' ').slice(0, 300)} - ${next ? `${next} builds it the classic way instead` : 'building the classic way instead'}`);
+        emit({ type: 'progress', chars: 0, note: next ? `the team got stuck, ${{ claude: 'Claude', codex: 'ChatGPT' }[next] || 'the next brain'} is taking over` : 'the team got stuck, building the classic way' });
       }
     }
     if (!r) {
       // With agy first, a quick voice answers out loud while agy builds (whichever line comes first
       // is said: the builder's own SAY isn't said twice).
       let over = false;
-      const voiced = !fix && leadBrain() === 'agy' && !state.said; // (not again after the agent way's own voice)
+      const voiced = !fix && leadBrain() === 'agy' && !skip && !state.said; // (not again after the agent way's own voice)
       if (voiced) {
         agyVoice({ history, text, alt, title: titleBefore }, line => {
           if (over || state.said) return;
@@ -910,7 +917,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
         }).catch(err => log(`agy voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
       }
       try {
-        r = await classic({ page, history, text, alt, fix }, emit, state);
+        r = await classic({ page, history, text, alt, fix }, emit, state, skip);
       } finally {
         over = true;
       }
@@ -922,7 +929,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
         if (broken.length) {
           log(`the new page doesn't run (${broken[0].slice(0, 120)}), fixing it before it's shown`);
           emit({ type: 'progress', chars: 0, note: 'fixing a wobbly bit' });
-          const fixed = await classic({ page: r.html, history, text: '', alt, fix: broken.join('\n') }, emit, { said: state.said || 'quiet' }).catch(() => null);
+          const fixed = await classic({ page: r.html, history, text: '', alt, fix: broken.join('\n') }, emit, { said: state.said || 'quiet' }, skip).catch(() => null);
           // (Taken only if it's still the whole page - not a bit of it - and runs better.)
           const whole = fixed?.html && fixed.html.length > r.html.length * 0.6 && /<\/html>|<\/body>|<\/script>/i.test(fixed.html);
           if (whole && (await team.syntaxErrors(fixed.html)).length < broken.length) r = { ...r, html: fixed.html };

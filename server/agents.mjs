@@ -27,7 +27,7 @@ import { syntaxErrors, blankProblems, speakFirst, warmVoice, warmHelpers, maxHel
 // The agent way is team mode with team.agents on, when Claude leads (solo mode comes first) - or,
 // when Gemini (agy) leads, how it builds unless agy.way is "classic": an Argon lead that remembers the
 // creation writes the plan, and Argon helpers write its parts at the same time (one Argon writing a
-// whole page took about 100 s; this way about as long as Claude's).
+// whole page took about 100 s; this way about 38 s, where Claude's took 33 s).
 export function enabled() {
   const c = config();
   const brain = leadBrain();
@@ -35,8 +35,9 @@ export function enabled() {
   return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && brain === 'claude';
 }
 const onAgy = () => leadBrain() === 'agy';
-// agy.way "fast": the team way on agy with changes as quick as Claude's - Argon changes more than the
-// kid asked for, and copies whole blocks of the page to change a little of them.
+// agy.way "fast": the team way on agy with quicker changes - Argon changes more than the kid asked
+// for, and copies whole blocks of the page to change a little of them (about 22 s a change instead
+// of 24.5 s, a little less done; Claude's take about 15 s).
 const agyFast = () => onAgy() && config().agy?.way === 'fast';
 // (What its versions are called: 'claude agents' or 'agy agents'.)
 const brainName = () => (onAgy() ? 'agy' : 'claude');
