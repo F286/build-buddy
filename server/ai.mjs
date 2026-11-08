@@ -14,7 +14,8 @@ import * as team from './team.mjs';
 import * as agents from './agents.mjs';
 import * as solo from './solo.mjs';
 
-// The agent way (agents.mjs) builds when it's switched on and Claude leads: listed first and installed.
+// The agent way (agents.mjs) builds when it's switched on and Claude leads (main.mjs puts the brain that
+// leads first in `backends`, as agents.mjs asks for).
 export const agentWay = () => agents.enabled() && leadBrain() === 'claude';
 
 const WORK = path.join(DATA, 'tmp');
@@ -557,149 +558,6 @@ export function agyVoice({ history, text, alt, title }, sayNow) {
   });
 }
 
-// One helper of the agent way's team, on agy (team.mjs helperCrew's runner): the same job and rules a
-// Claude helper gets, as one message - and, like one, given up once it goes quiet for stallSec after
-// it started writing.
-export function agyHelper({ system, prompt, onText, signal, timeoutSec = 150, stallSec }) {
-  const c = config().agy;
-  const content = `${system}\n\nDo not use any tools, run any commands or touch any files - just answer with your code.\n\n---\n\n${prompt}`;
-  return askAgy(c.helperModel || c.model || '', content, { onText, signal, timeoutSec, stallSec }).then(text => ({ text }));
-}
-
-// A conversation with agy that goes on turn after turn (the agent way's lead, on agy): one agy program
-// reading a message per turn, so it remembers the creation. The same shape as solo.mjs's Session for
-// Claude (ask, use, think, interrupt, end); its instructions go with its first message. agy can't stop
-// a turn halfway, so interrupting a turn ends the conversation (the next one starts afresh).
-const AGY_SESSION_IDLE_MS = 15 * 60000;
-export class AgySession {
-  constructor(projectId, { system, model = '', label = 'agents' } = {}) {
-    this.projectId = projectId;
-    this.system = system;
-    this.model = model;
-    this.label = label;
-    this.key = JSON.stringify(['agy', model, system]);
-    this.turns = 0;
-    this.current = null;
-    this.queue = [];
-    this.buf = '';
-    this.closed = false;
-    this.proc = startAgy(model);
-    this.proc.onData = chunk => this.data(chunk);
-    this.proc.early.splice(0).forEach(chunk => this.data(chunk));
-    this.proc.onClose = () => this.close(new Error(`agy ${label} ended${this.proc.closed?.code ? ` (exit ${this.proc.closed.code}: ${this.proc.err.trim().slice(-200)})` : ''}`));
-    this.touch();
-  }
-
-  get alive() {
-    return !this.closed;
-  }
-
-  get kidWaiting() {
-    return [this.current, ...this.queue].some(t => t && t.kind !== 'polish');
-  }
-
-  touch() {
-    clearTimeout(this.idle);
-    this.idle = setTimeout(() => this.end(), AGY_SESSION_IDLE_MS);
-  }
-
-  end() {
-    if (this.closed) return;
-    this.proc.child.kill('SIGKILL');
-    this.close(new Error('stopped'));
-  }
-
-  close(err) {
-    if (this.closed && !this.current && !this.queue.length) return;
-    this.closed = true;
-    clearTimeout(this.idle);
-    for (const t of [this.current, ...this.queue].filter(Boolean)) t.finish(t.interrupted ? new Error('interrupted') : err);
-    this.current = null;
-    this.queue = [];
-  }
-
-  // (Its model and how long it thinks are set when it starts: these are for the same calls as Claude's.)
-  async use() {}
-  async think() {}
-
-  interrupt() {
-    if (!this.current || this.closed) return;
-    this.current.interrupted = true;
-    this.end();
-  }
-
-  data(chunk) {
-    this.buf += chunk;
-    const lines = this.buf.split('\n');
-    this.buf = lines.pop();
-    for (const line of lines) {
-      let ev;
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      const t = this.current;
-      if (!t) continue;
-      t.quietSince = Date.now();
-      const step = ev.step_update;
-      if (step?.step_type === 'agent_response' && step.text_delta) t.add(step.text_delta);
-      else if (ev.event === 'result') {
-        const r = ev.result || {};
-        const text = r.response?.trim() ? r.response : t.text;
-        const err = r.status !== 'SUCCESS' ? new Error(r.error || `agy ${r.status || 'failed'}`) : /blocked by Gemini'?s filters/i.test(text) ? new Error("Gemini's safety filter stopped it") : null;
-        t.finish(err, text);
-        this.current = null;
-        this.next();
-      }
-    }
-  }
-
-  ask(prompt, { onText = () => {}, timeoutSec = config().timeoutSec, stallSec = 60, priority = false, kind = 'build' } = {}) {
-    this.touch();
-    return new Promise((resolve, reject) => {
-      const t = {
-        prompt,
-        kind,
-        timeoutSec,
-        stallSec,
-        text: '',
-        done: false,
-        add: s => ((t.text += s), onText(s)),
-        finish: (err, text) => {
-          if (t.done) return;
-          t.done = true;
-          clearTimeout(t.timer);
-          clearInterval(t.stall);
-          if (err) reject(err);
-          else resolve({ text: text || t.text || '' });
-        },
-      };
-      if (this.closed) return reject(new Error(`agy ${this.label} ended`));
-      if (priority) this.queue.unshift(t);
-      else this.queue.push(t);
-      this.next();
-    });
-  }
-
-  next() {
-    if (this.current || !this.queue.length || this.closed) return;
-    const t = (this.current = this.queue.shift());
-    const first = this.turns === 0;
-    this.turns++;
-    t.quietSince = Date.now();
-    t.timer = setTimeout(() => this.fail(t, `took longer than ${t.timeoutSec}s`), t.timeoutSec * 1000);
-    t.stall = setInterval(() => t.text && Date.now() - t.quietSince > t.stallSec * 1000 && this.fail(t, 'stalled'), 2000);
-    const content = first ? `${this.system}\n\nWhile the kid waits, answer in text only (no tools, no commands, no files).\n\n---\n\n${t.prompt}` : t.prompt;
-    this.proc.child.stdin.write(`${JSON.stringify({ event: 'user', message: { role: 'user', content } })}\n`);
-  }
-
-  fail(t, why) {
-    t.finish(new Error(`agy ${this.label} ${why}`));
-    this.end();
-  }
-}
-
 export const backendNames = Object.keys(backends);
 export const runBackend = (name, opts) => backends[name](opts);
 export const WORK_DIR = WORK;
@@ -905,7 +763,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
       // With agy first, a quick voice answers out loud while agy builds (whichever line comes first
       // is said: the builder's own SAY isn't said twice).
       let over = false;
-      const voiced = !fix && leadBrain() === 'agy' && !state.said; // (not again after the agent way's own voice)
+      const voiced = !fix && leadBrain() === 'agy' && !state.said; // (not if a line was already said)
       if (voiced) {
         agyVoice({ history, text, alt, title: titleBefore }, line => {
           if (over || state.said) return;
