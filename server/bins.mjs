@@ -55,8 +55,8 @@ export function installed(name) {
   return false;
 }
 
-// The brain that leads: the first one in `backends` that's installed. Gemini (agy) leads by default;
-// without agy, Claude does - and then Claude's own ways of building (team, agent, solo) apply.
+// The brain that leads: the first one in `backends` that's installed. Claude leads by default, with its
+// own ways of building (team, agent, solo); without it, the next one does, the classic way.
 export function leadBrain() {
   const c = config();
   return c.backends.find(installed) || c.backends[0];

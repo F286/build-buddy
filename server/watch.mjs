@@ -85,7 +85,7 @@ export async function review({ projectId, version, report, screenshot }) {
   const c = config().watch;
   if (!c.enabled) return { skipped: 'off' };
   // (Not while the agent way or solo mode is working on it: a pass would be thrown away.)
-  if (running || ai.isBusy() || agents.busy() || solo.busy()) return { skipped: 'busy' };
+  if (running || ai.isBusy() || agents.busy?.() || solo.busy()) return { skipped: 'busy' };
   let p = store.currentProject();
   if (!version || p.id !== projectId || p.current !== version) return { skipped: 'stale' };
   const list = watchers();
