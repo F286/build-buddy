@@ -186,7 +186,34 @@ const withRunTeam = c => ({
   }),
 });
 
-let current = withRunTeam(merge(DEFAULTS, readUserConfig()));
+// The brains: config().backends is the order as set with the brain that leads first - brains listed
+// before the first installed one go to the end (they're passed over anyway) - so Claude leading counts
+// as Claude first everywhere (the agent way, agents.mjs, asks for Claude first in `backends`). It's
+// worked out each time it's read, so a brain installed while Build Buddy runs leads from then on.
+// brainsAsSet() is the order as set: the panel shows it, and it's what a grown-up saves.
+let isInstalled = () => true; // (bins.mjs says how to tell)
+export const tellInstalled = f => {
+  isInstalled = f;
+};
+let asSet = [];
+export const brainsAsSet = () => asSet;
+function leadFirst(c) {
+  asSet = c.backends;
+  Object.defineProperty(c, 'backends', {
+    enumerable: true,
+    configurable: true,
+    get: () => {
+      const at = asSet.findIndex(b => isInstalled(b));
+      return at > 0 ? [...asSet.slice(at), ...asSet.slice(0, at)] : asSet;
+    },
+    set: v => {
+      asSet = v;
+    },
+  });
+  return c;
+}
+
+let current = leadFirst(withRunTeam(merge(DEFAULTS, readUserConfig())));
 if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());
 if (process.env.KIDBUILD_PORT) current.port = Number(process.env.KIDBUILD_PORT);
 
@@ -197,7 +224,7 @@ export function config() {
 // config.json holds only the user's own overrides; merge the patch into it.
 export function saveConfig(patch) {
   // (The brains in the order this run shows them, Claude first, are the run's: not kept.)
-  if (run.claudeFirst && String(patch.backends) === String(current.backends)) {
+  if (run.claudeFirst && String(patch.backends) === String(asSet)) {
     const { backends, ...rest } = patch;
     patch = rest;
   }
@@ -205,7 +232,7 @@ export function saveConfig(patch) {
   const user = merge(readUserConfig(), patch);
   fs.writeFileSync(FILE, JSON.stringify(user, null, 2) + '\n');
   if ((patch.team && 'enabled' in patch.team) || (patch.solo && 'enabled' in patch.solo)) runMode = null;
-  current = withRunTeam(merge(DEFAULTS, user));
+  current = leadFirst(withRunTeam(merge(DEFAULTS, user)));
   // (KIDBUILD_BACKENDS stays this run's brains until a grown-up picks others in the panel.)
   if (patch.backends) delete process.env.KIDBUILD_BACKENDS;
   else if (process.env.KIDBUILD_BACKENDS) current.backends = process.env.KIDBUILD_BACKENDS.split(',').map(s => s.trim());

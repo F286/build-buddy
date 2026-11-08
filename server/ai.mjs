@@ -14,8 +14,8 @@ import * as team from './team.mjs';
 import * as agents from './agents.mjs';
 import * as solo from './solo.mjs';
 
-// The agent way (agents.mjs) builds when it's switched on and Claude leads (main.mjs puts the brain that
-// leads first in `backends`, as agents.mjs asks for).
+// The agent way (agents.mjs) builds when it's switched on and Claude leads (config().backends puts the
+// brain that leads first, as agents.mjs asks for).
 export const agentWay = () => agents.enabled() && leadBrain() === 'claude';
 
 const WORK = path.join(DATA, 'tmp');

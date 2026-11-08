@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
-import { config, saveConfig, ROOT, DATA } from './config.mjs';
+import { config, saveConfig, brainsAsSet, ROOT, DATA } from './config.mjs';
 import * as store from './store.mjs';
 import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
@@ -30,21 +30,6 @@ const MIME = {
 };
 const args = new Set(process.argv.slice(2));
 const port = config().port;
-
-// The brains in the order a grown-up set them (the panel shows that). The order Build Buddy works with
-// puts the brain that leads first: brains listed before it that aren't installed go to the end
-// (they're passed over anyway), so Claude leading counts as Claude first everywhere - the agent way
-// (agents.mjs) asks for Claude first in `backends`. Set again whenever the settings change.
-let setBackends = config().backends;
-let ordered = null;
-function leadFirst() {
-  const c = config();
-  if (c.backends === ordered) return;
-  setBackends = c.backends;
-  const at = c.backends.findIndex(b => installed(b));
-  ordered = c.backends = at > 0 ? [...c.backends.slice(at), ...c.backends.slice(0, at)] : c.backends;
-}
-leadFirst();
 
 function send(res, status, body, type = 'application/json') {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
@@ -78,7 +63,7 @@ function publicConfig() {
   return {
     buddyName: c.buddyName,
     kidName: c.kidName,
-    backends: setBackends, // (as set: the panel shows them in that order)
+    backends: brainsAsSet(), // (as set: the panel shows them in that order)
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
     claudeFast: Boolean(c.claude.fast),
@@ -298,7 +283,6 @@ const routes = {
     if (['kokoro', 'piper', 'browser', 'off'].includes(b.tts)) patch.tts = b.tts;
     if (speech.KOKORO_VOICES.includes(b.voice)) patch.kokoro = { voice: b.voice };
     saveConfig(patch);
-    leadFirst();
     if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
     if (!ai.agentWay()) agents.stop();
     if (leadBrain() !== 'claude') team.stopPrograms({ warmOnly: true }); // (Claude's waiting helpers aren't needed)
@@ -512,7 +496,7 @@ server.listen(port, '127.0.0.1', () => {
           ? 'classic (solo and team mode are Claude\'s, and Claude isn\'t leading)'
           : 'classic';
   console.log(`  building: ${building}`);
-  console.log(`  brains: ${setBackends.map(b => (installed(b) ? b : `${b} (not installed)`)).join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
+  console.log(`  brains: ${brainsAsSet().map(b => (installed(b) ? b : `${b} (not installed)`)).join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();
   if (!args.has('--no-browser')) launchBrowser(!args.has('--window'));

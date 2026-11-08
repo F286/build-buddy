@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { config, resolvePath } from './config.mjs';
+import { config, resolvePath, tellInstalled } from './config.mjs';
 
 function isExecutable(file) {
   try {
@@ -54,6 +54,7 @@ export function installed(name) {
   if (name === 'claude' || name === 'codex' || name === 'agy') return Boolean(findBin(name, c[name]?.bin));
   return false;
 }
+tellInstalled(installed); // (config().backends puts the first installed brain first)
 
 // The brain that leads: the first one in `backends` that's installed. Claude leads by default, with its
 // own ways of building (team, agent, solo); without it, the next one does, the classic way.
