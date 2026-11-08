@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
-import { config, saveConfig, ROOT, DATA } from './config.mjs';
+import { config, saveConfig, brainsAsSet, ROOT, DATA } from './config.mjs';
 import * as store from './store.mjs';
 import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
@@ -63,7 +63,7 @@ function publicConfig() {
   return {
     buddyName: c.buddyName,
     kidName: c.kidName,
-    backends: c.backends,
+    backends: brainsAsSet(), // (as set: the panel shows them in that order)
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
     claudeFast: Boolean(c.claude.fast),
@@ -72,19 +72,18 @@ function publicConfig() {
     agents: Boolean(c.team.agents),
     teamActive: team.enabled() && !solo.enabled(),
     soloActive: solo.enabled(),
-    agentsActive: agents.enabled(),
+    agentsActive: ai.agentWay(),
     // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
-    agyActive: leadBrain() === 'agy' && !agents.enabled(), // (agy building the classic way)
+    agyActive: leadBrain() === 'agy',
     lead: leadBrain(), // (the first installed brain: it builds)
     installed: Object.fromEntries(ai.backendNames.map(n => [n, installed(n)])), // (is each brain installed? for the panel)
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
     // every look counts).
-    polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : agents.enabled() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
+    polishPasses: solo.enabled() ? Math.max(0, solo.polishPasses() - 1) : ai.agentWay() ? Math.max(0, agents.passes() - 1) : team.polishPasses(),
     creationsButton: Boolean(c.creationsButton),
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     agyModel: c.agy.model,
-    agyWay: c.agy.way || 'agents',
     stt: c.stt,
     tts: c.tts,
     voice: c.kokoro.voice,
@@ -195,18 +194,18 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => (timeIsUp() && !graceOpen() ? { warm: 0 } : solo.enabled() ? solo.warm() : agents.enabled() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm()),
+  'POST /api/warm': () => (timeIsUp() && !graceOpen() ? { warm: 0 } : solo.enabled() ? solo.warm() : ai.agentWay() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm()),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
   'POST /api/repair': async req => {
     const b = await readJson(req);
-    return builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? agents.repair(b) : team.repair(b);
+    return builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.repair(b)) : team.repair(b);
   },
 
   // A team-built creation just appeared: take a careful look and fix what would spoil it.
   'POST /api/check': async req => {
     const b = await readJson(req);
-    return builtSolo(b.version) ? solo.check(b) : builtAgents(b.version) ? agents.check(b) : team.check(b);
+    return builtSolo(b.version) ? solo.check(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.check(b)) : team.check(b);
   },
 
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
@@ -247,7 +246,7 @@ const routes = {
     store.dropVersion(p, version);
     ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
     if (/^claude solo/.test(v.backend)) solo.takenBack({ projectId, version, error });
-    if (/^(claude|agy) agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
+    if (/^claude agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
     return { dropped: true };
   },
 
@@ -278,7 +277,6 @@ const routes = {
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };
-    if (['agents', 'fast', 'classic'].includes(b.agyWay)) patch.agy = { ...patch.agy, way: b.agyWay };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
@@ -286,7 +284,7 @@ const routes = {
     if (speech.KOKORO_VOICES.includes(b.voice)) patch.kokoro = { voice: b.voice };
     saveConfig(patch);
     if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
-    if (!agents.enabled()) agents.stop();
+    if (!ai.agentWay()) agents.stop();
     if (leadBrain() !== 'claude') team.stopPrograms({ warmOnly: true }); // (Claude's waiting helpers aren't needed)
     return publicConfig();
   },
@@ -488,10 +486,8 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`Build Buddy is running at http://127.0.0.1:${port}`);
   const building = solo.enabled()
     ? 'solo (one Claude that remembers the creation)'
-    : agents.enabled()
-      ? leadBrain() === 'agy'
-        ? `Gemini, the agent way (an Argon lead that remembers the creation, with Argon helpers${config().agy?.way === 'fast' ? ', quicker changes' : ''})`
-        : 'a team, the agent way (a lead that remembers the creation, with helpers)'
+    : ai.agentWay()
+      ? 'a team, the agent way (a lead that remembers the creation, with helpers)'
       : team.enabled()
       ? `a team (lead + up to ${team.maxHelpers()} helpers)`
       : leadBrain() === 'agy'
@@ -500,7 +496,7 @@ server.listen(port, '127.0.0.1', () => {
           ? 'classic (solo and team mode are Claude\'s, and Claude isn\'t leading)'
           : 'classic';
   console.log(`  building: ${building}`);
-  console.log(`  brains: ${config().backends.map(b => (installed(b) ? b : `${b} (not installed)`)).join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
+  console.log(`  brains: ${brainsAsSet().map(b => (installed(b) ? b : `${b} (not installed)`)).join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();
   if (!args.has('--no-browser')) launchBrowser(!args.has('--window'));
