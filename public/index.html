@@ -139,7 +139,9 @@
       <select name="building"><option value="agents">A team led by one AI that remembers it (slower, uses more of your plan)</option><option value="team">A team of AIs at once (faster, uses more of your plan)</option><option value="solo">One AI that remembers it and keeps improving it</option><option value="">One AI writes it all (classic)</option></select>
     </label>
     <div class="row">
-      <label>Claude model <input name="claudeModel" placeholder="opus"></label>
+      <label>Claude model
+        <select name="claudeModel"><option value="opus">Opus - recommended</option><option value="fable">Fable - the most capable (uses more of your plan)</option><option value="sonnet">Sonnet - a little faster</option></select>
+      </label>
       <label>Claude speed
         <select name="claudeFast"><option value="">Normal</option><option value="fast">Fast (extra usage)</option></select>
       </label>

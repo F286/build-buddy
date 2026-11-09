@@ -1488,6 +1488,13 @@ async function openParent() {
     f.brains.append(extra);
   }
   f.brains.value = brains;
+  // (A model the list doesn't have - set in config.json - is kept, not reset on save.)
+  f.claudeModel.querySelector('option[data-extra]')?.remove();
+  if (![...f.claudeModel.options].some(o => o.value === (c.claudeModel || ''))) {
+    const extra = new Option(c.claudeModel ? `${c.claudeModel} (from config.json)` : "Claude Code's own default (from config.json)", c.claudeModel || '');
+    extra.dataset.extra = '1';
+    f.claudeModel.append(extra);
+  }
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
   f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? 'agents' : 'team') : '';
