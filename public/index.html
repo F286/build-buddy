@@ -124,9 +124,9 @@
     </div>
     <label>AI brain
       <select name="brains">
-        <option value="claude,agy,codex">Claude, then Gemini, then ChatGPT - recommended</option>
+        <option value="agy,claude,codex">⭐ Gemini (Antigravity), then Claude, then ChatGPT - recommended</option>
+        <option value="claude,agy,codex">Claude, then Gemini, then ChatGPT</option>
         <option value="claude,codex">Claude, then ChatGPT if Claude fails</option>
-        <option value="agy,claude,codex">Gemini (Antigravity), then Claude, then ChatGPT</option>
         <option value="codex,claude">ChatGPT, then Claude if ChatGPT fails</option>
         <option value="claude">Claude only</option>
         <option value="codex">ChatGPT only</option>
@@ -135,6 +135,15 @@
         <option value="command">Custom command (config.json)</option>
       </select>
     </label>
+    <label>How Gemini builds (when Gemini leads)
+      <select name="agyWay"><option value="agents">⭐ As a fast team (~22 s new, ~6 s changes) - recommended</option><option value="fast">As a team, with minimal-line changes</option><option value="classic">One AI writes it all (the best creations, about 100 s each)</option></select>
+    </label>
+    <div class="row">
+      <label>Gemini model <input name="agyModel" placeholder="gemini-4-argon-low"></label>
+      <label>Gemini speed
+        <select name="agyFast"><option value="fast">⭐ Fast (low effort)</option><option value="">Normal (medium effort)</option></select>
+      </label>
+    </div>
     <label>How Claude builds (when Claude leads)
       <select name="building"><option value="agents">A team led by one AI that remembers it (slower, uses more of your plan)</option><option value="team">A team of AIs at once (faster, uses more of your plan)</option><option value="solo">One AI that remembers it and keeps improving it</option><option value="">One AI writes it all (classic)</option></select>
     </label>
@@ -144,10 +153,7 @@
         <select name="claudeFast"><option value="">Normal</option><option value="fast">Fast (extra usage)</option></select>
       </label>
     </div>
-    <div class="row">
-      <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
-      <label>Gemini model <input name="agyModel" placeholder="(agy default)"></label>
-    </div>
+    <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
     <div class="row">
       <label>Listening
         <select name="stt"><option value="both">whisper + Parakeet</option><option value="whisper">whisper only</option><option value="parakeet">Parakeet only</option><option value="browser">Browser speech service</option></select>

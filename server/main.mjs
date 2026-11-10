@@ -84,6 +84,7 @@ function publicConfig() {
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     agyModel: c.agy.model,
+    agyFast: c.agy.fast !== false,
     agyWay: c.agy.way || 'agents',
     stt: c.stt,
     tts: c.tts,
@@ -278,6 +279,7 @@ const routes = {
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };
+    if (typeof b.agyFast === 'boolean') patch.agy = { ...patch.agy, fast: b.agyFast };
     if (['agents', 'fast', 'classic'].includes(b.agyWay)) patch.agy = { ...patch.agy, way: b.agyWay };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
@@ -286,7 +288,8 @@ const routes = {
     if (speech.KOKORO_VOICES.includes(b.voice)) patch.kokoro = { voice: b.voice };
     saveConfig(patch);
     if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
-    if (!ai.agentWay()) agents.stop();
+    if (!ai.agentWay() || patch.agy) agents.stop();
+    if (leadBrain() !== 'agy' || patch.agy) ai.coolAgy();
     if (leadBrain() !== 'claude') team.stopPrograms({ warmOnly: true }); // (Claude's waiting helpers aren't needed)
     return publicConfig();
   },
@@ -489,7 +492,9 @@ server.listen(port, '127.0.0.1', () => {
   const building = solo.enabled()
     ? 'solo (one Claude that remembers the creation)'
     : ai.agentWay()
-      ? 'a team, the agent way (a lead that remembers the creation, with helpers)'
+      ? leadBrain() === 'agy'
+        ? `Gemini, the fast-argon team way (an Argon lead that remembers the creation, with Argon helpers${config().agy.fast !== false ? ' at low effort' : ''})`
+        : 'a team, the agent way (a lead that remembers the creation, with helpers)'
       : team.enabled()
       ? `a team (lead + up to ${team.maxHelpers()} helpers)`
       : leadBrain() === 'agy'

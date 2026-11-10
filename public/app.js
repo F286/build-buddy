@@ -530,7 +530,7 @@ async function build(body) {
   // Try the team's page out of sight before it's shown, and if it crashes, have it repaired first,
   // so the kid never sees a page that crashes (a first look, if one is up, stays meanwhile).
   state.fixing = false; // the server counted the fix's time back up to here; trying it is play time
-  if (result?.html && /^claude (team|solo|agents)$/.test(result.backend)) result = await repairFirst(result);
+  if (result?.html && /^(claude (team|solo|agents)|agy agents)$/.test(result.backend)) result = await repairFirst(result);
   clearTimeout(filler);
   stopBlocks();
   micBtn.classList.remove('thinking');
@@ -560,7 +560,7 @@ async function build(body) {
         cheer();
       }
       // (Solo mode and the agent way keep looking until the server says it's done.)
-      if (/^claude (team|solo|agents)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend !== 'claude team' });
+      if (/^(claude (team|solo|agents)|agy agents)$/.test(result.backend)) checkTeamBuild(state.project.id, result.version, { solo: result.backend !== 'claude team' });
     }
     if (!body.fix && !quiet) {
       if (result.done) say(result.done);
@@ -589,10 +589,11 @@ async function build(body) {
 // there; if that doesn't work out, it starts fresh when shown (see pageError).
 async function repairFirst(result) {
   const keep = result.continues && state.kept?.projectId === state.project?.id ? state.kept.keep : null;
-  let errors = await tryPage(result.html, keep, 1500);
+  const look = /^agy/.test(result.backend) ? 600 : 1500;
+  let errors = await tryPage(result.html, keep, look);
   let withKeep = false;
   if (errors.length && keep) {
-    const fresh = await tryPage(result.html, null, 1500);
+    const fresh = await tryPage(result.html, null, look);
     if (fresh.length) errors = fresh;
     else withKeep = true;
   }
@@ -603,7 +604,7 @@ async function repairFirst(result) {
   try {
     // Not for long: after 30 s it's shown as it is, and the usual crash fixing takes over.
     const r = await Promise.race([api('/api/repair', { version: result.version, errors: errors.slice(0, 5).join('\n'), keep: withKeep ? keep : undefined }), sleep(30000).then(() => ({}))]);
-    if (!r.html || (await tryPage(r.html, withKeep ? keep : null, 1500)).length) return result;
+    if (!r.html || (await tryPage(r.html, withKeep ? keep : null, look)).length) return result;
     const took = await api('/api/repair', { version: result.version, accept: true });
     return took.version ? { ...result, html: r.html, version: took.version } : result;
   } catch {
@@ -1495,6 +1496,8 @@ async function openParent() {
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
   f.agyModel.value = c.agyModel || '';
+  f.agyFast.value = c.agyFast !== false ? 'fast' : '';
+  f.agyWay.value = c.agyWay || 'agents';
   f.stt.value = c.stt;
   f.tts.value = c.tts;
   const accent = { a: 'American', b: 'British' };
@@ -1534,14 +1537,14 @@ function brainsSaid(c) {
   const next = c.backends.slice(at + 1).find(has);
   const builds = `${name(c.lead)} builds each creation${next ? `; ${name(next)} takes over if it fails` : ''}. `;
   const way = (c.team && !c.teamActive && !c.soloActive) || (c.solo && !c.soloActive) ? `${c.solo ? 'Solo' : 'Team'} building needs Claude to lead, so it builds the classic way. ` : '';
-  if (!missing.length) return c.lead === 'agy' ? builds + way : way;
+  if (!missing.length) return c.lead === 'agy' ? builds : way;
   // (setup.sh says how to install each brain; a custom command is set in config.json.)
   const absent = missing.filter(b => b !== 'command');
   const said = [
     absent.length && `${absent.length > 1 ? `${absent.slice(0, -1).map(name).join(', ')} and ${name(absent.at(-1))} aren't` : `${name(absent[0])} isn't`} installed (run setup.sh)`,
     missing.includes('command') && "your command isn't set (command.cmd in config.json)",
   ].filter(Boolean);
-  return `${said.join(' and ')}, so ${has(c.lead) ? builds + way : 'nothing can build. '}`;
+  return `${said.join(' and ')}, so ${has(c.lead) ? builds + (c.lead === 'agy' ? '' : way) : 'nothing can build. '}`;
 }
 
 function showParentStatus() {
@@ -1570,6 +1573,8 @@ $('#parentForm').addEventListener('submit', async e => {
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     ...(f.agyModel.value !== (state.config.agyModel || '') && { agyModel: f.agyModel.value }),
+    agyFast: f.agyFast.value === 'fast',
+    ...(f.agyWay.value !== (state.config.agyWay || 'agents') && { agyWay: f.agyWay.value }),
     stt: f.stt.value,
     tts: f.tts.value,
     voice: f.voice.value,

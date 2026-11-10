@@ -17,13 +17,14 @@ export const DEFAULTS = {
 
   // AI "brains", tried in order. If the first fails (offline, usage limit hit, ...) the next is used,
   // and one that isn't installed is passed over (the first installed one leads: see bins.mjs).
-  //   claude  - Claude Code CLI, signed in with a Claude subscription (or ANTHROPIC_API_KEY). First by
-  //             default: it builds the agent way (team.agents below).
-  //   agy     - Google's Antigravity CLI, signed in with a Google account (Gemini 4 Argon). When it
-  //             leads, one Argon writes the whole page (the classic way).
+  //   agy     - Google's Antigravity CLI, signed in with a Google account (Gemini 4 Argon). First by
+  //             default: it builds the fast-argon team way (agy.way below, ~22 s for something new
+  //             and ~6 s for a surgical @L change).
+  //   claude  - Claude Code CLI, signed in with a Claude subscription (or ANTHROPIC_API_KEY). When it
+  //             leads, it builds the agent way (team.agents below).
   //   codex   - OpenAI Codex CLI, signed in with a ChatGPT subscription (or an OpenAI API key)
   //   command - any program that reads a prompt on stdin and prints the reply (ollama, llm, gemini, ...)
-  backends: ['claude', 'agy', 'codex'],
+  backends: ['agy', 'claude', 'codex'],
   // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
   // richer pages in about the same time (25 s vs 21 s). Higher effort roughly doubles the wait.
   // fast: Claude's fast mode for the builder - the same model, answering much sooner. On a Claude
@@ -90,13 +91,15 @@ export const DEFAULTS = {
   // session then switches to the main model for everything else).
   solo: { enabled: false, polish: 3, model: '', firstModel: 'sonnet', effort: '', thinking: { build: 2000, look: 12000 } },
   codex: { bin: '', model: '', reasoning: 'low' },
-  // Antigravity (agy): model is any id `agy models` lists. When agy leads, one Argon writes the whole
-  // page (the classic way: the team and solo settings above are Claude's). voiceModel: a quick model
-  // that says the first line out loud while agy builds (Gemini Flash answers in about 2 s; the builder
-  // takes 5 to 10 s to start writing); "" lets the builder's own first line be said. keepHistory: true
-  // runs agy in your own agy home, so Build Buddy's runs are listed with your conversations (by
-  // default they use one of their own, data/agy-home, sharing only the sign-in).
-  agy: { bin: '', model: 'gemini-4-argon-low', helperModel: 'gemini-4-argon-low', voiceModel: 'gemini-3.8-flash-low', way: 'agents', keepHistory: false },
+  // Antigravity (agy): model is any id `agy models` lists. It builds the fast-argon team way by default
+  // (way, below; the team and solo settings above are Claude's). fast: true (the default) uses low
+  // thinking effort (--effort low / gemini-4-argon-low) so the same Argon model starts writing code
+  // much sooner; false uses agy's normal medium effort. voiceModel: a quick model that says the first
+  // line out loud while agy builds (Gemini Flash answers in about 2 s; the builder takes 5 to 10 s to
+  // start writing); "" lets the builder's own first line be said. keepHistory: true runs agy in your
+  // own agy home, so Build Buddy's runs are listed with your conversations (by default they use one of
+  // their own, data/agy-home, sharing only the sign-in).
+  agy: { bin: '', model: 'gemini-4-argon-low', helperModel: 'gemini-4-argon-low', voiceModel: 'gemini-3.8-flash-low', fast: true, way: 'agents', keepHistory: false },
   command: { cmd: '', args: [] },
 
   // Speech in: both (whisper and Parakeet listen together and the AI gets both versions; whisper
@@ -172,14 +175,16 @@ let runMode =
         : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
           ? 'classic'
           : null;
-// (Team, the agent way and solo are Claude's ways of building, so asking for one puts Claude first.
-// That lasts the whole run - picking how Claude builds in the panel doesn't end it - unless a grown-up
-// picks brains there: theirs win, and the run's own order is never saved.)
+// (Team, the agent way and solo are Claude's ways of building, so asking for one puts Claude first;
+// --classic has Gemini build the classic way too. Both last the whole run - picking how Claude builds
+// in the panel doesn't end them - unless a grown-up picks brains, or a way for Gemini, there: theirs
+// win, and the run's own are never saved.)
 const claudeFirst = list => ['claude', ...list.filter(b => b !== 'claude')];
-const run = { claudeFirst: runMode !== null && runMode !== 'classic' };
+const run = { claudeFirst: runMode !== null && runMode !== 'classic', agyClassic: runMode === 'classic' };
 const withRunTeam = c => ({
   ...c,
   ...(run.claudeFirst && { backends: claudeFirst(c.backends) }),
+  ...(run.agyClassic && { agy: { ...c.agy, way: 'classic' } }),
   ...(runMode !== null && {
     team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' },
     solo: { ...c.solo, enabled: runMode === 'solo' },
@@ -229,6 +234,7 @@ export function saveConfig(patch) {
     patch = rest;
   }
   if (patch.backends) run.claudeFirst = false;
+  if (patch.agy && 'way' in patch.agy) run.agyClassic = false;
   const user = merge(readUserConfig(), patch);
   fs.writeFileSync(FILE, JSON.stringify(user, null, 2) + '\n');
   if ((patch.team && 'enabled' in patch.team) || (patch.solo && 'enabled' in patch.solo)) runMode = null;

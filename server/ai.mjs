@@ -320,7 +320,31 @@ const backends = {
 // runs are cleared out of it now and then (agy.keepHistory runs them in the grown-up's own home).
 
 const AGY_SETTINGS = JSON.stringify({ toolPermission: 'strict', allowNonWorkspaceAccess: false, enableTerminalSandbox: true });
-const agyArgs = model => ['-p=', '--input-format', 'stream-json', '--output-format', 'stream-json', '--sandbox', '--disable-slash-commands', '--settings', AGY_SETTINGS, ...(model ? ['--model', model] : [])];
+
+// Gemini 4 Argon in agy has no separate paid "fastMode" service tier like Claude's; what makes the
+// same Argon model answer faster is its low-effort model variant: gemini-4-argon-low (on by default
+// as agy.fast) vs agy's standard default gemini-4-argon-medium (when --model gemini-4-argon is used).
+export function resolveAgyModel(model, fast = config().agy?.fast !== false) {
+  const raw = (model || config().agy?.model || 'gemini-4-argon-low').trim();
+  // The quick spoken-greeting voice model (gemini-3.8-flash-low) always uses its -low variant.
+  if (/^gemini-[\d.]+-flash-low$/i.test(raw)) return { model: raw, effort: '' };
+  const m = raw.match(/^(gemini-[a-z0-9.-]+?)(?:-(low|medium|high))?$/i);
+  if (!m) return { model: raw, effort: fast ? 'low' : '' };
+  const [, base, explicit] = m;
+  if (explicit === 'high') return { model: `${base}-high`, effort: '' };
+  const tier = fast ? 'low' : 'medium';
+  return { model: `${base}-${tier}`, effort: '' };
+}
+
+const agyArgs = model => {
+  const r = resolveAgyModel(model);
+  return [
+    '-p=', '--input-format', 'stream-json', '--output-format', 'stream-json',
+    '--sandbox', '--disable-slash-commands', '--settings', AGY_SETTINGS,
+    ...(r.model ? ['--model', r.model] : []),
+    ...(r.effort ? ['--effort', r.effort] : []),
+  ];
+};
 const AGY_WARM_MS = 3 * 60000;
 let agyPool = []; // { model, proc, timer }
 const agyLive = new Set(); // every agy program still running
@@ -405,7 +429,8 @@ function startAgy(model) {
   return proc;
 }
 
-function takeAgy(model) {
+function takeAgy(rawModel) {
+  const { model } = resolveAgyModel(rawModel);
   let i = agyPool.findIndex(w => w.model === model && !w.proc.closed && w.proc.ready);
   if (i < 0) i = agyPool.findIndex(w => w.model === model && !w.proc.closed);
   if (i < 0) return null;
@@ -445,7 +470,8 @@ export const coolAgy = () => agyPool.splice(0).forEach(w => (clearTimeout(w.time
 export function keepAgyWarm(need, ms = AGY_WARM_MS) {
   agyPool = agyPool.filter(w => !w.proc.closed);
   let started = 0;
-  for (const [model, count] of Object.entries(need)) {
+  for (const [rawModel, count] of Object.entries(need)) {
+    const { model } = resolveAgyModel(rawModel);
     for (let n = agyPool.filter(w => w.model === model).length; n < count; n++) {
       let proc;
       try {
