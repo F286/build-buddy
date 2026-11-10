@@ -96,7 +96,7 @@ export const DEFAULTS = {
   // takes 5 to 10 s to start writing); "" lets the builder's own first line be said. keepHistory: true
   // runs agy in your own agy home, so Build Buddy's runs are listed with your conversations (by
   // default they use one of their own, data/agy-home, sharing only the sign-in).
-  agy: { bin: '', model: 'gemini-4-argon-low', voiceModel: 'gemini-3.8-flash-low', keepHistory: false },
+  agy: { bin: '', model: 'gemini-4-argon-low', helperModel: 'gemini-4-argon-low', voiceModel: 'gemini-3.8-flash-low', way: 'agents', keepHistory: false },
   command: { cmd: '', args: [] },
 
   // Speech in: both (whisper and Parakeet listen together and the AI gets both versions; whisper

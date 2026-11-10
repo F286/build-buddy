@@ -20,16 +20,20 @@ import { config } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
 import { Session } from './solo.mjs';
+import { leadBrain } from './bins.mjs';
 import { syntaxErrors, blankProblems, speakFirst, warmVoice, polishPasses as teamPolish } from './team.mjs';
+import * as agyAgents from './agy-agents.mjs';
 
-// The agent way is team mode with team.agents on (Claude only; solo mode comes first).
+// The agent way is team mode with team.agents on (Claude only; solo mode comes first) - or, when
+// Gemini (agy) leads, how it builds unless agy.way is "classic".
 export function enabled() {
   const c = config();
+  if (leadBrain() === 'agy') return agyAgents.enabled();
   return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && c.backends[0] === 'claude';
 }
 
 // Passes after something new or a change: growing it, then looking again (team.polish more).
-export const passes = () => 1 + teamPolish();
+export const passes = () => (leadBrain() === 'agy' ? agyAgents.passes() : 1 + teamPolish());
 
 // The Agent tool takes a model alias only (no full model names).
 const ALIASES = ['sonnet', 'opus', 'haiku', 'fable'];
@@ -275,6 +279,7 @@ function makeWay(s) {
 }
 
 export function warm() {
+  if (leadBrain() === 'agy') return agyAgents.warm();
   if (!enabled()) return { warm: 0 };
   const before = session;
   try {
@@ -286,6 +291,7 @@ export function warm() {
 }
 
 export function stop() {
+  agyAgents.stop();
   session?.end();
   session = null;
 }
@@ -294,7 +300,7 @@ export function stop() {
 export function madeByAgents(p, version) {
   let v = p.versions.find(x => x.n === version);
   for (let i = 0; v && /overwatch/.test(v.backend || '') && i < 50; i++) v = p.versions.find(x => x.n === v.from);
-  return /^claude agents/.test(v?.backend || '');
+  return /^(claude|agy) agents/.test(v?.backend || '');
 }
 
 // The lead's helpers at work, for the app's little robots: Agent calls started and finished.
@@ -375,7 +381,8 @@ async function problemsIn(built) {
 // One build. Resolves like the classic way: { say, done, title, emoji, html, edited, backend }.
 // Throws if it couldn't (the classic way takes over).
 
-export async function build({ page, history, text, alt, fix, title = '', look = pickLook() }, emit, state) {
+export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), last = false }, emit, state) {
+  if (leadBrain() === 'agy') return agyAgents.build({ page, history, text, alt, fix, title, look, last }, emit, state);
   const t0 = Date.now();
   const secs = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   const p = store.currentProject();
@@ -520,6 +527,7 @@ function saveScreenshot(dir, dataUrl) {
 }
 
 export async function check({ projectId, version, report, screenshot }) {
+  if (leadBrain() === 'agy') return agyAgents.check({ projectId, version, report, screenshot });
   if (!enabled() || config().team.check === false) return { skipped: 'off' };
   let p = store.currentProject();
   if (p.id !== projectId || p.current !== version || isBusy() || !madeByAgents(p, version)) return { skipped: 'stale' };
@@ -615,6 +623,7 @@ export async function check({ projectId, version, report, screenshot }) {
 // One of its passes crashed when the app tried it out of sight, so it was taken back (POST
 // /api/drop-fix): its files go back to how they were, it's told why, and a lost grow happens again.
 export function takenBack({ projectId, version, error }) {
+  if (leadBrain() === 'agy') return agyAgents.takenBack({ projectId, version, error });
   const w = workFor(projectId);
   if (w.lastPass?.version !== version) return;
   if (session?.projectId === projectId && w.lastPass.before) {
@@ -634,6 +643,7 @@ export function takenBack({ projectId, version, error }) {
 const proposals = new Map();
 
 export async function repair({ version, errors, keep, accept = false }) {
+  if (leadBrain() === 'agy') return agyAgents.repair({ version, errors, keep, accept });
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
   if (!enabled() || p.current !== version || v?.backend !== 'claude agents') return { skipped: 'stale' };

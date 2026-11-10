@@ -74,7 +74,7 @@ function publicConfig() {
     soloActive: solo.enabled(),
     agentsActive: ai.agentWay(),
     // (agy builds the classic way; the app starts it while the kid talks, as for the team.)
-    agyActive: leadBrain() === 'agy',
+    agyActive: leadBrain() === 'agy' && !ai.agentWay(),
     lead: leadBrain(), // (the first installed brain: it builds)
     installed: Object.fromEntries(ai.backendNames.map(n => [n, installed(n)])), // (is each brain installed? for the panel)
     // How many polish passes the app asks for after the first check (in solo mode and the agent way
@@ -84,6 +84,7 @@ function publicConfig() {
     fastStatus: ai.fastStatus(),
     codexModel: c.codex.model,
     agyModel: c.agy.model,
+    agyWay: c.agy.way || 'agents',
     stt: c.stt,
     tts: c.tts,
     voice: c.kokoro.voice,
@@ -246,7 +247,7 @@ const routes = {
     store.dropVersion(p, version);
     ai.log(`FIX dropped v${version} (${v.backend}): it crashed when tried - ${String(error || '').slice(0, 160)}`);
     if (/^claude solo/.test(v.backend)) solo.takenBack({ projectId, version, error });
-    if (/^claude agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
+    if (/^(claude|agy) agents/.test(v.backend)) agents.takenBack({ projectId, version, error });
     return { dropped: true };
   },
 
@@ -277,6 +278,7 @@ const routes = {
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };
+    if (['agents', 'fast', 'classic'].includes(b.agyWay)) patch.agy = { ...patch.agy, way: b.agyWay };
     if (typeof b.creationsButton === 'boolean') patch.creationsButton = b.creationsButton;
     for (const k of ['buddyName', 'kidName']) if (typeof b[k] === 'string') patch[k] = b[k].trim().slice(0, 30);
     if (['both', 'parakeet', 'whisper', 'browser', 'off'].includes(b.stt)) patch.stt = b.stt;
