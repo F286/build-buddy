@@ -117,6 +117,7 @@ const sfx = {
 const LINES = {
   fixing: ['Oops! Let me fix a wobbly bit.'],
   filler: ['Ooh! Let me think...', 'Okay! Building now...', 'Hmm, let me build that!'],
+  together: ["Now I'm putting it all together!"], // (said by the server while the kid waits: see 'narrate')
   tangled: ['Oh no, my brain got a little tangled. Can you say that again?', 'Hmm, that one was tricky. Can you try again?'],
   blocked: ["Hmm, I can't build that one. Can you think of something else?"],
   queued: ["Okay! I'll do that next.", "Got it! That's next."],
@@ -431,7 +432,9 @@ function startBlocks(body) {
 
 // Team mode: a little robot for each helper building a piece of it (see server/team.mjs). Before
 // there are helpers - or when a lead makes a change itself - a robot for each lead at work.
-function showHelpers(count, done = 0, leads = 0) {
+// parts: what each helper is making, as a picture ([{ emoji, done }], from server/crew.mjs): the kid
+// sees their truck, their cars and their crowd being made, each one popping in when it's ready.
+function showHelpers(count, done = 0, leads = 0, parts = null) {
   const el = $('#buildingTeam');
   const name = state.config.buddyName || 'Sparky';
   const robots = count || leads;
@@ -439,7 +442,13 @@ function showHelpers(count, done = 0, leads = 0) {
   if (!state.fixing) $('#buildingLabel').textContent = count ? `${name} + ${count} helper${count > 1 ? 's' : ''}` : team ? `${name}'s team` : `${name} is building`;
   while (el.children.length > robots) el.lastChild.remove();
   while (el.children.length < robots) el.append(Object.assign(document.createElement('span'), { textContent: '🤖' }));
-  [...el.children].forEach((robot, i) => robot.classList.toggle('done', i < done));
+  el.classList.toggle('parts', Boolean(parts));
+  [...el.children].forEach((robot, i) => {
+    robot.textContent = parts?.[i]?.emoji || '🤖';
+    const ready = parts ? Boolean(parts[i]?.done) : i < done;
+    if (parts && ready && !robot.classList.contains('done')) sfx.pop();
+    robot.classList.toggle('done', ready);
+  });
   el.hidden = !robots;
 }
 
@@ -509,12 +518,16 @@ async function build(body) {
         if (ev.type === 'progress') {
           progress.target = Math.max(progress.target, Math.floor(ev.chars / 110));
           progress.lastEvent = Date.now();
-          if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone);
+          if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone, 0, ev.parts);
           else if (ev.note) showHelpers(0); // the team gave up: building the classic way
           else if (ev.team) showHelpers(0, 0, ev.leads || 1); // the team is at work: its leads plan
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);
+        } else if (ev.type === 'narrate') {
+          // What it's making, said while the kid waits - only into a silence, never on top of the
+          // first answer or the kid.
+          if (!body.fix && !voice.current && !voice.queue.length && !mic.recording && !timer.overtime) say(ev.text);
         } else if (ev.type === 'sketch') {
           showSketch(ev.html);
         } else if (ev.type === 'done' || ev.type === 'error') {

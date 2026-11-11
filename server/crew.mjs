@@ -13,7 +13,8 @@
 //   - the lead is handed every part in one message, and makes them fit (the same check as before:
 //     it's what finds the truck that jumps over the cars but never crushes them);
 //   - its fixes and changes are written into its reply (FIX blocks), which Build Buddy takes into the
-//     files - no tool to wait for, so a check or a small change is one answer, not three;
+//     files. It has no tools at all - the parts, a screenshot, a page that changed are put in front of
+//     it - so a check or a small change is one answer, not three, and never a detour to read a file;
 //   - for a big change, the helpers write while the lead makes its own changes.
 //
 // The creation lives in files in its own folder, as in agents.mjs:
@@ -62,6 +63,7 @@ function lead() {
 // ---------------------------------------------------------------------------------------------
 // What it's told
 
+const TAG = '[<one emoji> <what it is, in a few words a kid would say, like: the monster truck>]';
 const JOB = '<exactly the code it defines, like drawSky(ctx, t) or makeFrog(scene) → { update(dt, t), hitTest(x, y) }> - <in under 40 words: how it looks, sounds and feels, what it does when poked, and the shared names and keep fields it reads or changes>';
 
 function leadSystem() {
@@ -86,7 +88,7 @@ FIX <page.html or parts/<name>.js>
 <what replaces them>
 >>>>>>> REPLACE
 - A whole file is \`FILE <path>\` on a line of its own, then the file in a \`\`\` block.
-You know the files: you wrote page.html, and you're shown every part when it's written. (Your one tool, Read, is for a screenshot, or a file you're told has changed.)
+You have no tools and need none - you know the files: you wrote page.html, you're shown every part when it's written, and whatever changes outside your own work is shown to you.
 
 Your helpers each write one part file, all at the same time, so the kid gets it much sooner - but only if you hand the work out: every part file is written by a helper, never by you. A helper starts the moment its job line is written. It sees the page as it is at that moment, and its job - nothing else. So whatever your helpers need to know about the whole creation (the coordinates, the shared state, how the parts talk to each other) is a short comment in page.html's shared code, above the jobs. Your own writing is page.html, the jobs, and the fixes that make the parts fit. You are the one who knows the whole creation, so you make it one thing that works.
 
@@ -95,16 +97,16 @@ Your whole reply is the TITLE line and then page.html in one \`\`\`html block - 
 - \`<!doctype html>\`, a style that fills the window with no scrollbars, and one \`<script type="module">\` holding:
 - the shared code: every import any part needs, the palette and sizes, the shared state - the world's rules as a few plain numbers that one place updates every frame - the shared input object, and \`const keep = KB.keep({ ... })\` with every field the kid would miss when the page changes;
 - a job line for each part, the biggest job first (its helper starts first): 5 to 7 small parts, similar in size, about 25-40 lines each (for example: the rules, the place, the star, the other characters, the effects, the sounds) - the kid waits for the slowest one, so split anything big (the star, a track, a whole scene, effects and sounds) into two parts. Each job is one line:
-  \`// @part <name>: ${JOB}\`
-  A helper writes about 30 lines in the time the kid can wait, and writes everything its job names - so name at most three things it does, in those 40 words or fewer, and keep the shared code to what the parts need. Extras come when you grow it, after the kid sees it.
+  \`// @part <name> ${TAG}: ${JOB}\`
+  (The tag in brackets is shown and said to the kid while they wait: "I'm making the monster truck!") A helper writes about 30 lines in the time the kid can wait, and writes everything its job names - so name at most three things it does, in a job line of 300 characters at most, and keep the shared code to what the parts need. Extras come when you grow it, after the kid sees it.
 - MAIN: it makes the page's elements, creates everything by calling the parts exactly as their jobs say, runs the one animation loop (dt and t in seconds, dt at most 0.05) and turns the arrow keys, taps and drags into the shared input object.
 Stop after the block. When your helpers are done you're handed every part as they wrote it, and you make it one creation that works - with FIX blocks - and end with DONE.
 
 ## A change to what's there
 A small change: make it yourself, with FIX blocks, and end with DONE. Several separate things, or something big: hand the big pieces out first - their helpers write while you make your own changes. A job is one line, written before anything else in your reply, so its helper starts at once:
-  \`PART <name>: ${JOB}\`
+  \`PART <name> ${TAG}: ${JOB}\`
   for a new part - say in it anything new you're adding to the shared code that it goes by, and add its \`// @part <name>\` line and its calls to page.html yourself (FIX blocks), in this same reply; or
-  \`PART <name> (again): <what changes, and what stays as it is>\`
+  \`PART <name> ${TAG} (again): <what changes, and what stays as it is>\`
   for a part that's there: its helper writes the whole file again, so leave that file alone meanwhile.
 Each helper sees the whole page as it is now, and never two helpers get the same file. When they're done you're handed what they wrote: make it fit, and end with DONE (after handing parts out, DONE comes then, not before). Keep the KB.keep names and what they mean, so the kid carries on where they were. Anything new the kid can make progress in gets its default in page.html's \`KB.keep({ ... })\` - only those fields carry over, and only you can add them, since helpers write only their own part - and its job names that keep field.
 
@@ -144,14 +146,17 @@ ${buildingRules()}`;
 }
 
 // What one helper is handed: the creation, the page as it is, and its job.
-function helperPrompt({ asked, latest, look }, job) {
+function helperPrompt({ asked, latest, look }, job, quick = true) {
   return [
     `# This creation\n${asked ? `The kid asked for: "${asked}"` : ''}${latest ? `\nThen they said: "${latest}"` : ''}${look ? `\nThe look: ${look}.` : ''}`,
     `# The page${job.partial ? ' (as far as the lead has written it: the other jobs and MAIN follow)' : ' as it is now (each part\'s code follows its `// ---- <name>` line)'}\n<page>\n${job.page}\n</page>`,
     job.again
       ? `# Your job: write parts/${job.name}.js again - the whole file (its code now follows \`// ---- ${job.name}\` in the page), with this change:\n${job.job}`
       : `# Your job: write parts/${job.name}.js\n// @part ${job.name}: ${job.job}`,
-  ].join('\n\n');
+    // (Without this line a helper thinks for 10 to 20 s before the harder parts - a truck, a row of
+    // cars - and the whole creation waits for it: measured, 24-34 s for the slowest of six, 14 s with it.)
+    quick && 'Start writing the code at once - no planning or thinking it through first: the kid is waiting, and the lead checks it afterwards.',
+  ].filter(Boolean).join('\n\n');
 }
 
 // Growing it into its full version, while the kid plays (the first pass after something new).
@@ -222,7 +227,15 @@ function clear(dir) {
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
 }
 
-// Before a turn: the files hold the creation as it is now. Returns what the lead is told about them.
+// The files as they are, to show the lead.
+function shown(dir) {
+  const files = snapshot(dir);
+  return Object.keys(files).sort((a, b) => (a === 'page.html' ? -1 : b === 'page.html' ? 1 : a.localeCompare(b))).map(rel => `=== ${rel}\n${files[rel].trimEnd()}`).join('\n\n');
+}
+
+// Before a turn: the files hold the creation as it is now. Returns what the lead is told about them -
+// the files themselves, when it doesn't know them as they are (it's new to them, or they changed
+// outside its own work).
 function sync(s, page) {
   const dir = s.dir;
   const now = assemble(dir)?.html;
@@ -239,8 +252,8 @@ function sync(s, page) {
   }
   s.files = page;
   return now === page
-    ? 'Your folder holds the creation as it is: page.html and its parts in parts/ (Read what you need before you change it).'
-    : 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part.';
+    ? `The creation's files, as they are now:\n\n${shown(dir)}`
+    : `The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts. When you hand out work, a helper can take over a piece of it as a new part.\n\n${shown(dir)}`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -251,7 +264,7 @@ let session = null;
 
 function sessionArgs() {
   const r = lead();
-  const args = ['-p', '--safe-mode', '--tools', 'Read', '--permission-prompts', 'none', '--strict-mcp-config', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt', leadSystem()];
+  const args = ['-p', '--safe-mode', '--tools', '', '--strict-mcp-config', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt', leadSystem()];
   if (r.model) args.push('--model', r.model);
   if (r.effort) args.push('--effort', r.effort);
   if (r.fast) args.push('--settings', JSON.stringify({ fastMode: true }));
@@ -290,7 +303,7 @@ async function settled(w) {
 // didn't fix it): it's told, and it reads the files again before changing them.
 function undone(s, w, why) {
   s.files = null;
-  w.note = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
+  w.note = `Your last changes were taken out (${why}): the files are back to how they were before them, as shown here.`;
 }
 
 // What the kid says comes first: a pass at work stops, and any waiting are dropped.
@@ -308,7 +321,7 @@ export function warm() {
   const before = session;
   try {
     const s = sessionFor(store.currentProject().id, { renew: true });
-    const others = config().team?.warm === false ? 0 : warmVoice() + keepRoleWarm('agentHelper', helperSystem(true), maxHelpers());
+    const others = config().team?.warm === false ? 0 : warmVoice() + keepRoleWarm('agentHelper', helperSystem(true), Math.max(7, maxHelpers()));
     return { warm: (s === before ? 0 : 1) + others };
   } catch {
     return { warm: 0 };
@@ -345,6 +358,17 @@ function sameCreation(before, after) {
   return [...was].filter(k => now.has(k)).length * 2 >= was.size;
 }
 
+// A page line a problem names, with the lines around it (the lead has no file to look it up in).
+function around(problems, html) {
+  const lines = String(html || '').split('\n');
+  return problems.map(p => {
+    const at = Number(/page line (\d+)/.exec(p)?.[1]);
+    if (!at || at > lines.length) return p;
+    const from = Math.max(1, at - 3);
+    return `${p}\n${lines.slice(from - 1, at + 2).map((l, i) => `${from + i === at ? '>' : ' '} ${from + i}: ${l.slice(0, 200)}`).join('\n')}`;
+  });
+}
+
 // Does the page run? Problems found before it's shown go back to the lead once.
 async function problemsIn(built) {
   if (!built?.html) return ['there is no page.html'];
@@ -354,8 +378,15 @@ async function problemsIn(built) {
 // ---------------------------------------------------------------------------------------------
 // The lead's reply, read as it's written: the jobs in it, and the page of something new.
 
-const PART_LINE = /^[ \t]*\/\/ ?@part[ \t]+([\w-]+)[ \t]*:[ \t]*(\S.*)$/; // in the page: a part and its job
-const HAND_OUT = /^[ \t>*_`-]*PART[ \t]+`?([\w-]+)`?[ \t]*(\((?:again|rewrite)\))?[ \t]*:[ \t]*(\S.*?)`?[ \t]*$/; // in a reply
+const PART_LINE = /^[ \t]*\/\/ ?@part[ \t]+([\w-]+)[ \t]*(?:\[([^\]\n]*)\])?[ \t]*:[ \t]*(\S.*)$/; // in the page: a part, its tag and its job
+const HAND_OUT = /^[ \t>*_`-]*PART[ \t]+`?([\w-]+)`?[ \t]*(?:\[([^\]\n]*)\])?[ \t]*(\((?:again|rewrite)\))?[ \t]*:[ \t]*(\S.*?)`?[ \t]*$/; // in a reply
+
+// A job's tag, apart: its picture and its words ("🚚 the monster truck").
+function tagOf(tag) {
+  const t = String(tag || '').trim();
+  const m = /^((?:\p{Extended_Pictographic}|\p{Regional_Indicator})[\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}\p{Extended_Pictographic}]*)\s*(.*)$/u.exec(t);
+  return { emoji: m ? m[1] : '', words: (m ? m[2] : t).replace(/[^\p{L}\p{N} '-]/gu, '').trim().slice(0, 40) };
+}
 
 class JobReader {
   constructor(onJob, onPage = () => {}) {
@@ -397,7 +428,7 @@ class JobReader {
     const m = PART_LINE.exec(l);
     if (m && !this.names.has(m[1])) {
       this.names.add(m[1]);
-      this.onJob({ name: m[1], job: m[2].trim(), again: false, partial: true, page: this.text.slice(this.block, to) });
+      this.onJob({ name: m[1], ...tagOf(m[2]), job: m[3].trim(), again: false, partial: true, page: this.text.slice(this.block, to) });
     }
   }
 
@@ -405,7 +436,7 @@ class JobReader {
     const m = HAND_OUT.exec(l);
     if (!m || this.names.has(m[1])) return;
     this.names.add(m[1]);
-    this.onJob({ name: m[1], job: m[3].trim(), again: Boolean(m[2]), partial: false, page: null });
+    this.onJob({ name: m[1], ...tagOf(m[2]), job: m[4].trim(), again: Boolean(m[3]), partial: false, page: null });
   }
 }
 
@@ -567,7 +598,7 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
     start(found, pageNow) {
       const job = { ...found, page: found.page ?? pageNow, state: 'writing', code: '', error: '', chars: 0, startedAt: Date.now(), doneAt: 0 };
       jobs.push(job);
-      const prompt = helperPrompt(about(job), job);
+      const prompt = helperPrompt(about(job), job, quick);
       // One more try if a helper fails.
       job.finished = write(job, prompt)
         .catch(err => {
@@ -599,11 +630,19 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
 // reply of the same turn, as far as the caller goes). Resolves with all it said, and what was handed out.
 //   about(job)   what its helpers are told about the creation ({ asked, latest, look })
 //   fit          how the handing-back message ends (what it's to do with the parts)
-async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onProgress = () => {}, ...opts }) {
+async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onProgress = () => {}, narrate = null, ...opts }) {
   const crew = makeCrew(s, about, { quick, onChange: n => onProgress(n, crew) });
   let before = null; // its reply is a whole new page: the files as they were (the folder starts again)
+  // (What its helpers are making, said to the kid once three of them are at it - or all, if fewer.)
+  let told = !narrate;
+  const tell = (all = false) => {
+    const making = crew.jobs.map(j => j.words).filter(Boolean).slice(0, 3);
+    if (told || !making.length || (!all && making.length < 3) || crew.done === crew.jobs.length) return;
+    told = true;
+    narrate(`I'm making ${making.length > 1 ? `${making.slice(0, -1).join(', ')} and ${making.at(-1)}` : making[0]}!`);
+  };
   const reader = new JobReader(
-    job => crew.start(job, pageNow),
+    job => (crew.start(job, pageNow), tell()),
     () => {
       before = snapshot(s.dir);
       clear(s.dir);
@@ -624,22 +663,23 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
       // (A part the new page still names, as it was...)
       if (before?.[`parts/${name}.js`] != null) fs.writeFileSync(path.join(s.dir, 'parts', `${name}.js`), before[`parts/${name}.js`]);
       // (... and a job written into page.html some other way: its helper starts now.)
-      else if (PART_LINE.test(l)) crew.start({ name, job: PART_LINE.exec(l)[2].trim(), again: false, partial: false, page: assemble(s.dir)?.html || page }, pageNow);
+      else if (PART_LINE.test(l)) crew.start({ name, ...tagOf(PART_LINE.exec(l)[2]), job: PART_LINE.exec(l)[3].trim(), again: false, partial: false, page: assemble(s.dir)?.html || page }, pageNow);
     }
     if (!crew.jobs.length) return { text: first.text, jobs: [], fresh: Boolean(before) };
+    tell(true);
     await crew.settled();
     const failed = crew.jobs.filter(j => j.state === 'failed');
     const built = assemble(s.dir);
     const problems = failed.length ? [] : await problemsIn(built);
-    if (problems.length) fs.writeFileSync(path.join(s.dir, 'assembled.html'), built?.html || '');
     const back = [
-      `Your helper${crew.jobs.length > 1 ? 's are' : ' is'} done - ${crew.jobs.length > 1 ? 'every part' : 'the part'}, as written and saved (no need to Read ${crew.jobs.length > 1 ? 'them' : 'it'}):`,
+      `Your helper${crew.jobs.length > 1 ? 's are' : ' is'} done - ${crew.jobs.length > 1 ? 'every part' : 'the part'}, as written and saved:`,
       ...crew.jobs.filter(j => j.state === 'done').map(j => `=== parts/${j.name}.js\n${j.code}`),
       failed.length && `${failed.map(j => `parts/${j.name}.js`).join(' and ')} didn't get written (${failed.length > 1 ? 'those helpers' : 'that helper'} failed): write ${failed.length > 1 ? 'them' : 'it'} yourself now - FILE parts/<name>.js, then the code in a \`\`\` block.`,
-      problems.length && `Put together, the page doesn't run yet:\n${problems.join('\n')}\n(Line numbers are in assembled.html: the page as it was put together.)`,
+      problems.length && `Put together, the page doesn't run yet (page lines count the page with every part in place):\n${around(problems, built?.html).join('\n')}`,
       fit,
     ].filter(Boolean).join('\n\n');
     if (opts.fitThinking != null) await s.think(opts.fitThinking);
+    if (narrate && before) narrate("Now I'm putting it all together!"); // (something new: the longest wait)
     const second = await askLead(s, back, opts);
     return { text: `${first.text}\n${second.text}`, jobs: crew.jobs, fresh: Boolean(before) };
   } catch (err) {
@@ -678,7 +718,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   if (!fix) speakFirst({ history, text, alt, title }, sayNow).catch(err => log(`agents voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
 
   const known = s.turns > 0 && Boolean(page) && s.files === page;
-  const note = [sync(s, page), w.note].filter(Boolean).join(' ');
+  const files = sync(s, page);
+  const note = [w.note, files].filter(Boolean).join('\n\n');
   w.note = '';
   const creationLook = page ? p.versions.filter(x => x.look).at(-1)?.look || look : look;
   // What the creation was asked for (kept across turns; the first request after a restart).
@@ -692,7 +733,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   const progress = (n = 0, crew = helpers) => {
     chars += n;
     helpers = crew;
-    emit({ type: 'progress', chars, helpers: crew.jobs.length, helpersDone: crew.done, team: true, leads: 1 });
+    emit({ type: 'progress', chars, helpers: crew.jobs.length, helpersDone: crew.done, team: true, leads: 1, parts: crew.jobs.map(j => ({ emoji: j.emoji || '', done: j.state !== 'writing' })) });
   };
   progress();
   const prompt = [
@@ -704,7 +745,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   ].filter(Boolean).join('\n\n');
   let reply;
   try {
-    reply = await leadTurn(s, prompt, { about, fit: page ? FIT_CHANGE : FIT_NEW, quick: true, pageNow: page || '', onProgress: progress, fitThinking: lead().thinking.fit, priority: true, timeoutSec: Math.max(config().timeoutSec, 360), stallSec: 120 });
+    reply = await leadTurn(s, prompt, { about, fit: page ? FIT_CHANGE : FIT_NEW, quick: true, pageNow: page || '', onProgress: progress, narrate: fix ? null : text => emit({ type: 'narrate', text }), fitThinking: lead().thinking.fit, priority: true, timeoutSec: Math.max(config().timeoutSec, 360), stallSec: 120 });
   } finally {
     over = true;
   }
@@ -722,9 +763,8 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   }
   let problems = await problemsIn(built);
   if (problems.length) {
-    fs.writeFileSync(path.join(s.dir, 'assembled.html'), built.html || '');
     log(`agents: page doesn't run (${problems.join('; ').slice(0, 160)}), asking it to fix that`);
-    await askLead(s, `Before it's shown: the page doesn't run -\n${problems.join('\n')}\n(Line numbers are in assembled.html: the page as it was put together - Read it if you need them.) Fix just that, with FIX blocks.`, { priority: true, timeoutSec: 180, stallSec: 90 }).catch(() => null);
+    await askLead(s, `Before it's shown: the page doesn't run (page lines count the page with every part in place) -\n${around(problems, built.html).join('\n')}\nFix just that, with FIX blocks.`, { priority: true, timeoutSec: 180, stallSec: 90 }).catch(() => null);
     built = assemble(s.dir);
     problems = await problemsIn(built);
     if (!built?.html) throw new Error('its page is gone');
@@ -754,16 +794,14 @@ function running(report, shot) {
   const r = report || {};
   const slow = r.fps != null && r.fps < 30 ? '\nIf that feels slow, make each frame lighter - never by taking away what the look asked for.' : '';
   return `<how_it_is_running>\nRunning at ${r.fps ?? '?'} frames per second${r.canvas ? ` on a ${r.canvas} canvas` : ''}.${slow}\nErrors while running: ${r.errors?.length ? r.errors.slice(-5).join(' | ') : 'none'}\n</how_it_is_running>\n\n${
-    shot ? `A screenshot of it right now is in the file ${shot} - look at it first (with the Read tool).` : 'There is no screenshot, so judge from the files.'
+    shot ? 'A screenshot of it right now is attached - look at it first.' : 'There is no screenshot, so judge from the files.'
   }`;
 }
 
-function saveScreenshot(dir, dataUrl) {
-  const m = /^data:image\/(jpeg|png);base64,(.+)$/.exec(dataUrl || '');
-  if (!m) return null;
-  const file = path.join(dir, `screenshot-${Date.now()}.${m[1] === 'png' ? 'png' : 'jpg'}`);
-  fs.writeFileSync(file, Buffer.from(m[2], 'base64'));
-  return file;
+// A screenshot (a data: URL from the app), as a picture in the lead's message.
+function picture(dataUrl) {
+  const m = /^data:(image\/(?:jpeg|png));base64,(.+)$/.exec(dataUrl || '');
+  return m ? { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } } : null;
 }
 
 const madeByCrew = (p, version) => {
@@ -789,15 +827,16 @@ export async function check({ projectId, version, report, screenshot }) {
   };
   w.checking = true;
   let before = null;
-  const shot = saveScreenshot(s.dir, screenshot);
+  const shot = picture(screenshot);
   try {
-    const note = [sync(s, page), w.note].filter(Boolean).join(' ');
+    const files = sync(s, page);
+    const note = [w.note, files].filter(Boolean).join('\n\n');
     before = snapshot(s.dir);
     const rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
     const grow = w.grow;
     const prompt = [
       note ? `${historyNote(p.history)}\n\n${note}` : 'Here it is, running - the kid has been playing with it.',
-      running(report, shot && path.basename(shot)),
+      running(report, shot),
       grow ? GROW : LOOK,
       "Keep it the kid's creation: don't change what they chose, keep the controls and the KB.keep names.",
     ].filter(Boolean).join('\n\n');
@@ -807,7 +846,7 @@ export async function check({ projectId, version, report, screenshot }) {
     w.note = '';
     w.tries++;
     // (Its helpers write fuller parts while the kid plays.)
-    const reply = await leadTurn(s, prompt, { about: () => rules, fit: FIT_PASS, quick: false, pageNow: page, timeoutSec: 600, stallSec: 150, kind: 'polish' });
+    const reply = await leadTurn(s, shot ? [{ type: 'text', text: prompt }, shot] : prompt, { about: () => rules, fit: FIT_PASS, quick: false, pageNow: page, timeoutSec: 600, stallSec: 150, kind: 'polish' });
     const why = field(reply.text, 'WHY', true) || 'made it better';
     const done = () => {
       w.passes++;
@@ -831,8 +870,7 @@ export async function check({ projectId, version, report, screenshot }) {
     };
     let probs = await worse(built);
     if (probs && !stale()) {
-      fs.writeFileSync(path.join(s.dir, 'assembled.html'), built.html);
-      await askLead(s, `With your changes in, the page doesn't run: ${probs.slice(0, 3).join(' | ')}\n(Line numbers are in assembled.html - Read it if you need them.) Fix just that, with FIX blocks.`, { timeoutSec: 180, stallSec: 90, kind: 'polish' }).catch(() => null);
+      await askLead(s, `With your changes in, the page doesn't run (page lines count the page with every part in place):\n${around(probs.slice(0, 3), built.html).join('\n')}\nFix just that, with FIX blocks.`, { timeoutSec: 180, stallSec: 90, kind: 'polish' }).catch(() => null);
       built = assemble(s.dir) || built;
       probs = await worse(built);
     }
@@ -858,7 +896,6 @@ export async function check({ projectId, version, report, screenshot }) {
     return { skipped: err.message === 'interrupted' ? 'stale' : 'failed' };
   } finally {
     w.checking = false;
-    if (shot) fs.rmSync(shot, { force: true });
   }
 }
 
@@ -869,9 +906,9 @@ export function takenBack({ projectId, version, error }) {
   if (w.lastPass?.version !== version) return;
   if (session?.projectId === projectId && w.lastPass.before) {
     restore(session.dir, w.lastPass.before);
-    session.files = assemble(session.dir)?.html ?? null;
+    session.files = null; // (it's shown the files as they are again)
   }
-  w.note = `Your last changes were taken back: with them in, it crashed when it was tried (${String(error || '').slice(0, 200)}).`;
+  w.note = `Your last changes were taken back: with them in, it crashed when it was tried (${String(error || '').slice(0, 200)}). The files are as they were before them, as shown here.`;
   if (w.lastPass.grow) w.grow = true;
   w.passes = Math.max(0, w.passes - 1);
   w.lastPass = null;
