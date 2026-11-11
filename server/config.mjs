@@ -69,18 +69,19 @@ export const DEFAULTS = {
     checker: { model: '', effort: 'medium' },
     polisher: { model: '', effort: 'high' },
     tester: { model: '', effort: 'medium' },
-    // agents: true (the default) builds team mode the agent way (server/agents.mjs): one lead Claude
-    // that keeps the creation in mind and hands its parts to helpers (subagents), then makes them fit.
-    // false: team mode's usual way. agentLead is
-    // the lead (model, effort and args as for a role; thinking: how long it may think while the kid
-    // waits, and when it looks its creation over); agentHelper.model is the helpers' model, as an alias
-    // (sonnet, opus, haiku or fable: the Agent tool takes no full model names).
+    // agents: true (the default) builds team mode the agent way: one lead Claude that keeps the
+    // creation in mind and hands its parts to helpers, then makes them fit. false: team mode's usual
+    // way. agentLead is the lead (model, effort and args as for a role; thinking: how long it may
+    // think while the kid waits, when it's handed the parts, and when it looks its creation over);
+    // agentHelper.model is the helpers' model, as an alias (sonnet, opus, haiku or fable: the Agent
+    // tool takes no full model names).
     agents: true,
-    // agentHelpers: who writes the agent way's parts. "direct": programs of Build Buddy's own, each
-    // started on its job the moment the lead has written it (server/crew.mjs). "subagents": Claude
-    // Code subagents the lead calls one after another (server/agents.mjs, as it was).
-    agentHelpers: 'subagents',
-    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, look: 10000 } },
+    // agentHelpers: who writes the agent way's parts. "direct" (the default): programs of Build
+    // Buddy's own, each started on its job the moment the lead has written it (server/crew.mjs) -
+    // something new appears in about two thirds of the time. "subagents": Claude Code subagents the
+    // lead calls one after another (server/agents.mjs, as it was).
+    agentHelpers: 'direct',
+    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, fit: 700, look: 10000 } },
     agentHelper: { model: 'sonnet' },
   },
   // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
