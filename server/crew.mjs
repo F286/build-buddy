@@ -93,13 +93,14 @@ You have no tools and need none - you know the files: you wrote page.html, you'r
 Your helpers each write one part file, all at the same time, so the kid gets it much sooner - but only if you hand the work out: every part file is written by a helper, never by you. A helper starts the moment its job line is written. It sees the page as it is at that moment, and its job - nothing else. So whatever your helpers need to know about the whole creation (the coordinates, the shared state, how the parts talk to each other) is a short comment in page.html's shared code, above the jobs. Your own writing is page.html, the jobs, and the fixes that make the parts fit. You are the one who knows the whole creation, so you make it one thing that works.
 
 ## Something new - start writing straight away
-Your whole reply is the TITLE line and then page.html in one \`\`\`html block - about 40-60 lines of your own, in this order:
+Your whole reply is the TITLE line and then page.html in one \`\`\`html block. Start with the TITLE line at once - the page's first comments are where you plan it, so don't think it through before you write. About 40-60 lines of your own, in this order:
 - \`<!doctype html>\`, a style that fills the window with no scrollbars, and one \`<script type="module">\` holding:
-- the shared code: every import any part needs, the palette and sizes, the shared state - the world's rules as a few plain numbers that one place updates every frame - the shared input object, and \`const keep = KB.keep({ ... })\` with every field the kid would miss when the page changes;
+- the shared code, kept short - your helpers are waiting for it, so only what the parts go by (what only MAIN needs comes after the jobs). Its first line is \`// ASKED: <each thing the kid asked for, one after another, in their words>\`. Then every import any part needs, the palette and sizes, the shared state - the world's rules as a few plain numbers that one place updates every frame - the shared input object, and \`const keep = KB.keep({ ... })\` with every field the kid would miss when the page changes;
 - a job line for each part, the biggest job first (its helper starts first): 5 to 7 small parts, similar in size, about 25-40 lines each (for example: the rules, the place, the star, the other characters, the effects, the sounds) - the kid waits for the slowest one, so split anything big (the star, a track, a whole scene, effects and sounds) into two parts. Each job is one line:
   \`// @part <name> ${TAG}: ${JOB}\`
   (The tag in brackets is shown and said to the kid while they wait: "I'm making the monster truck!") A helper writes about 30 lines in the time the kid can wait, and writes everything its job names - so name at most three things it does, in a job line of 300 characters at most, and keep the shared code to what the parts need. Extras come when you grow it, after the kid sees it.
 - MAIN: it makes the page's elements, creates everything by calling the parts exactly as their jobs say, runs the one animation loop (dt and t in seconds, dt at most 0.05) and turns the arrow keys, taps and drags into the shared input object.
+Plan it for a ${config().kidAge}-year-old's first ten seconds, and say so in the jobs it touches: every thing they asked for is on the first screen, the star whole and big; an arrow key moves the star the way it points on the screen (left goes left, up goes up - never turn-and-go steering) and a quick tap does something every time; and the main thing they asked for happens however they go at it, not only when they get it just right (the truck crushes the cars it drives into, too, not only the ones it lands on).
 Stop after the block. When your helpers are done you're handed every part as they wrote it, and you make it one creation that works - with FIX blocks - and end with DONE.
 
 ## A change to what's there
@@ -688,8 +689,8 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
   }
 }
 
-const FIT_NEW = `Now make it one creation that works. Go through what the kid asked for, thing by thing: is each one there, in plain view - and does what they wanted to happen really happen when this code runs, from the key or the tap, through the parts, to the screen? Fix what's missing or wouldn't happen, any name or call that doesn't match, anything that would crash or doesn't fit the plan or the look - with FIX blocks, in the part or in page.html. Change only what needs it - the kid is waiting - then end with DONE.`;
-const FIT_CHANGE = `Now make it fit: is everything the kid just asked for there and working, with what was there before - from the key or the tap, through the parts, to the screen? Fix any name or call that doesn't match and anything missing or that would crash, with FIX blocks. Then end with DONE.`;
+const FIT_NEW = `Now make it one creation that works. Go through your ASKED line, thing by thing: is each one there, on the first screen, big enough to see - and does what they wanted to happen really happen when this code runs, from the key or the tap, through the parts, to the screen? Then the kid's first ten seconds: is the star whole on the screen from the start; does an arrow key move it the way it points, and a quick tap do something; and does the main thing happen however a 5-year-old goes at it, not only when they get it just right? Fix what's missing or wouldn't happen, any name or call that doesn't match, anything that would crash when it runs (a name nothing defines, a radius or size that can go below zero) or doesn't fit the plan or the look - with FIX blocks, in the part or in page.html. Change only what needs it - the kid is waiting - then end with DONE.`;
+const FIT_CHANGE = `Now make it fit: is everything the kid just asked for there - where they'll see it without looking for it - and working, with what was there before, from the key or the tap, through the parts, to the screen? Fix any name or call that doesn't match and anything missing or that would crash when it runs (a name nothing defines, a radius or size that can go below zero), with FIX blocks. Then end with DONE.`;
 const FIT_PASS = `Now make what they wrote fit: fix any name or call that doesn't match and anything missing or that would crash, with FIX blocks. Then end with the WHY line.`;
 
 // ---------------------------------------------------------------------------------------------
@@ -736,8 +737,15 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     emit({ type: 'progress', chars, helpers: crew.jobs.length, helpersDone: crew.done, team: true, leads: 1, parts: crew.jobs.map(j => ({ emoji: j.emoji || '', done: j.state !== 'writing' })) });
   };
   progress();
+  // (It wrote page.html turns ago and has changed it since: with it in front of it, its FIX blocks'
+  // FINDs fit. The parts it's shown when they're written.)
+  let pageFile = '';
+  try {
+    if (page && !files) pageFile = `page.html, as it is now:\n${fs.readFileSync(path.join(s.dir, 'page.html'), 'utf8').trimEnd()}`;
+  } catch {}
   const prompt = [
     page ? note || (known ? '' : 'Your folder holds the creation as it is.') : 'The screen is blank - nothing has been built yet: your folder is empty.',
+    pageFile,
     !fix && (page ? `If this turns into a fresh new page, try this look, unless the kid asked for something else: ${look}.` : `For this new creation, try this look, unless the kid asked for something else: ${look}.`),
     !known && historyNote(history),
     fix ? `The page just crashed with this problem:\n${fix}\nFix it (FIX blocks) without changing anything else. Keep DONE very short.` : `The kid just said: "${text}"`,
