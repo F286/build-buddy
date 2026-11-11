@@ -396,6 +396,9 @@ class JobReader {
     this.text = '';
     this.at = 0; // read up to here (whole lines)
     this.block = null; // where the page's block began (its first line), while inside it
+    this.fence = false; // an html block has begun: its first line shows whether it's a page
+    this.other = false; // inside some other fenced block
+    this.fixing = false; // inside a FIX block's FIND/REPLACE
     this.page = null; // the page of something new, once its block has closed
     this.names = new Set();
   }
@@ -415,10 +418,24 @@ class JobReader {
   line(l, from, to) {
     if (this.page != null && this.block == null) return this.handOut(l); // (after the page)
     if (this.block == null) {
-      // The page of something new: an html block (or a bare page).
-      if (/^[ \t]*```html\b/i.test(l)) [this.block, this.fenced] = [to + 1, true];
-      else if (/^[ \t]*<!doctype html/i.test(l)) [this.block, this.fenced] = [from, false];
-      else return this.handOut(l);
+      // Inside a FIX block, or some other fenced block (a whole file, a snippet): nothing in it counts.
+      if (this.fixing || this.other) {
+        if (this.fixing ? /^[ \t]*>{5,9} ?REPLACE\b/.test(l) : /^[ \t]*```[ \t]*$/.test(l)) this.fixing = this.other = false;
+        return;
+      }
+      if (/^[ \t]*<{5,9} ?FIND\b/.test(l)) return void (this.fixing = true);
+      const whole = /^[ \t]*<(!doctype html|html\b)/i.test(l);
+      // An html block: the page of something new, if a whole page is what it holds.
+      if (this.fence) {
+        if (!l.trim()) return;
+        this.fence = false;
+        if (!whole) return void (this.other = !/^[ \t]*```[ \t]*$/.test(l));
+        [this.block, this.fenced] = [from, true];
+        return this.onPage();
+      }
+      if (/^[ \t]*```/.test(l)) return void (/^[ \t]*```html\b/i.test(l) ? (this.fence = true) : (this.other = true));
+      if (!whole) return this.handOut(l);
+      [this.block, this.fenced] = [from, false]; // (a bare page, without the block around it)
       return this.onPage();
     }
     if (this.fenced ? /^[ \t]*```[ \t]*$/.test(l) : /<\/html>[ \t]*$/i.test(l)) {
@@ -985,3 +1002,6 @@ export async function repair({ version, errors, keep, accept = false }) {
     w.repairing = false;
   }
 }
+
+// (For server/crew.test.mjs.)
+export { JobReader, changesIn, fixed, applyReply, codeOf, tagOf };

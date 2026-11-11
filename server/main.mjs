@@ -70,6 +70,7 @@ function publicConfig() {
     team: Boolean(c.team.enabled),
     solo: Boolean(c.solo?.enabled),
     agents: Boolean(c.team.agents),
+    agentHelpers: c.team.agentHelpers === 'subagents' ? 'subagents' : 'direct', // (who writes the agent way's parts)
     teamActive: team.enabled() && !solo.enabled(),
     soloActive: solo.enabled(),
     agentsActive: ai.agentWay(),
@@ -275,6 +276,7 @@ const routes = {
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
     if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
     if (typeof b.agents === 'boolean') patch.team = { ...patch.team, agents: b.agents };
+    if (['direct', 'subagents'].includes(b.agentHelpers)) patch.team = { ...patch.team, agentHelpers: b.agentHelpers };
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };
