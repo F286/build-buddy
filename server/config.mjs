@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const DATA = path.join(ROOT, 'data');
+// (KIDBUILD_DATA: another folder for everything Build Buddy keeps - for trying things side by side.)
+export const DATA = process.env.KIDBUILD_DATA ? path.resolve(process.env.KIDBUILD_DATA) : path.join(ROOT, 'data');
 const FILE = path.join(ROOT, 'config.json');
 
 export const DEFAULTS = {
@@ -75,6 +76,10 @@ export const DEFAULTS = {
     // waits, and when it looks its creation over); agentHelper.model is the helpers' model, as an alias
     // (sonnet, opus, haiku or fable: the Agent tool takes no full model names).
     agents: true,
+    // agentHelpers: who writes the agent way's parts. "direct": programs of Build Buddy's own, each
+    // started on its job the moment the lead has written it (server/crew.mjs). "subagents": Claude
+    // Code subagents the lead calls one after another (server/agents.mjs, as it was).
+    agentHelpers: 'subagents',
     agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, look: 10000 } },
     agentHelper: { model: 'sonnet' },
   },

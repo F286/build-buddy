@@ -1001,6 +1001,8 @@ export function helperCrew({ page, text, alt, look, signal, tally, progress = ()
 export const warmHelpers = (count = maxHelpers(), ms = WARM_MS, kit = false) => keepWarm('helper', helperSystem(kit), count, ms);
 
 export { PlanReader, codeOf, applyEditsWithFixer, fix as fixPage, EDIT_FORMAT };
+// (The agent way's direct helpers - crew.mjs - are asked, and kept started and waiting, as any role is.)
+export { ask as askRole, keepWarm as keepRoleWarm };
 
 // ---------------------------------------------------------------------------------------------
 // One build by the team. Resolves like the classic way does: { say, done, title, emoji, html,

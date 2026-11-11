@@ -23,6 +23,7 @@ import { Session } from './solo.mjs';
 import { leadBrain } from './bins.mjs';
 import { syntaxErrors, blankProblems, speakFirst, warmVoice, polishPasses as teamPolish } from './team.mjs';
 import * as agyAgents from './agy-agents.mjs';
+import * as crew from './crew.mjs';
 
 // The agent way is team mode with team.agents on (Claude only; solo mode comes first) - or, when
 // Gemini (agy) leads, how it builds unless agy.way is "classic".
@@ -280,6 +281,7 @@ function makeWay(s) {
 
 export function warm() {
   if (leadBrain() === 'agy') return agyAgents.warm();
+  if (crew.on()) return crew.warm(); // (its helpers are Build Buddy's own programs: crew.mjs)
   if (!enabled()) return { warm: 0 };
   const before = session;
   try {
@@ -292,6 +294,7 @@ export function warm() {
 
 export function stop() {
   agyAgents.stop();
+  crew.stop();
   session?.end();
   session = null;
 }
@@ -383,6 +386,7 @@ async function problemsIn(built) {
 
 export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), last = false }, emit, state) {
   if (leadBrain() === 'agy') return agyAgents.build({ page, history, text, alt, fix, title, look, last }, emit, state);
+  if (crew.on()) return crew.build({ page, history, text, alt, fix, title, look }, emit, state);
   const t0 = Date.now();
   const secs = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   const p = store.currentProject();
@@ -528,6 +532,7 @@ function saveScreenshot(dir, dataUrl) {
 
 export async function check({ projectId, version, report, screenshot }) {
   if (leadBrain() === 'agy') return agyAgents.check({ projectId, version, report, screenshot });
+  if (crew.on()) return crew.check({ projectId, version, report, screenshot });
   if (!enabled() || config().team.check === false) return { skipped: 'off' };
   let p = store.currentProject();
   if (p.id !== projectId || p.current !== version || isBusy() || !madeByAgents(p, version)) return { skipped: 'stale' };
@@ -624,6 +629,7 @@ export async function check({ projectId, version, report, screenshot }) {
 // /api/drop-fix): its files go back to how they were, it's told why, and a lost grow happens again.
 export function takenBack({ projectId, version, error }) {
   if (leadBrain() === 'agy') return agyAgents.takenBack({ projectId, version, error });
+  if (crew.on()) return crew.takenBack({ projectId, version, error });
   const w = workFor(projectId);
   if (w.lastPass?.version !== version) return;
   if (session?.projectId === projectId && w.lastPass.before) {
@@ -644,6 +650,7 @@ const proposals = new Map();
 
 export async function repair({ version, errors, keep, accept = false }) {
   if (leadBrain() === 'agy') return agyAgents.repair({ version, errors, keep, accept });
+  if (crew.on()) return crew.repair({ version, errors, keep, accept });
   let p = store.currentProject();
   const v = p.versions.find(x => x.n === version);
   if (!enabled() || p.current !== version || v?.backend !== 'claude agents') return { skipped: 'stale' };
