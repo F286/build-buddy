@@ -199,20 +199,24 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
 // body taken away from under it, a rope cut), what it is tied to pulls it, or gravity changes.
 // What touches nothing is never held.
 // (What it costs: what gets less than 5 px in a second stops there - a marble on a slope of up to
-// half a degree, which plain Matter has rolling at 50 px a second ten seconds later, and a ball
-// with friction on one of up to 5 degrees, which plain Matter moves a pixel or two a second - and
-// a push that would set a held body going slower than 12 px a second can be lost: what comes up
-// against it has to come at 24 px a second if it weighs the same, faster the lighter it is, and
-// a block set down softly on the end of a plank balanced on another may not tip it.
-// Engine.create({ settling: false }) is plain Matter, and so is an engine with Matter's own
-// sleeping switched on. test/matter.html has the tests.)
+// half a degree, which plain Matter has rolling at 50 px a second ten seconds later (with the air
+// friction the building rules give what must roll, 0.002), and a ball with friction on one of up
+// to 5 degrees, which plain Matter moves a pixel or two a second - and a push that doesn't set a
+// held body going at 12 px a second in one step can be lost, since it starts every step from
+// rest: what comes up against it has to come at 24 px a second if it weighs the same, faster the
+// lighter it is (or, turning on the spot, at 14 degrees a second, however big it is), and a
+// weight that would move it little by little may not move it at all - a block set down softly
+// on the end of a plank balanced on another doesn't tip it, a ball let into the dip between two
+// others on ice doesn't part them. Engine.create({ settling: false }) is plain Matter, and so is
+// an engine with Matter's own sleeping switched on. test/matter.html has the tests.)
 const REST = 60; // sixtieths of a second a body must be at rest before it is held: a second
 const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step all that time,
 const FAR = 5, FAR_TURN = 0.03; // and no further than this from where that began (or it is going somewhere, slowly);
 const SPOT = 0.5, SPOT_TURN = 0.01; // or shaking on the spot: no further than this from where it was
 const PUSH = 0.5, PUSH_NO_GRAVITY = 0.05, PUSH_TURN = 0.005; // pulled by what it is tied to: faster than this share of one step of free fall (px a step where nothing falls), or radians a step
 const HIT = 1, HIT_TURN = 0.02; // just hit: px and radians a step
-const states = new WeakMap(); // body -> { x, y, angle, slow, fromX, fromY, fromAngle, spot, held, rested, step, at, tied, pace, turn, came, hit }
+const SOON = 3; // sixtieths of a second in which something on the move has left its spot (SPOT / SLOW, and one more)
+const states = new WeakMap(); // body -> { x, y, angle, slow, fromX, fromY, fromAngle, spot, held, rested, step, at, tied, pace, turn, came }
 const handled = new WeakSet(); // bodies the page itself has just moved, pushed or changed
 const pulls = new WeakMap(); // engine -> its gravity as last seen
 const settled = new WeakMap(); // engine -> the step it was last settled in
@@ -227,8 +231,8 @@ for (const name of ['setPosition', 'setAngle', 'setVelocity', 'setAngularVelocit
     return was.apply(this, arguments);
   };
 }
-const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, fromX: 0, fromY: 0, fromAngle: 0, spot: 0, held: false, rested: null, step: 0, at: 0, tied: 0, pace: 0, turn: 0, came: false, hit: 0 }).get(body);
-let now = 0; // (counts the steps settled: `step` is the last one a body was settled in, `at` the last one it touched something in, `tied` the last one a rope held it in, `hit` the last one it was hit in)
+const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, fromX: 0, fromY: 0, fromAngle: 0, spot: 0, held: false, rested: null, step: 0, at: 0, tied: 0, pace: 0, turn: 0, came: false }).get(body);
+let now = 0; // (counts the steps settled: `step` is the last one a body was settled in, `at` the last one it touched something in, `tied` the last one a rope held it in)
 const ends = (it, body) => (it.bodyA && (it.bodyA.parent || it.bodyA)) === body || (it.bodyB && (it.bodyB.parent || it.bodyB)) === body;
 function settle(engine) {
   // (Switched off: what was held is forgotten, or it would jump back when switched on again.)
@@ -300,7 +304,12 @@ function settle(engine) {
           s.fromAngle = body.angle;
         }
         s.slow += sixtieths;
-      } else s.slow = 0;
+      } else {
+        // (At rest, and set going just as its second in one place was up, too late to leave its
+        // spot before a hold would begin: that second begins again, or the hit would be lost.)
+        if (s.slow * 2 >= REST && s.spot + SOON + sixtieths >= REST) s.spot = 0;
+        s.slow = 0;
+      }
       if (Math.abs(body.position.x - s.x) > SPOT || Math.abs(body.position.y - s.y) > SPOT || Math.abs(body.angle - s.angle) > SPOT_TURN) {
         s.spot = 0;
         s.x = body.position.x;
@@ -334,47 +343,40 @@ function settle(engine) {
     }
     return around.get(body);
   };
-  // Something on the move (fast enough to see, and getting somewhere) hits what it touches.
+  // Something on the move (fast enough to see, and getting somewhere) lets go of what it touches.
   const moving = body => {
     const s = states.get(body);
     return s && !s.held && s.slow === 0 && s.spot < 3;
   };
   // So does something that came into this step on the move and was stopped in it, if that set
-  // going what it touches, or anything held that leans on that: a ball that hits one of its own
-  // weight and bounce stops dead, and of a row of them only the far one leaves. (A box set down on
-  // a wall sets nothing going, and the wall stays held: left alone, what is held gets no speed
-  // at all from a step.)
+  // going (as fast as "on the move") what it touches, or anything held that leans on that: a ball
+  // that hits one of its own weight and bounce stops dead, and of a row of them only the far one
+  // leaves. (A box set down on a wall sets nothing going, and the wall stays held: left alone,
+  // what is held gets no speed at all from a step.)
   const stopped = body => {
     const s = states.get(body);
     return s && !s.held && s.came && s.spot < 3;
   };
-  let calm = null; // bodies around which nothing was set going, as found in this step
+  let calm = null; // held bodies around which nothing was set going, as found in this step
   const shaken = body => {
     if (calm && calm.has(body)) return false;
     const reached = new Set([body]);
     for (const one of reached) {
-      // (Set going: some point of it is as fast as something on the move - a plank's end, when
-      // the plank is set turning.)
-      if (one.speed + one.angularSpeed * Math.hypot(one.bounds.max.x - one.bounds.min.x, one.bounds.max.y - one.bounds.min.y) / 2 >= SLOW) return true;
+      if (one.speed >= SLOW || one.angularSpeed >= SLOW_TURN) return true;
       for (const other of aroundOf(one)?.bodies || []) if (other && states.get(other)?.held) reached.add(other);
     }
     if (calm) for (const one of reached) calm.add(one);
     else calm = reached;
     return false;
   };
-  // What is hit is let go if it is held, and no hold begins on it in this step. (A hit handed on
-  // to something held through a body that is not held yet is still lost: letting go for that too
-  // made a castle settle crooked, with all that stops and starts in it while it comes to rest.)
-  const hits = (one, other) => {
-    const s = states.get(other);
-    if (!s || !(moving(one) || (stopped(one) && shaken(other)))) return;
-    if (s.held) loose.push(other);
-    else s.hit = now;
-  };
+  // (A hit handed on to something held through a body that is not held yet is still lost:
+  // letting go for that too made a castle settle crooked, with all that stops and starts in it
+  // while it comes to rest.)
   for (const pair of pairs) {
     if (!pair.isActive || pair.isSensor) continue;
-    hits(pair.bodyA.parent, pair.bodyB.parent);
-    hits(pair.bodyB.parent, pair.bodyA.parent);
+    const a = pair.bodyA.parent, b = pair.bodyB.parent;
+    if (states.get(b)?.held && (moving(a) || (stopped(a) && shaken(b)))) loose.push(b);
+    else if (states.get(a)?.held && (moving(b) || (stopped(b) && shaken(a)))) loose.push(a);
   }
   // What is let go takes along everything it touches or is tied to, and everything those do.
   const free = new Set(loose);
@@ -407,7 +409,7 @@ function settle(engine) {
         }
       }
       // (Hit in this very step: its place hasn't changed yet, but it is not at rest.)
-      if (s.hit === now || body.speed > HIT || body.angularSpeed > HIT_TURN) {
+      if (body.speed > HIT || body.angularSpeed > HIT_TURN) {
         s.slow = s.spot = 0;
         continue;
       }

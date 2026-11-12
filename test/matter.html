@@ -623,7 +623,7 @@ scene('a row of five balls settled on ice, each touching the next, hit at one en
   step(engine, 120);
   return R(row[4].position.x - from);
 }, moved(100, 8));
-scene('seen from above (no gravity), two balls settled against a cushion and each other, one of them hit along the cushion by a third of its weight and bounce: how far it has gone 2 s later (px)', engine => {
+scene('seen from above (no gravity), two balls settled against a cushion and each other, one of them hit along the cushion by a third ball of the same weight and bounce: how far it has gone 2 s later (px)', engine => {
   engine.gravity.y = 0;
   const bouncy = { restitution: 1, friction: 0, frictionAir: 0, frictionStatic: 0 };
   const cushion = B.rectangle(640, 420, 1200, 40, { isStatic: true, restitution: 1, friction: 0 });
@@ -636,7 +636,7 @@ scene('seen from above (no gravity), two balls settled against a cushion and eac
   step(engine, 120);
   return R(Math.hypot(one.position.x - from.x, one.position.y - from.y));
 }, moved(300, 12));
-// (A hold doesn't begin on what is hit in that very step.)
+// (What is set going just as its second of rest is up is not held: that second begins again.)
 scene('a ball on ice hit by one of its own weight around the step in which it would begin to be held (nine timings, a quarter of a step apart): how far it has gone a second after, summed (px)', first => {
   let sum = 0;
   for (let wait = 59; wait <= 61; wait += 0.25) {
@@ -652,6 +652,21 @@ scene('a ball on ice hit by one of its own weight around the step in which it wo
   }
   return R(sum);
 }, moved(200, 10));
+scene('three balls in a row on ice, each touching the next, hit softly at one end around the step in which they would begin to be held (three timings, a quarter of a step apart): how far the far ball has gone a second after, summed (px)', first => {
+  let sum = 0;
+  for (const wait of [59.75, 60, 60.25]) {
+    const engine = Engine.create(first.settling === false ? { settling: false } : undefined);
+    ground(engine);
+    Composite.allBodies(engine.world)[0].friction = 0;
+    const icy = { friction: 0, frictionAir: 0, frictionStatic: 0, restitution: 1 };
+    const row = Array.from({ length: 3 }, (_, i) => B.circle(600 + i * 39.5, G - 20, 20, icy)), cue = B.circle(560 - wait, G - 20, 20, icy);
+    Composite.add(engine.world, [...row, cue]);
+    Body.setVelocity(cue, { x: 1, y: 0 });
+    step(engine, Math.ceil(wait) + 60);
+    sum += row[2].position.x - 679;
+  }
+  return R(sum);
+}, (on, off) => off > 30 && on > off * 0.8); // (the hit takes two steps to arrive, and what the first one brings may be lost: but not all of it, as when one ball of the row is held and the next is not)
 // (And what lands on something built and is stopped by it sets nothing going: the building stays held.)
 scene('a small box set down on a thin wall that has stood 4 s: bricks that move at all in the second after', engine => {
   ground(engine);
