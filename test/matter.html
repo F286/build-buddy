@@ -61,6 +61,7 @@ const held = bodies => bodies.filter(b => b.speed === 0 && b.angularSpeed === 0)
 const scenes = [];
 const scene = (name, run, ok) => scenes.push({ name, run, ok });
 const same = (tolerance = 1) => (on, off) => Math.abs(on - off) <= tolerance;
+const moved = (least, tolerance) => (on, off) => off >= least && Math.abs(on - off) <= tolerance; // the same, and plain Matter.js really moved it
 
 // What's built stays built (plain Matter.js lets the castles fall, which is why this exists).
 for (const [name, make, settles = 5] of [['a castle of 40 px bricks', () => castle(40)], ['a castle of 30 px bricks', () => castle(30)], ['a wall of thin bricks', thinWall], ['a column of 14', () => column(14)], ['a column of 20 small blocks', () => column(20, 30)], ['a pile of 40 balls', pile, 15]]) {
@@ -583,6 +584,85 @@ scene('a block dragged with Matter\'s MouseConstraint, pressed against a wall in
   return R(block.position.y - y);
 }, same(5));
 
+// (In these the thing that hits is all but stopped by the hit itself, and what it hit must still go.)
+scene('a ball that hits a settled ball of its own weight, both perfectly bouncy, on ice (it stops dead itself): how far the settled one has gone 2 s later (px)', engine => {
+  ground(engine);
+  Composite.allBodies(engine.world)[0].friction = 0;
+  const bouncy = { restitution: 1, friction: 0, frictionAir: 0, frictionStatic: 0 };
+  const still = B.circle(600, G - 20, 20, bouncy), cue = B.circle(300, G - 20, 20, bouncy);
+  Composite.add(engine.world, still);
+  step(engine, 150);
+  Composite.add(engine.world, cue);
+  Body.setVelocity(cue, { x: 6, y: 0 });
+  step(engine, 120);
+  return R(still.position.x - 600);
+}, moved(300, 5));
+scene('a ball of half a settled ball\'s weight hits it on ice, both of bounce 0.5 (it stops dead itself): how far the settled one has gone 2 s later (px)', engine => {
+  ground(engine);
+  Composite.allBodies(engine.world)[0].friction = 0;
+  const bouncy = { restitution: 0.5, friction: 0, frictionAir: 0, frictionStatic: 0 };
+  const still = B.circle(600, G - 20, 20, bouncy), cue = B.circle(300, G - 20, 20, { ...bouncy, density: 0.0005 });
+  Composite.add(engine.world, still);
+  step(engine, 150);
+  Composite.add(engine.world, cue);
+  Body.setVelocity(cue, { x: 6, y: 0 });
+  step(engine, 120);
+  return R(still.position.x - 600);
+}, moved(150, 5));
+// (Matter's circle of radius 20 is a shape of 20 flat sides, 19.75 px from its middle: balls 40 px apart don't touch.)
+scene('a row of five balls settled on ice, each touching the next, hit at one end by a sixth, all perfectly bouncy: how far the ball at the far end has gone 2 s later (px)', engine => {
+  ground(engine);
+  Composite.allBodies(engine.world)[0].friction = 0;
+  const bouncy = { restitution: 1, friction: 0, frictionAir: 0, frictionStatic: 0 };
+  const row = Array.from({ length: 5 }, (_, i) => B.circle(500 + i * 39.4, G - 20, 20, bouncy)), cue = B.circle(200, G - 20, 20, bouncy);
+  Composite.add(engine.world, row);
+  step(engine, 150);
+  const from = row[4].position.x;
+  Composite.add(engine.world, cue);
+  Body.setVelocity(cue, { x: 6, y: 0 });
+  step(engine, 120);
+  return R(row[4].position.x - from);
+}, moved(100, 8));
+scene('seen from above (no gravity), two balls settled against a cushion and each other, one of them hit along the cushion by a third of its weight and bounce: how far it has gone 2 s later (px)', engine => {
+  engine.gravity.y = 0;
+  const bouncy = { restitution: 1, friction: 0, frictionAir: 0, frictionStatic: 0 };
+  const cushion = B.rectangle(640, 420, 1200, 40, { isStatic: true, restitution: 1, friction: 0 });
+  const one = B.circle(600, 380.3, 20, bouncy), other = B.circle(600, 340.9, 20, bouncy);
+  Composite.add(engine.world, [cushion, one, other]);
+  step(engine, 150);
+  const from = { ...one.position }, cue = B.circle(300, from.y, 20, bouncy);
+  Composite.add(engine.world, cue);
+  Body.setVelocity(cue, { x: 8, y: 0 });
+  step(engine, 120);
+  return R(Math.hypot(one.position.x - from.x, one.position.y - from.y));
+}, moved(300, 12));
+// (A hold doesn't begin on what is hit in that very step.)
+scene('a ball on ice hit by one of its own weight around the step in which it would begin to be held (nine timings, a quarter of a step apart): how far it has gone a second after, summed (px)', first => {
+  let sum = 0;
+  for (let wait = 59; wait <= 61; wait += 0.25) {
+    const engine = Engine.create(first.settling === false ? { settling: false } : undefined);
+    ground(engine);
+    Composite.allBodies(engine.world)[0].friction = 0;
+    const icy = { friction: 0, frictionAir: 0, frictionStatic: 0 };
+    const still = B.circle(600, G - 20, 20, icy), cue = B.circle(560 - wait, G - 20, 20, icy);
+    Composite.add(engine.world, [still, cue]);
+    Body.setVelocity(cue, { x: 1, y: 0 });
+    step(engine, Math.ceil(wait) + 60);
+    sum += still.position.x - 600;
+  }
+  return R(sum);
+}, moved(200, 10));
+// (And what lands on something built and is stopped by it sets nothing going: the building stays held.)
+scene('a small box set down on a thin wall that has stood 4 s: bricks that move at all in the second after', engine => {
+  ground(engine);
+  const wall = thinWall();
+  Composite.add(engine.world, wall);
+  step(engine, 240);
+  const top = wall[wall.length - 3], at = places(wall);
+  Composite.add(engine.world, B.rectangle(top.position.x, top.bounds.min.y - 6, 10, 10));
+  step(engine, 60);
+  return wall.filter((b, i) => b.position.x !== at[i].x || b.position.y !== at[i].y).length;
+}, on => on === 0);
 // The module's other mendings.
 scene('Engine.create() gives 10 position and 8 velocity passes, and a page can ask for others', () => {
   const a = Engine.create(), b = Engine.create({ positionIterations: 6, velocityIterations: 4 });
