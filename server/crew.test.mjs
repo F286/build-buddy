@@ -145,6 +145,8 @@ test("looseEnds: something heard that nothing tells", () => {
   assert.match(ends[0], /^parts\/crowd\.js hears 'crushed' with on\(\.\.\.\), which nothing tells \(told: 'crush'\)$/);
   // Told under a name worked out as it runs: it could be any of them, so nothing is said.
   assert.deepEqual(looseEnds({ ...FITS, 'parts/truck.js': "function makeTruck() { const kind = 'crush'; tell(kind, {}); return {}; }", 'parts/crowd.js': "function drawCrowd() {}\non('crushed', () => {});" }), []);
+  // Told through an object the page hands its parts (S.tell('crush')): told all the same.
+  assert.deepEqual(looseEnds({ ...FITS, 'parts/truck.js': "function makeTruck() { S.tell('crush', {}); keep.score++; return {}; }" }), []);
   // A page without the shared on and tell: its parts' own `on` calls are something else.
   assert.deepEqual(looseEnds({ 'page.html': WIRED().replace(/const hear.*\n/, ''), 'parts/truck.js': 'function makeTruck() { return {}; }', 'parts/crowd.js': "function drawCrowd() {}\non('y', () => {});" }), []);
 });
@@ -169,4 +171,14 @@ test('a change planned in the open: the PLAN line is no job, the PART lines afte
   assert.deepEqual(r.names, ['rival', 'ramp']);
   assert.deepEqual(r.jobs.map(j => j.again), [false, true]);
   assert.equal(r.pages, 0);
+});
+
+test('looseEnds: a color of the wrong kind for what draws with it', () => {
+  const page = kind => `<!doctype html>\n<script type="module">\nconst C = { sky: ${kind === 'text' ? "'#7fd0ff'" : '0x7fd0ff'}, red: ${kind === 'text' ? "'#ff5a4e'" : '0xff5a4e'}, size: 12 };\n// @part place: drawPlace(g) - the place\ndrawPlace(g);\n</script>`;
+  const phaser = 'function drawPlace(g) { g.fillStyle(C.red, 1).fillRect(0, 0, 9, 9); g.lineStyle(2, C.sky, 1); g.fillStyle(0x333333, 1); }';
+  const canvas = "function drawPlace(g) { g.fillStyle = C.red; g.fillRect(0, 0, 9, 9); g.strokeStyle = C.sky; g.fillStyle = '#333'; g.lineWidth = C.size; }";
+  assert.deepEqual(looseEnds({ 'page.html': page('number'), 'parts/place.js': phaser }), []);
+  assert.deepEqual(looseEnds({ 'page.html': page('text'), 'parts/place.js': canvas }), []);
+  assert.deepEqual(looseEnds({ 'page.html': page('text'), 'parts/place.js': phaser }), ['parts/place.js draws with colors of the wrong kind, which come out black: C.red is text, and Phaser draws with numbers (0xff8800); C.sky is text, and Phaser draws with numbers (0xff8800)']);
+  assert.deepEqual(looseEnds({ 'page.html': page('number'), 'parts/place.js': canvas }), ["parts/place.js draws with colors of the wrong kind, which come out black: C.red is a number, and a canvas draws with text ('#ff8800'); C.sky is a number, and a canvas draws with text ('#ff8800')"]);
 });

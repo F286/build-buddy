@@ -417,7 +417,8 @@ const HAND_OUT = /^[ \t>*_`-]*PART[ \t]+`?([\w-]+)`?[ \t]*(?:\[([^\]\n]*)\])?[ \
 
 // The loose ends between a page and its parts that no syntax check finds and that are plain to see in
 // the files - so the lead is told, rather than having to notice: something heard that nothing tells,
-// a keep field with no default, a function its job names that nothing defines.
+// a keep field with no default, a function its job names that nothing defines, a color of the wrong
+// kind for what draws with it (it comes out black).
 // files: { 'page.html': text, 'parts/<name>.js': text }.
 function looseEnds(files) {
   const page = files['page.html'] || '';
@@ -431,12 +432,14 @@ function looseEnds(files) {
   const out = [];
   // What's heard and never told (with the shared code's `on` and `tell`).
   if (/\bconst hear\b/.test(page)) {
-    const named = (word, text) => [...text.matchAll(new RegExp(`(?<![.\\w$])${word}\\(\\s*(['"\`])([^'"\`\\n]+)\\1`, 'g'))].map(m => m[2]);
-    const told = new Set(named('tell', all));
+    // (Heard with the bare on(...): sprite.on('pointerdown') is Phaser's. Told with tell(...) however
+    // it's reached - the page may hand it to its parts as S.tell.)
+    const named = (before, word, text) => [...text.matchAll(new RegExp(`(?<![${before}\\w$])${word}\\(\\s*(['"\`])([^'"\`\\n]+)\\1`, 'g'))].map(m => m[2]);
+    const told = new Set(named('', 'tell', all));
     // (Something told under a name worked out as it runs could be any of them: nothing to say then.)
-    const anyName = /(?<![.\w$])tell\(\s*[^'"`\s)]/.test(all);
+    const anyName = /(?<![\w$])tell\(\s*[^'"`\s)]/.test(all);
     for (const [rel, text] of anyName ? [] : each) {
-      const deaf = [...new Set(named('on', text))].filter(n => !told.has(n));
+      const deaf = [...new Set(named('.', 'on', text))].filter(n => !told.has(n));
       if (deaf.length) out.push(`${rel} hears ${deaf.map(n => `'${n}'`).join(' and ')} with on(...), which nothing tells${told.size ? ` (told: ${[...told].map(n => `'${n}'`).join(', ')})` : ''}`);
     }
   }
@@ -445,6 +448,18 @@ function looseEnds(files) {
   for (const [rel, text] of kept?.size && !kept.open ? each : []) {
     const missing = [...new Set([...text.matchAll(/(?<![.\w$])keep\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))].filter(n => !kept.has(n));
     if (missing.length) out.push(`${rel} uses ${missing.map(n => `keep.${n}`).join(' and ')}, which page.html's KB.keep({ ... }) has no default for`);
+  }
+  // A color of the wrong kind: Phaser's fillStyle(...) and lineStyle(...) take numbers (0xff8800),
+  // a canvas's fillStyle = ... takes text ('#ff8800'). The other kind draws black, with no error.
+  const kinds = new Map(); // 'C.red' -> 'text' | 'number', from the shared code's color lists
+  for (const [, name, body] of each[0]?.[1].matchAll(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*\{([^{}]*)\}/g) || []) {
+    for (const [, key, text, number] of body.matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*:\s*(?:(['"`])(?:#[0-9a-fA-F]{3,8}|rgba?\([^'"`]*|hsla?\([^'"`]*)\2|(0x[0-9a-fA-F]{3,8}))\s*(?=,|$)/g)) kinds.set(`${name}.${key}`, text ? 'text' : number ? 'number' : '');
+  }
+  for (const [rel, text] of kinds.size ? each : []) {
+    const wrong = new Set();
+    for (const [, args] of text.matchAll(/\.(?:fillStyle|lineStyle|setTint|setFillStyle|setStrokeStyle)\(([^()]*)\)/g)) for (const [ref] of args.matchAll(/[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*/g)) if (kinds.get(ref) === 'text') wrong.add(`${ref} is text, and Phaser draws with numbers (0xff8800)`);
+    for (const [, ref] of text.matchAll(/\.(?:fillStyle|strokeStyle|shadowColor)\s*=\s*([A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*)\s*(?=[;,)\n}]|$)/gm)) if (kinds.get(ref) === 'number') wrong.add(`${ref} is a number, and a canvas draws with text ('#ff8800')`);
+    if (wrong.size) out.push(`${rel} draws with colors of the wrong kind, which come out black: ${[...wrong].slice(0, 4).join('; ')}${wrong.size > 4 ? `; and ${wrong.size - 4} more` : ''}`);
   }
   // What a job says its part defines, that the page calls and nothing defines.
   for (const line of page.split('\n')) {
@@ -734,8 +749,10 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
 async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onProgress = () => {}, narrate = null, ...opts }) {
   const crew = makeCrew(s, about, { quick, onChange: n => onProgress(n, crew) });
   let before = null; // its reply is a whole new page: the files as they were (the folder starts again)
-  // (What its helpers are making, said to the kid once three of them are at it - or all, if fewer.)
+  // (What its helpers are making, said to the kid once three of them are at it - or, with fewer, a
+  // moment after the last one so far: a change's one or two helpers are named while they write.)
   let told = !narrate;
+  let soon = null;
   const announce = (all = false) => {
     const making = crew.jobs.map(j => j.words).filter(Boolean).slice(0, 3);
     if (told || !making.length || (!all && making.length < 3) || crew.done === crew.jobs.length) return;
@@ -743,7 +760,12 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
     narrate(`I'm making ${making.length > 1 ? `${making.slice(0, -1).join(', ')} and ${making.at(-1)}` : making[0]}!`);
   };
   const reader = new JobReader(
-    job => (crew.start(job, pageNow), announce()),
+    job => {
+      crew.start(job, pageNow);
+      announce();
+      clearTimeout(soon);
+      if (!told) soon = setTimeout(() => announce(true), 3000);
+    },
     () => {
       before = snapshot(s.dir);
       clear(s.dir);
@@ -788,6 +810,8 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
   } catch (err) {
     crew.stop();
     throw err;
+  } finally {
+    clearTimeout(soon);
   }
 }
 

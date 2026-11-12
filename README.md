@@ -420,30 +420,130 @@ instead, pick *A team of AIs at once* in the Ctrl+Shift+P panel, set `"team": { 
 - **One lead that remembers it.** A single `claude` program is started while the kid is still
   talking and keeps running between requests, like solo mode's. Sparky's first words still come
   from team mode's quick voice while it works.
-- **Helpers that write at the same time.** The lead plans the page and hands every part to a helper:
-  Claude Code subagents (Sonnet by default) that all write at once. The kid waits for the slowest
-  one, so parts are small (25 to 40 lines - extras come when it's grown) and the biggest goes out
-  first; a helper that goes silent for 90 s is stopped, and the lead does its job itself. Then it
-  reads what they wrote and makes it one creation that works - a name that doesn't match, a call
-  that's missing, a part that doesn't fit the plan - before the kid sees it.
+- **Helpers that start the moment their job is written.** The lead's reply is the page itself: the
+  shared code first (the names, sizes and numbers every part goes by, and how the parts tell each
+  other what happens), then one line for each part -
+  `// @part truck [🚚 the monster truck]: makeTruck(scene) → { update(dt, t) } - ...` - then the code
+  that runs them. Build Buddy reads the reply as it's written, and each of those lines starts a
+  helper at once, with the page as far as it's written and its job: a `claude` program of Build
+  Buddy's own (Sonnet by default), started while the kid was still talking, that answers with its
+  part's code and nothing else. The kid waits for the slowest one, so parts are small (25 to 40
+  lines - extras come when it's grown), the biggest goes out first, and a helper is told to start
+  writing at once (left to itself, Sonnet thinks for 10 to 20 s before the harder parts). One that
+  hasn't written a word after 8 s gets a second helper on the same job, and whichever finishes
+  first is used.
+- **The lead makes the parts one creation.** When its helpers are done it's handed every part in
+  one message, with anything Build Buddy can see is loose between them just by reading the files (a
+  function the page calls that no part defines, something a part listens for that nothing tells, a
+  progress field with no starting value, a color given as text to a library that draws with numbers
+  - which comes out black, with no error). It goes through what the kid asked for, thing by thing: is it there, on the first
+  screen, and does it really happen when this code runs - from the key or the tap, through the
+  parts, to the screen? Its fixes are part of its reply (`FIX parts/cars.js`, the lines to find, the
+  lines that replace them), and Build Buddy takes them into the files. The lead has no tools at
+  all: whatever it needs to see is put in front of it, so a check or a small change is one answer,
+  never a trip to read a file first.
+- **The kid sees and hears what's being made.** Each job carries a picture and a few words
+  (`[🚚 the monster truck]`): the pictures appear on the building card as the helpers start, each
+  one pops when its part is ready, and Sparky says "I'm making the monster truck, the row of cars
+  and the crowd!" about fifteen seconds in, then "Now I'm putting it all together!".
 - **The creation lives in files**, in its own folder: `page.html`, with a `// @part <name>` line
   where each part goes, and `parts/<name>.js` for each part. Build Buddy puts them together after
-  each turn. `rules.md` holds the rules every helper follows (Build Buddy writes it); the lead's
-  notes for its helpers (the shared names, how the parts talk to each other) are comments in
-  `page.html`'s shared code, so every helper reads them with the page.
+  each turn.
+- **Changes go the same way.** A small change is the lead's own, as FIX blocks, in about 7 s. For
+  several things at once or something big, its reply starts with `PART <name> [...]: <job>` lines -
+  for a new part, or for one that's written again - so their helpers write while the lead makes its
+  own changes to the page.
 - **Then it keeps working on it while the kid plays,** three times in the same session (one more
   than `team.polish`): it grows it into its full version, handing the additions out to helpers (who
   write fuller parts here than while the kid waited) and making them fit, then looks it over twice
   as a demanding parent would, fixing small things itself and handing out bigger ones (none with
-  `team.check: false`). The kid's changes go to it too.
+  `team.check: false`). It's shown a screenshot of the creation running each time. The kid's
+  changes go to it too.
 - **It stays the kid's creation.** If the page changes outside its files (undone, fixed by the
   overwatch), it's handed the page as it is; a pass that crashes when tried is taken back and its
   files are put back; and a change that keeps the creation's progress fields carries the kid's
   progress over, whatever the lead calls it.
 
-Measured blind on eight requests no prompt example mentions (a beehive, a marble run, a hamster with
-a wheel, a pirate ship, a caterpillar that turns into a butterfly, a treehouse with a slide, a
-basketball game and a bubble machine), each pair judged twice with the two shown in both orders:
+#### Why a lead with helpers works, and where its minute went
+
+Until now the lead's helpers were Claude Code's own subagents (still there: *The same team, the way
+it was* in the panel, or `"team": { "agentHelpers": "subagents" }`). With Opus leading, that was
+already the way of building that gave kids what they asked for. Timing it turn by turn on six
+requests of the kind kids make (a monster truck show, dinosaurs by a volcano, a town to drive
+around, a car wash, a toilet that fires poop at a dinosaur, a rocket visiting planets - each with
+five or six things asked for at once) shows why it works:
+
+- **One mind holds the whole creation.** The lead writes the page's skeleton and, in its comments,
+  what every part goes by: the coordinates, the shared numbers, what each part's code is called
+  with. Helpers who all read the same plan write parts that fit.
+- **It reads every part before the kid sees it.** In three of those six builds its check fixed
+  something no error message would ever report: a truck that jumped the cars and never crushed
+  them, a dinosaur drawn in the wrong place whose taps the volcano swallowed, aliens that stayed
+  behind when their planets moved.
+- **It remembers the code.** The same session wrote the page, so a small change is two exact edits
+  and takes 6 to 12 s - nothing is read again or written again.
+- **Opus leads well.** Its first word comes after about 3 s, without a long think first, and its
+  edits are exact. (It writes 236 characters a second; Sonnet writes 336 and Haiku 532, which is
+  why the helpers aren't Opus. Fable writes 212 after thinking for about 13 s first, every time:
+  fuller creations and a longer wait.)
+
+And where the time went - for the monster truck show, which took 70 s to appear: the lead thought
+for 8 s and wrote the page in 13; then it wrote a message to each of its five helpers, one after
+another, for 15 s (each helper started only when its own message was finished, then read two files
+before writing); the helpers needed 19 s more; and the lead's check took 14 s, in three round trips
+to read the files. The helpers were writing for about 20 of those 70 s. A big change had the same
+shape: the lead waited for its helper before making its own changes.
+
+Direct helpers keep the lead, its plan, its check and its memory, and take the waiting out: nobody
+waits to be asked, nothing is read from a file, and the check is one answer. On the same six
+requests, one at a time:
+
+| | Subagents (as it was) | Direct helpers |
+|---|---|---|
+| Something new appears after | 68 s (54 to 85) | 43 s (36 to 47) |
+| A small change ("make the truck green and add fire") | 9 s (6 to 12) | 7 s (4 to 10) |
+| A big change (two or three things at once) | 49 s (36 to 59) | 31 s (23 to 40) |
+| The pass that grows it, while the kid plays | 99 and 118 s (two creations) | 73 s (42 to 126, five creations) |
+
+In the app itself, a monster truck show appeared after 47 s: Sparky answered after 3 s, the first
+parts' pictures were on the building card at 15 s, "I'm making the purple monster truck, the row of
+cars and the show arena!" came at 17 s and "Now I'm putting it all together!" at 31 s.
+
+The creations were judged blind, side by side: a judge is given what the kid said, the list of what
+was asked for, each version's code and two screenshots of each, and isn't told how either was built.
+On the six first versions and the six big changes, direct helpers' creations were preferred 8 times
+out of 12 (3 of them clearly; none of the 4 the other way was), had 57 of the 58 things asked for
+fully there and working, against 47 of 58, and scored 8.3 out of 10 on average, against 7.3. The
+small changes, judged in an earlier round, came out even (3 to 3). One judge looked at each pair,
+so this is a direction, not a measurement to the decimal - but it pointed the same way twice: the
+round before, first versions were preferred 4 times out of 6 too.
+
+Three things got first versions there, each found by reading what the judges marked down:
+
+- **Parts tell each other what happens through one line of shared code** (`on('crush', ...)`,
+  `tell('crush', car)`), never through a list of events that's emptied every frame. With such a
+  list, a part that ran earlier in the frame missed everything: twice the crowd never cheered a
+  crush.
+- **Everything asked for is on the first screen, big enough to know at a glance** - a world just
+  big enough to hold it, not a map shown tiny - and a helper's first line names the features that
+  make its piece unmistakable (a T-rex: huge head, big teeth, tiny arms, thick tail), then draws
+  them.
+- **The check runs the numbers as they are** (is the jump high and long enough to clear the row?)
+  and follows what one part tells to the parts that should react.
+
+It uses about as much of a Claude plan as before: a town, its small change and its big change came
+to about 15% more, going by the cost Claude Code itself reports for each program.
+
+Three things tried along the way were left out. Haiku as the helpers was quicker and its parts
+were plainly weaker. Showing the creation before the lead's check would save about ten seconds
+and show the kid the truck that never crushes the cars. And Claude's fast mode would cut the
+lead's writing - the largest share of the wait that's left - but it's paid from extra usage
+credits, so it stays a choice (*Claude speed* in the panel).
+
+Measured blind earlier, with subagents as its helpers, on eight requests no prompt example mentions
+(a beehive, a marble run, a hamster with a wheel, a pirate ship, a caterpillar that turns into a
+butterfly, a treehouse with a slide, a basketball game and a bubble machine), each pair judged
+twice with the two shown in both orders:
 
 - **Against team mode's usual way**, its creations won 14 of 16 judgments, 10 of them clearly. A
   world that works went from 6.4 to 7.9, something to discover from 5.5 to 8.1 and the spark of joy
