@@ -261,7 +261,7 @@ function sync(s, page) {
   s.files = page;
   return now === page
     ? `The creation's files, as they are now:\n\n${shown(dir)}`
-    : `The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts. When you hand out work, a helper can take over a piece of it as a new part.\n\n${shown(dir)}`;
+    : `The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts. When you hand out work, a helper can take over a piece of it as a new part: give it a \`// @part <name>\` line in page.html in place of that piece's code (FIX page.html) - until it has one, there's no part to write "again", and what its helper writes isn't on the page.\n\n${shown(dir)}`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -829,6 +829,9 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
 // Parts a kid doesn't see being made (by the names leads give them): said last, if at all.
 const UNSEEN = /^(rules?|logic|game|main|controls?|input|sounds?|audio|music|sfx|effects?|fx|particles?)$/i;
 
+// The parts among these that page.html has no `// @part <name>` line for.
+const offThePage = (names, page) => names.filter(name => !new RegExp(`^[ \\t]*// ?@part[ \\t]+${name}(?![\\w-])`, 'm').test(page));
+
 // One turn of the lead's, with its helpers: its reply is read as it's written and every job in it
 // starts a helper; when it and they are done, it's handed what they wrote and makes it fit (another
 // reply of the same turn, as far as the caller goes). Resolves with all it said, and what was handed out.
@@ -922,9 +925,14 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
     if (narrate && before) narrate("Now I'm putting it all together!"); // (something new: the longest wait)
     const seen = peek && built?.html && !failed.length && !problems.length ? await peek(built.html).catch(() => null) : null;
     const shot = picture(seen?.screenshot);
+    // (A part that's written and not on the page: page.html has no line for it - a new part whose
+    // line was forgotten, or one written "again" after the page came back as one file. Nothing else
+    // would say so: no file is missing, nothing fails to parse.)
+    const offPage = offThePage(crew.jobs.filter(j => j.state === 'done').map(j => j.name), pageFile());
     const back = [
       `Your helper${crew.jobs.length > 1 ? 's are' : ' is'} done - ${crew.jobs.length > 1 ? 'every part' : 'the part'}, as written and saved:`,
       ...crew.jobs.filter(j => j.state === 'done').map(j => `=== parts/${j.name}.js\n${j.code}`),
+      offPage.length && `${offPage.map(n => `parts/${n}.js`).join(' and ')} ${offPage.length > 1 ? "aren't" : "isn't"} on the page yet: page.html has no \`// @part ${offPage.length > 1 ? '<name>' : offPage[0]}\` line${offPage.length > 1 ? ' for them' : ''}. Put ${offPage.length > 1 ? 'each line' : 'it'} where that code goes (FIX page.html), and take out any older code of the same piece still written into the page.`,
       failed.length && `${failed.map(j => `parts/${j.name}.js`).join(' and ')} didn't get written (${failed.length > 1 ? 'those helpers' : 'that helper'} failed): write ${failed.length > 1 ? 'them' : 'it'} yourself now - FILE parts/<name>.js, then the code in a \`\`\` block.`,
       problems.length && `Put together, the page doesn't run yet (page lines count the page with every part in place):\n${around(problems, built?.html).join('\n')}`,
       loose.length && `Build Buddy read the files and found ${loose.length > 1 ? 'these loose ends' : 'this loose end'} between the parts - to fix:\n${loose.map(l => `- ${l}`).join('\n')}`,
@@ -1265,4 +1273,4 @@ export async function repair({ version, errors, keep, accept = false }) {
 }
 
 // (For server/crew.test.mjs.)
-export { JobReader, changesIn, fixed, applyReply, taken, codeOf, tagOf, keepFields, looseEnds, peekThrough };
+export { JobReader, changesIn, fixed, applyReply, taken, codeOf, tagOf, keepFields, looseEnds, peekThrough, offThePage };

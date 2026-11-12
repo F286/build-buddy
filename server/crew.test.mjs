@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { JobReader, changesIn, fixed, applyReply, taken, assemble, codeOf, tagOf, keepFields, looseEnds, peeked, peekThrough } from './crew.mjs';
+import { JobReader, changesIn, fixed, applyReply, taken, assemble, codeOf, tagOf, keepFields, looseEnds, peeked, peekThrough, offThePage } from './crew.mjs';
 
 // A reply read in small chunks, as it arrives.
 function read(text, chunk = 5) {
@@ -299,4 +299,10 @@ test('a peek: the picture and what it threw; a one-color picture with no error i
   a = ask();
   peeked({ id: a.id, screenshot: 42, errors: 'x', blank: 1 });
   assert.deepEqual(await a.seen, { screenshot: '', blank: false, errors: [] });
+});
+
+test("a part that's written but has no line in page.html isn't on the page", () => {
+  const page = 'top\n// @part truck [🚚 the truck]: makeTruck() - big\n  //@part cars\n// ---- crowd\nfunction cheer() {}\n// @part truck-wheels: spin()\n';
+  assert.deepEqual(offThePage(['truck', 'cars', 'crowd', 'truck-wheels', 'wheels'], page), ['crowd', 'wheels']);
+  assert.deepEqual(offThePage([], page), []);
 });
