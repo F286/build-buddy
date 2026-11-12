@@ -74,9 +74,11 @@ export function providedImports() {
 }
 
 // How to build a page. Shared with the overwatch (watch.mjs), so its fixes follow the same rules.
-// What moves in 2D is drawn on a plain canvas, with Matter.js for free-for-alls: measured against
-// building with a 2D game engine (Phaser), blind judges scored these pages most of a point higher,
-// and none crashed on a call the engine doesn't have (the README has the numbers).
+// What moves in 2D is drawn on a plain canvas, with Matter.js for free-for-alls. Measured by blind
+// judges on ten requests: what was built with a 2D game engine (Phaser) scored most of a point
+// lower and crashed on calls the engine doesn't have, and what tumbles scored higher with
+// Matter.js than with arithmetic. (The README has the numbers, also for 28 requests an earlier
+// wording of these rules had never seen, where the old rules and those came out level overall.)
 export function buildingRules() {
   const c = config();
   const matter = libVersion('matter');
