@@ -502,8 +502,9 @@ async function build(body) {
 
   let result = null;
   try {
-    // (peeks: this app can run a page out of sight and send its picture back - see 'peek' below.)
-    const res = await fetch('/api/build', { method: 'POST', headers: { 'content-type': 'application/json', 'x-kidbuild': '1' }, body: JSON.stringify({ ...body, peeks: true }) });
+    // (peeks: this app can run a page out of sight and send its picture back - see 'peek' below.
+    // Not on a computer where taking that picture held everything up: see peeksTooSlow.)
+    const res = await fetch('/api/build', { method: 'POST', headers: { 'content-type': 'application/json', 'x-kidbuild': '1' }, body: JSON.stringify({ ...body, peeks: !state.peeksTooSlow }) });
     if (!res.ok) throw new Error((await res.json()).error || res.statusText);
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buf = '';
@@ -527,7 +528,16 @@ async function build(body) {
           if (!body.fix) say(ev.text);
         } else if (ev.type === 'peek') {
           // The builder wants to see its page running before it's shown: out of sight, right now.
-          peek(ev.html).then(seen => api('/api/peeked', { id: ev.id, ...seen }), () => {}).catch(() => {});
+          // (Reading a page's picture back is quick with a graphics card - a peek takes a second or
+          // two - and can take many seconds without one, with this app held up meanwhile, since the
+          // page runs in the same process. One that slow, and this computer isn't asked again.)
+          const asked = performance.now();
+          peek(ev.html)
+            .then(seen => {
+              if (performance.now() - asked > 2600) state.peeksTooSlow = true;
+              return api('/api/peeked', { id: ev.id, ...seen });
+            })
+            .catch(() => {});
         } else if (ev.type === 'narrate') {
           // What it's making, said while the kid waits - only into a silence, never on top of the
           // first answer or the kid.

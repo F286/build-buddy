@@ -1003,6 +1003,7 @@ async function buildWith(s, p, { page, history, text, alt, fix, title = '', look
   let chars = 0;
   let helpers = { jobs: [], done: 0 };
   const progress = (n = 0, crew = helpers) => {
+    if (over) return; // (its turn is over - or failed, and another way builds it: no late news of this team)
     chars += n;
     helpers = crew;
     emit({ type: 'progress', chars, helpers: crew.jobs.length, helpersDone: crew.done, team: true, leads: 1, parts: crew.jobs.map(j => ({ emoji: j.emoji || '', done: j.state !== 'writing' })) });
