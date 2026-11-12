@@ -762,8 +762,8 @@ Matter.js the castles fall and the heaps never stop stirring), and hits, grabs, 
 from underneath, throws, ropes, seesaws, slopes, stopped time and gravity turned upside down come
 out as in plain Matter.js. Its price: what creeps along slower than 5 px a second stops. All 58
 Matter.js creations of this test still run on it. Twelve of them were then played on both builds
-of the library by judges who weren't told which was which: eleven played the same, one was better
-with it (that castle stood), none worse.
+of the library by judges who weren't told which was which: nine played the same, three were better
+with it (that castle stood, and knocked-down blocks stayed where they landed), none worse.
 
 **Then what was kept** was built afresh and judged next to the first round's builds of the old
 set-up and of plain canvas alone (all ten requests, new and changed, two judges each):
