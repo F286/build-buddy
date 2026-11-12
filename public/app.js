@@ -530,11 +530,12 @@ async function build(body) {
           // The builder wants to see its page running before it's shown: out of sight, right now.
           // (Reading a page's picture back is quick with a graphics card - a peek takes a second or
           // two - and can take many seconds without one, with this app held up meanwhile, since the
-          // page runs in the same process. One that slow, and this computer isn't asked again.)
+          // page runs in the same process. One that slow, or that came back with no picture at all
+          // - the page's own 1.5 s for taking it ran out - and this computer isn't asked again.)
           const asked = performance.now();
           peek(ev.html)
             .then(seen => {
-              if (performance.now() - asked > 2600) state.peeksTooSlow = true;
+              if (!seen.screenshot || performance.now() - asked > 2600) state.peeksTooSlow = true;
               return api('/api/peeked', { id: ev.id, ...seen });
             })
             .catch(() => {});
