@@ -63,7 +63,7 @@ const scene = (name, run, ok, options) => scenes.push({ name, run, ok, options }
 const same = (tolerance = 1) => (on, off) => Math.abs(on - off) <= tolerance;
 
 // What's built stays built (plain Matter.js lets the castles fall, which is why this exists).
-for (const [name, make, settles = 5] of [['a castle of 40 px bricks', () => castle(40)], ['a castle of 30 px bricks', () => castle(30)], ['a wall of thin bricks', thinWall], ['a column of 14', () => column(14)], ['a column of 20 small blocks', () => column(20, 30)], ['a pile of 40 balls', pile, 10]]) {
+for (const [name, make, settles = 5] of [['a castle of 40 px bricks', () => castle(40)], ['a castle of 30 px bricks', () => castle(30)], ['a wall of thin bricks', thinWall], ['a column of 14', () => column(14)], ['a column of 20 small blocks', () => column(20, 30)], ['a pile of 40 balls', pile, 15]]) {
   scene(`${name} left alone for 2 minutes: furthest any piece moves after the first ${settles} s (px)`, engine => {
     ground(engine);
     const bodies = make(); Composite.add(engine.world, bodies);
@@ -321,6 +321,97 @@ scene('a block picked off a settled column (found with Query.point), put on the 
   step(engine, 120);
   return held(col);
 }, on => on === 4);
+
+// What moves slowly but is going somewhere is not at rest.
+for (const heavier of [1.05, 1.1]) scene(`a seesaw whose right block is ${R((heavier - 1) * 100)}% heavier: its tilt after 5 s (hundredths of a radian)`, engine => {
+  ground(engine);
+  const plank = B.rectangle(600, G - 200, 400, 20, { friction: 0.8 });
+  const left = B.rectangle(450, G - 235, 50, 50, { friction: 0.8 }), right = B.rectangle(750, G - 235, 50, 50, { friction: 0.8, density: 0.001 * heavier });
+  Composite.add(engine.world, [plank, Constraint.create({ pointA: { x: 600, y: G - 200 }, bodyB: plank, length: 0, stiffness: 1 }), left, right]);
+  step(engine, 300);
+  return R(Math.abs(plank.angle) * 100);
+}, same(8));
+scene('a tall plank standing on a corner, 1 degree past its balance: its lean after 5 s (hundredths of a radian)', engine => {
+  ground(engine);
+  const lean = Math.atan(30 / 200) + Math.PI / 180, half = Math.hypot(15, 100);
+  const plank = B.rectangle(600 + half * Math.sin(lean - Math.atan(30 / 200)) + 15 * 0, G - half * Math.cos(lean - Math.atan(30 / 200)), 30, 200, { friction: 0.8, angle: lean });
+  Composite.add(engine.world, plank);
+  step(engine, 300);
+  return R(Math.abs(plank.angle) * 100);
+}, same(10));
+scene('a block (friction 0.33) creeping down a ramp of 20 degrees: how far it slides in 30 s (px)', engine => {
+  const a = (20 * Math.PI) / 180;
+  Composite.add(engine.world, B.rectangle(600, 300, 1100, 20, { isStatic: true, angle: a, friction: 0.33 }));
+  const block = B.rectangle(600 - 450 * Math.cos(a) + 31 * Math.sin(a), 300 - 450 * Math.sin(a) - 31 * Math.cos(a), 40, 40, { friction: 0.33, angle: a });
+  Composite.add(engine.world, block);
+  const x = block.position.x;
+  step(engine, 1800);
+  return R(block.position.x - x);
+}, (on, off) => Math.abs(on - off) <= Math.max(10, off * 0.1));
+
+// What goes away without a touch, and what is tied together.
+scene('a plank leaning on a block that the page then puts somewhere else at once (Body.setPosition): the plank\'s lean 5 s later (hundredths of a radian)', engine => {
+  ground(engine);
+  const block = B.rectangle(600, G - 60, 120, 120, { friction: 0.8 });
+  const plank = B.rectangle(700, G - 90, 20, 220, { friction: 0.8, angle: 0.7 });
+  Composite.add(engine.world, [block, plank]);
+  step(engine, 400);
+  step(engine, 300, () => { Body.setPosition(block, { x: 200, y: 300 }); Body.setVelocity(block, { x: 0, y: 0 }); });
+  return R(Math.abs(plank.angle) * 100);
+}, same(5));
+scene('a plank on two piers, one of them moved away at once: the plank\'s tilt 3 s later (hundredths of a radian)', engine => {
+  ground(engine);
+  const a = B.rectangle(500, G - 50, 40, 100, { isStatic: true }), b = B.rectangle(700, G - 50, 40, 100, { isStatic: true });
+  const plank = B.rectangle(600, G - 110, 300, 20, { friction: 0.8 });
+  Composite.add(engine.world, [a, b, plank]);
+  step(engine, 300);
+  b.collisionFilter.mask = 0;
+  step(engine, 180);
+  return R(Math.abs(plank.angle) * 100);
+}, same(5));
+scene('a marble behind a gate on a ramp of 15 degrees, the gate opened by its collision filter: how far it has rolled 3 s later (px)', engine => {
+  const a = (15 * Math.PI) / 180;
+  Composite.add(engine.world, B.rectangle(600, 300, 1100, 20, { isStatic: true, angle: a, friction: 0 }));
+  const gate = B.rectangle(600 - 300 * Math.cos(a) + 40 * Math.sin(a), 300 - 300 * Math.sin(a) - 40 * Math.cos(a), 10, 80, { isStatic: true, angle: a });
+  const marble = B.circle(600 - 330 * Math.cos(a) + 31 * Math.sin(a), 300 - 330 * Math.sin(a) - 31 * Math.cos(a), 20, { friction: 0, frictionAir: 0.002 });
+  Composite.add(engine.world, [gate, marble]);
+  step(engine, 300);
+  const x = marble.position.x;
+  gate.collisionFilter.mask = 0;
+  step(engine, 180);
+  return R(marble.position.x - x);
+}, same(5));
+scene('a cart (wheels on axles) that has stood for 5 s, pushed with Body.applyForce for a second: how far it rolls in 4 s (px)', engine => {
+  ground(engine);
+  const group = Body.nextGroup(true);
+  const chassis = B.rectangle(400, G - 50, 160, 30, { collisionFilter: { group } });
+  const wheels = [-55, 55].map(dx => B.circle(400 + dx, G - 25, 25, { collisionFilter: { group }, friction: 0.8 }));
+  Composite.add(engine.world, [chassis, ...wheels, ...wheels.map((w, i) => Constraint.create({ bodyA: chassis, pointA: { x: i ? 55 : -55, y: 25 }, bodyB: w, length: 0, stiffness: 1 }))]);
+  step(engine, 300);
+  step(engine, 60, () => Body.applyForce(chassis, chassis.position, { x: 0.004, y: 0 }));
+  step(engine, 180);
+  return R(chassis.position.x - 400);
+}, (on, off) => Math.abs(on - off) <= Math.max(8, Math.abs(off) * 0.15));
+scene('two blocks joined by a rope on ice, one pushed away from the other for a second: how far the other is dragged (px)', engine => {
+  ground(engine);
+  Composite.allBodies(engine.world)[0].friction = 0;
+  const a = B.rectangle(600, G - 25, 50, 50, { friction: 0, frictionAir: 0 }), b = B.rectangle(700, G - 25, 50, 50, { friction: 0, frictionAir: 0 });
+  Composite.add(engine.world, [a, b, Constraint.create({ bodyA: a, bodyB: b, length: 100, stiffness: 1 })]);
+  step(engine, 300);
+  step(engine, 60, () => Body.applyForce(a, a.position, { x: -a.mass * 0.001 * 0.3, y: 0 }));
+  return R(b.position.x - 700);
+}, same(5));
+scene('a heap (60 balls rained on a castle) that has come to rest: furthest anything moves by itself in the next 3 minutes (px)', engine => {
+  ground(engine);
+  const bricks = castle(40); Composite.add(engine.world, bricks);
+  const balls = Array.from({ length: 60 }, (_, i) => B.circle(820 + (i % 10) * 34 + (i % 3) * 5, -40 - Math.floor(i / 10) * 60, 14 + (i % 4) * 2, { restitution: 0.4, friction: 0.1 }));
+  Composite.add(engine.world, balls);
+  const all = [...bricks, ...balls];
+  step(engine, 1500);
+  const start = places(all);
+  step(engine, 10800);
+  return R(far(all, start));
+}, on => on <= 3);
 
 // The module's other mendings.
 scene('Engine.create() gives 10 position and 8 velocity passes, and a page can ask for others', () => {

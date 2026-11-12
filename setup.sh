@@ -195,15 +195,18 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
 // other body, so nothing about touching it changes, and it is let go - with everything it touches,
 // and everything that touches - as soon as it is really pushed or turned, the page moves or pushes
 // it (Body.setPosition and the like, or a force), something on the move touches it, it no longer
-// touches what it rested on (a body taken away from under it), or gravity changes.
-// (What it costs: a ball left at rest on a slope of half a degree stays there, and what physics
-// alone moves along the ground slower than 12 px a second can stop. Engine.create({ settling: false })
-// is plain Matter, and so is an engine with Matter's own sleeping switched on.)
+// touches what it rested on (a body taken away from under it), what it is tied to pulls it, or
+// gravity changes. What touches nothing is never held.
+// (What it costs: what creeps along something slower than 5 px a second stops there - a marble on
+// a slope of half a degree, a ball with friction on one of 3 degrees or less, which plain Matter
+// moves a few pixels a second. Engine.create({ settling: false }) is plain Matter, and so is an
+// engine with Matter's own sleeping switched on. test/matter.html has the tests.)
 const REST = 60; // steps a body must be at rest before it is held: a second
-const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step,
+const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step all that time,
+const FAR = 5, FAR_TURN = 0.03; // and no further than this from where that began (or it is going somewhere, slowly);
 const SPOT = 0.5, SPOT_TURN = 0.01; // or shaking on the spot: no further than this from where it was
 const PUSH = 0.5, PUSH_NO_GRAVITY = 0.05, PUSH_TURN = 0.005; // pushed: faster than this share of one step of free fall (px a step where nothing falls), or radians a step
-const states = new WeakMap(); // body -> { x, y, angle, slow, spot, held, at, touches, rested }
+const states = new WeakMap(); // body -> { x, y, angle, slow, fromX, fromY, fromAngle, spot, held, at, touches, rested, tied }
 const handled = new WeakSet(); // bodies the page itself has just moved, pushed or changed
 const pulls = new WeakMap(); // engine -> its gravity as last seen
 const NO_SPEED = { x: 0, y: 0 };
@@ -216,7 +219,7 @@ for (const name of ['setPosition', 'setAngle', 'setVelocity', 'setAngularVelocit
     return was.apply(this, arguments);
   };
 }
-const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, spot: 0, held: false, at: 0, touches: 0, rested: 0 }).get(body);
+const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, fromX: 0, fromY: 0, fromAngle: 0, spot: 0, held: false, at: 0, touches: 0, rested: 0, tied: 0 }).get(body);
 let now = 0; // (counts the steps settled: `at` is the last one a body touched something in, `touches` how many things)
 const touch = body => {
   if (body.isStatic) return;
@@ -246,6 +249,12 @@ function settle(engine) {
     touch(pair.bodyA.parent);
     touch(pair.bodyB.parent);
   }
+  // (What a rope, a pin or an axle is tied to: a Constraint, Matter's own mouse constraint included.)
+  const ties = Composite.allConstraints(engine.world);
+  for (const tie of ties) {
+    if (tie.bodyA && !tie.bodyA.isStatic) stateOf(tie.bodyA.parent || tie.bodyA).tied = now;
+    if (tie.bodyB && !tie.bodyB.isStatic) stateOf(tie.bodyB.parent || tie.bodyB).tied = now;
+  }
   const loose = []; // what is let go this step, to begin with
   for (const body of bodies) {
     const byHand = handled.delete(body);
@@ -261,10 +270,18 @@ function settle(engine) {
       if (s.held) loose.push(body);
       s.slow = s.spot = 0;
     } else if (s.held) {
-      // (Held, a body touches the same things step after step: fewer means one of them has gone.)
-      if (body.speed > push || body.angularSpeed > PUSH_TURN || s.touches < s.rested) loose.push(body);
+      // Held, a body touches the same things step after step: fewer means one of them has gone.
+      // And only what it is tied to can move it without a touch (the solver's own little
+      // starts, in a heap that has come to rest, are not that).
+      if (s.touches < s.rested || (s.tied === now && (body.speed > push || body.angularSpeed > PUSH_TURN))) loose.push(body);
     } else {
-      s.slow = body.speed < SLOW && body.angularSpeed < SLOW_TURN ? s.slow + 1 : 0;
+      if (body.speed < SLOW && body.angularSpeed < SLOW_TURN) {
+        if (!s.slow++) {
+          s.fromX = body.position.x;
+          s.fromY = body.position.y;
+          s.fromAngle = body.angle;
+        }
+      } else s.slow = 0;
       if (Math.abs(body.position.x - s.x) > SPOT || Math.abs(body.position.y - s.y) > SPOT || Math.abs(body.angle - s.angle) > SPOT_TURN) {
         s.spot = 0;
         s.x = body.position.x;
@@ -294,6 +311,11 @@ function settle(engine) {
       link(pair.bodyA.parent, pair.bodyB.parent);
       link(pair.bodyB.parent, pair.bodyA.parent);
     }
+    for (const tie of ties) {
+      if (!tie.bodyA || !tie.bodyB) continue;
+      link(tie.bodyA.parent || tie.bodyA, tie.bodyB.parent || tie.bodyB);
+      link(tie.bodyB.parent || tie.bodyB, tie.bodyA.parent || tie.bodyA);
+    }
     for (let i = 0; i < loose.length; i++) {
       for (const other of touching.get(loose[i]) || []) {
         if (other.isStatic || free.has(other)) continue;
@@ -314,7 +336,14 @@ function settle(engine) {
       continue;
     }
     if (!s.held) {
-      if (s.slow < REST && s.spot < REST) continue;
+      if (s.spot < REST) {
+        if (s.slow < REST) continue;
+        // Slow all that time, but it has got somewhere: a seesaw tipping, a block creeping down a ramp.
+        if (Math.abs(body.position.x - s.fromX) > FAR || Math.abs(body.position.y - s.fromY) > FAR || Math.abs(body.angle - s.fromAngle) > FAR_TURN) {
+          s.slow = 0;
+          continue;
+        }
+      }
       s.held = true;
       s.rested = s.touches;
       s.x = body.position.x;
