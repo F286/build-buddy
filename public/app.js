@@ -1555,7 +1555,7 @@ async function openParent() {
   }
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
-  f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? (c.agentHelpers === 'subagents' ? 'subagents' : 'agents') : 'team') : '';
+  f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? (c.agentHelpers === 'direct' ? 'direct' : 'agents') : 'team') : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
@@ -1632,11 +1632,11 @@ $('#parentForm').addEventListener('submit', async e => {
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
     ...(f.building.value !== state.buildingShown && {
-      team: ['team', 'agents', 'subagents'].includes(f.building.value),
-      agents: ['agents', 'subagents'].includes(f.building.value),
+      team: ['team', 'agents', 'direct'].includes(f.building.value),
+      agents: ['agents', 'direct'].includes(f.building.value),
       solo: f.building.value === 'solo',
       // (The agent way's helpers: Build Buddy's own programs, or Claude Code subagents as before.)
-      ...(['agents', 'subagents'].includes(f.building.value) && { agentHelpers: f.building.value === 'subagents' ? 'subagents' : 'direct' }),
+      ...(['agents', 'direct'].includes(f.building.value) && { agentHelpers: f.building.value === 'direct' ? 'direct' : 'subagents' }),
     }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,

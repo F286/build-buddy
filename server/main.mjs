@@ -70,7 +70,7 @@ function publicConfig() {
     team: Boolean(c.team.enabled),
     solo: Boolean(c.solo?.enabled),
     agents: Boolean(c.team.agents),
-    agentHelpers: c.team.agentHelpers === 'subagents' ? 'subagents' : 'direct', // (who writes the agent way's parts)
+    agentHelpers: c.team.agentHelpers === 'direct' ? 'direct' : 'subagents', // (who writes the agent way's parts)
     teamActive: team.enabled() && !solo.enabled(),
     soloActive: solo.enabled(),
     agentsActive: ai.agentWay(),

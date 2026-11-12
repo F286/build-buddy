@@ -32,10 +32,10 @@ import { leadBrain } from './bins.mjs';
 import { syntaxErrors, blankProblems, speakFirst, warmVoice, polishPasses as teamPolish, maxHelpers, askRole, keepRoleWarm } from './team.mjs';
 
 // On when the agent way is (agents.mjs enabled()) and its helpers are Build Buddy's own programs
-// (team.agentHelpers "direct") rather than Claude Code subagents ("subagents": agents.mjs as it was).
+// (team.agentHelpers "direct") rather than Claude Code subagents ("subagents", the default: agents.mjs).
 export function on() {
   const c = config();
-  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && c.backends[0] === 'claude' && leadBrain() === 'claude' && c.team?.agentHelpers !== 'subagents';
+  return Boolean(c.team?.enabled && c.team?.agents) && !c.solo?.enabled && c.backends[0] === 'claude' && leadBrain() === 'claude' && c.team?.agentHelpers === 'direct';
 }
 
 // Passes after something new or a change: growing it, then looking again (team.polish more).
