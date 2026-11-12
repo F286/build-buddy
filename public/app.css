@@ -233,6 +233,15 @@ button {
 #buildingTeam span:nth-child(2n) { animation-delay: -0.3s; }
 #buildingTeam span:nth-child(3n) { animation-delay: -0.55s; }
 #buildingTeam span.done { animation: none; opacity: 0.45; }
+/* ... or a picture of each piece being made: faint and bobbing until it's ready, then it pops in */
+#buildingTeam.parts { gap: 5px; font-size: 24px; }
+#buildingTeam.parts span { opacity: 0.4; }
+#buildingTeam.parts span.done { opacity: 1; animation: ready 0.35s ease-out; }
+@keyframes ready {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
 @keyframes helper {
   0%, 100% { transform: translateY(0) rotate(-6deg); }
   50% { transform: translateY(-5px) rotate(6deg); }

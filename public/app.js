@@ -117,6 +117,7 @@ const sfx = {
 const LINES = {
   fixing: ['Oops! Let me fix a wobbly bit.'],
   filler: ['Ooh! Let me think...', 'Okay! Building now...', 'Hmm, let me build that!'],
+  together: ["Now I'm putting it all together!"], // (said by the server while the kid waits: see 'narrate')
   tangled: ['Oh no, my brain got a little tangled. Can you say that again?', 'Hmm, that one was tricky. Can you try again?'],
   blocked: ["Hmm, I can't build that one. Can you think of something else?"],
   queued: ["Okay! I'll do that next.", "Got it! That's next."],
@@ -431,7 +432,9 @@ function startBlocks(body) {
 
 // Team mode: a little robot for each helper building a piece of it (see server/team.mjs). Before
 // there are helpers - or when a lead makes a change itself - a robot for each lead at work.
-function showHelpers(count, done = 0, leads = 0) {
+// parts: what each helper is making, as a picture ([{ emoji, done }], from server/crew.mjs): the kid
+// sees their truck, their cars and their crowd being made, each one popping in when it's ready.
+function showHelpers(count, done = 0, leads = 0, parts = null) {
   const el = $('#buildingTeam');
   const name = state.config.buddyName || 'Sparky';
   const robots = count || leads;
@@ -439,7 +442,13 @@ function showHelpers(count, done = 0, leads = 0) {
   if (!state.fixing) $('#buildingLabel').textContent = count ? `${name} + ${count} helper${count > 1 ? 's' : ''}` : team ? `${name}'s team` : `${name} is building`;
   while (el.children.length > robots) el.lastChild.remove();
   while (el.children.length < robots) el.append(Object.assign(document.createElement('span'), { textContent: '🤖' }));
-  [...el.children].forEach((robot, i) => robot.classList.toggle('done', i < done));
+  el.classList.toggle('parts', Boolean(parts));
+  [...el.children].forEach((robot, i) => {
+    robot.textContent = parts?.[i]?.emoji || '🤖';
+    const ready = parts ? Boolean(parts[i]?.done) : i < done;
+    if (parts && ready && !robot.classList.contains('done')) sfx.pop();
+    robot.classList.toggle('done', ready);
+  });
   el.hidden = !robots;
 }
 
@@ -493,7 +502,9 @@ async function build(body) {
 
   let result = null;
   try {
-    const res = await fetch('/api/build', { method: 'POST', headers: { 'content-type': 'application/json', 'x-kidbuild': '1' }, body: JSON.stringify(body) });
+    // (peeks: this app can run a page out of sight and send its picture back - see 'peek' below.
+    // Not on a computer where taking that picture held everything up: see peeksTooSlow.)
+    const res = await fetch('/api/build', { method: 'POST', headers: { 'content-type': 'application/json', 'x-kidbuild': '1' }, body: JSON.stringify({ ...body, peeks: !state.peeksTooSlow }) });
     if (!res.ok) throw new Error((await res.json()).error || res.statusText);
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buf = '';
@@ -509,12 +520,32 @@ async function build(body) {
         if (ev.type === 'progress') {
           progress.target = Math.max(progress.target, Math.floor(ev.chars / 110));
           progress.lastEvent = Date.now();
-          if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone);
+          if (ev.helpers) showHelpers(ev.helpers, ev.helpersDone, 0, ev.parts);
           else if (ev.note) showHelpers(0); // the team gave up: building the classic way
           else if (ev.team) showHelpers(0, 0, ev.leads || 1); // the team is at work: its leads plan
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);
+        } else if (ev.type === 'peek') {
+          // The builder wants to see its page running before it's shown: out of sight, right now.
+          // (Reading a page's picture back is quick with a graphics card - a peek takes a second or
+          // two - and can take many seconds without one, with this app held up meanwhile, since the
+          // page runs in the same process. One that slow, or that came back with no picture at all
+          // - the page's own 1.5 s for taking it ran out - and this computer isn't asked again.)
+          // (Not counted while the app's window is hidden: a page out of sight draws nothing then, and
+          // answers nothing, however quick the computer.)
+          const asked = performance.now();
+          const shown = !document.hidden;
+          peek(ev.html)
+            .then(seen => {
+              if (shown && !document.hidden && (!seen.screenshot || performance.now() - asked > 2600)) state.peeksTooSlow = true;
+              return api('/api/peeked', { id: ev.id, ...seen });
+            })
+            .catch(() => {});
+        } else if (ev.type === 'narrate') {
+          // What it's making, said while the kid waits - only into a silence, never on top of the
+          // first answer or the kid.
+          if (!body.fix && !voice.current && !voice.queue.length && !mic.recording && !timer.overtime) say(ev.text);
         } else if (ev.type === 'sketch') {
           showSketch(ev.html);
         } else if (ev.type === 'done' || ev.type === 'error') {
@@ -700,6 +731,45 @@ async function checkCreation({ urgent = false } = {}) {
   } finally {
     overwatch.running = false;
   }
+}
+
+// A peek at a page that isn't shown yet: it runs out of sight (silent, behind the stage, the stage's
+// size) until it has drawn, and its picture and the errors it threw come back - within 3 s at most.
+function peek(html) {
+  return new Promise(resolve => {
+    const trial = document.createElement('iframe');
+    trial.setAttribute('sandbox', 'allow-scripts');
+    trial.setAttribute('aria-hidden', 'true');
+    trial.tabIndex = -1;
+    const r = frame.getBoundingClientRect();
+    Object.assign(trial.style, { position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, border: '0', opacity: '0.01', pointerEvents: 'none', zIndex: '-1' });
+    const errors = [];
+    let asked = false;
+    const done = seen => {
+      clearTimeout(giveUp);
+      removeEventListener('message', onMessage);
+      trial.remove();
+      resolve({ screenshot: seen?.screenshot || '', blank: Boolean(seen?.blank), errors: [...new Set(errors)].filter(m => !/ResizeObserver|^Script error/i.test(m)).slice(0, 5) });
+    };
+    const ask = () => {
+      if (asked) return;
+      asked = true;
+      trial.contentWindow?.postMessage({ kidbuild: true, type: 'peek?', id: 1 }, '*');
+    };
+    const onMessage = e => {
+      const d = e.data;
+      if (e.source !== trial.contentWindow || !d?.kidbuild) return;
+      if (d.type === 'error') errors.push(d.message);
+      // (Loaded: its libraries are in and its first code has run. A little longer, and it has drawn.)
+      if (d.type === 'loaded') setTimeout(ask, 600);
+      if (d.type === 'peek') done(d);
+    };
+    addEventListener('message', onMessage);
+    // (A page that hasn't loaded isn't asked: its picture would be of nothing. No answer after 3 s: no picture.)
+    const giveUp = setTimeout(() => done(null), 3000);
+    document.body.append(trial);
+    trial.srcdoc = wrap(html, { trial: true });
+  });
 }
 
 // Run a page out of sight for a moment (silent, behind the stage, with a few arrow-key presses)
@@ -1488,9 +1558,16 @@ async function openParent() {
     f.brains.append(extra);
   }
   f.brains.value = brains;
+  // (A model the list doesn't have - set in config.json - is kept, not reset on save.)
+  f.claudeModel.querySelector('option[data-extra]')?.remove();
+  if (![...f.claudeModel.options].some(o => o.value === (c.claudeModel || ''))) {
+    const extra = new Option(c.claudeModel ? `${c.claudeModel} (from config.json)` : "Claude Code's own default (from config.json)", c.claudeModel || '');
+    extra.dataset.extra = '1';
+    f.claudeModel.append(extra);
+  }
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
-  f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? 'agents' : 'team') : '';
+  f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? (c.agentHelpers === 'direct' ? 'direct' : 'agents') : 'team') : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
   f.codexModel.value = c.codexModel || '';
@@ -1566,7 +1643,13 @@ $('#parentForm').addEventListener('submit', async e => {
     ...(f.brains.value !== state.config.backends.join(',') && { backends: f.brains.value.split(',') }),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
-    ...(f.building.value !== state.buildingShown && { team: ['team', 'agents'].includes(f.building.value), agents: f.building.value === 'agents', solo: f.building.value === 'solo' }),
+    ...(f.building.value !== state.buildingShown && {
+      team: ['team', 'agents', 'direct'].includes(f.building.value),
+      agents: ['agents', 'direct'].includes(f.building.value),
+      solo: f.building.value === 'solo',
+      // (The agent way's helpers: Build Buddy's own programs, or Claude Code subagents as before.)
+      ...(['agents', 'direct'].includes(f.building.value) && { agentHelpers: f.building.value === 'direct' ? 'direct' : 'subagents' }),
+    }),
     creationsButton: f.creationsButton.value === 'show',
     codexModel: f.codexModel.value,
     ...(f.agyModel.value !== (state.config.agyModel || '') && { agyModel: f.agyModel.value }),

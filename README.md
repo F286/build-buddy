@@ -182,6 +182,7 @@ cd build-buddy
 ./start.sh --classic        # one AI writes each creation by itself, instead of a team (see Team mode)
 ./start.sh --solo           # Claude first: one Claude that remembers the creation and keeps improving it (see Solo mode)
 ./start.sh --agents         # Claude first: a team led by one Claude that remembers it (see Team mode, the agent way)
+./start.sh --direct         # Claude first: the same team with direct helpers - quicker, and new (see Team mode, the agent way)
 ./start.sh --team           # Claude first: team mode's usual way
 ```
 
@@ -247,7 +248,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `kidAge` | `5` | Sparky pitches words and games to this age. |
 | `buddyName` | `"Sparky"` | The robot's name. |
 | `backends` | `["claude", "agy", "codex"]` | Which AI to use, in order (`claude`, `agy`, `codex`, `command`). The first one installed leads: Claude by default, or Gemini (`agy`) if `claude` isn't installed. If it fails (offline, usage limit), the next takes over. Also in the panel as *AI brain*. |
-| `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. |
+| `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code: `"opus"`, `"fable"`, `"sonnet"` or any model name Claude Code takes. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. `"fable"` (Claude Fable, the most capable) leads fuller creations but the kid waits longer and it uses more of your plan: in one test of the agent way, the same garden took 103 s with Fable leading against 61 s with Opus. Also in the panel as *Claude model*. |
 | `claude.fast` | `false` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for building: the same model, answering much sooner. On a Claude subscription it's paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. Also in the panel as *Claude speed*. |
 | `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` or `--team` (which puts Claude first for that run). Used when Claude leads (the first installed brain in `backends`). |
 | `team.helpers` | `6` | The most helpers working on one creation at a time (1 to 8). |
@@ -257,9 +258,11 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.check` | `true` | Right after a creation appears, the checker takes a careful look and its fixes slide in at a calm moment. |
 | `team.polish` | `2` | After the check, how many times the polisher gives it finishing touches (`false` for none). Each pass costs no waiting: the creation is already on screen, and the touches slide in like the check's fixes. |
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
-| `team.agents` | `true` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers (subagents) and makes them fit, then grows and polishes it while the kid plays. `false` is team mode's usual way. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents` (or `--team`). |
-| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`) and when it looks its creation over (`look`). `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
-| `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable` (the Agent tool takes no full model names). |
+| `team.agents` | `true` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers and makes them fit, then grows and polishes it while the kid plays. `false` is team mode's usual way. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents` (or `--direct`, or `--team`). |
+| `team.agentHelpers` | `"subagents"` | Who writes the agent way's parts. `"subagents"`: Claude Code's subagents, which the lead calls one after another. `"direct"`: [direct helpers](#with-direct-helpers-new) - programs of Build Buddy's own, each started on its part the moment the lead has written that part's job; in test runs something new appeared in about two thirds of the time. In the panel as *The same team with direct helpers*, and for one run with `./start.sh --direct`. |
+| `team.peek` | `true` | With direct helpers: before something new or a big change is shown, the app runs it out of sight for a moment and the lead is handed a screenshot of it (and any error it threw) together with its helpers' parts - so a school drawn black, a car hidden under a cloud or people cut off at the edge are fixed before the kid sees them. It takes a second or two with a graphics card. Without one, photographing a page can take many seconds and hold the app up meanwhile, so after one peek that takes longer than about two and a half seconds or brings no picture back, it isn't asked for again until Build Buddy restarts. `data/log.txt` says how long each one took. |
+| `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "fit": 700, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`), when it's handed the parts to make them fit (`fit`, with direct helpers) and when it looks its creation over (`look`). Opus 5.5 and Sonnet 5.5 decide for themselves how long to think whatever these say, so the lead's instructions ask it to start writing at once. `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
+| `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable`. Haiku writes half again as fast (532 characters a second against 336), but its parts were plainly weaker - a ramp the wrong shape, a word on a sign, things in the wrong band of the screen - so Sonnet stays. |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo` (which puts Claude first for that run). Used when Claude leads. |
 | `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
 | `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
@@ -470,6 +473,136 @@ basketball game and a bubble machine), each pair judged twice with the two shown
 fixes, which changed how its files are kept in step with the page and a few lines of its prompts,
 not how it builds.)
 
+#### With direct helpers (new)
+
+A second way to run the same team, to try: pick *The same team with direct helpers* in the
+Ctrl+Shift+P panel, set `"team": { "agentHelpers": "direct" }` in `config.json`, or start it for
+one run with `./start.sh --direct`. It keeps the lead, its plan, its check, its memory and its
+passes while the kid plays, and takes the waiting out of handing the work out. In test runs
+something new appeared in about two thirds of the time and was judged at least as good (below);
+it isn't the default yet because test runs are all it has behind it.
+
+- **Helpers that start the moment their job is written.** The lead's reply is the page itself: the
+  shared code first (the names, sizes and numbers every part goes by, and how the parts tell each
+  other what happens), then one line for each part -
+  `// @part truck [🚚 the monster truck]: makeTruck(scene) → { update(dt, t) } - ...` - then the code
+  that runs them. Build Buddy reads the reply as it's written, and each of those lines starts a
+  helper at once, with the page as far as it's written and its job: a `claude` program of Build
+  Buddy's own (Sonnet by default), started while the kid was still talking, that answers with its
+  part's code and nothing else. The kid waits for the slowest one, so parts are small (25 to 40
+  lines - extras come when it's grown), the biggest goes out first, and a helper is told to start
+  writing at once (left to itself, Sonnet thinks for 10 to 20 s before the harder parts). One that
+  hasn't written a word after 8 s gets a second helper on the same job, and whichever finishes
+  first is used.
+- **The lead makes the parts one creation.** When its helpers are done it's handed every part in
+  one message, with anything Build Buddy can see is loose between them just by reading the files (a
+  function the page calls that no part defines, something a part listens for that nothing tells, a
+  progress field with no starting value, a color given as text to a library that draws with
+  numbers, which comes out black with no error). It goes through what the kid asked for, thing by
+  thing: is it there, on the first screen, and does it really happen when this code runs - from
+  the key or the tap, through the parts, to the screen? Its fixes are part of its reply (`FIX parts/cars.js`, the lines to find, the
+  lines that replace them), and Build Buddy takes them into the files. The lead has no tools at
+  all: whatever it needs to see is put in front of it, so a check or a small change is one answer,
+  never a trip to read a file first.
+- **It sees the creation before the kid does.** With the parts comes a screenshot: the app runs the
+  page as the helpers wrote it, out of sight and silent, and sends back its picture and anything
+  it threw. Whether everything asked for is there, whole and big enough to know, is something to
+  look at, not to work out from the code - and what the picture shows is fixed in the same answer.
+  In the test builds that's how a second crowd drawn over the first, clouds covering the car,
+  people cut off at the bottom of the screen and a star that crashed every frame were gone before
+  anyone saw them (`team.peek`).
+- **The kid sees and hears what's being made.** Each job carries a picture and a few words
+  (`[🚚 the monster truck]`): the pictures appear on the building card as the helpers start, each
+  one pops when its part is ready, and Sparky says "I'm making the monster truck, the row of cars
+  and the crowd!" about fifteen seconds in, then "Now I'm putting it all together!".
+- **The creation lives in the same files** (`page.html` and `parts/<name>.js`; no `rules.md` - a
+  helper is handed its rules with its job).
+- **Changes go the same way.** A small change is the lead's own, as FIX blocks, in about 7 s. For
+  several things at once or something big, its reply starts with `PART <name> [...]: <job>` lines -
+  for a new part, or for one that's written again - so their helpers write while the lead makes its
+  own changes to the page.
+
+**Why a lead with helpers works, and where its minute went.**
+
+With Opus leading, the agent way and its subagents are the way of building that gives kids what
+they asked for. Timing it turn by turn on six requests of the kind kids make (a monster truck show,
+dinosaurs by a volcano, a town to drive around, a car wash, a toilet that fires poop at a dinosaur,
+a rocket visiting planets - each with five or six things asked for at once) shows why it works:
+
+- **One mind holds the whole creation.** The lead writes the page's skeleton and, in its comments,
+  what every part goes by: the coordinates, the shared numbers, what each part's code is called
+  with. Helpers who all read the same plan write parts that fit.
+- **It reads every part before the kid sees it.** In three of those six builds its check fixed
+  something no error message would ever report: a truck that jumped the cars and never crushed
+  them, a dinosaur drawn in the wrong place whose taps the volcano swallowed, aliens that stayed
+  behind when their planets moved.
+- **It remembers the code.** The same session wrote the page, so a small change is two exact edits
+  and takes 6 to 12 s - nothing is read again or written again.
+- **Opus leads well.** It starts writing without a long think first - after about 3 s when it's
+  asked for a piece of writing on its own, 8 s as the lead planning the build timed below - and its
+  edits are exact. (It writes 236 characters a second; Sonnet writes 336 and Haiku 532, which is
+  why the helpers aren't Opus. Fable writes 212 after thinking for about 13 s first, every time:
+  fuller creations and a longer wait.)
+
+And where the time went - for the monster truck show, which took 70 s to appear: the lead thought
+for 8 s and wrote the page in 13; then it wrote a message to each of its five helpers, one after
+another, for 15 s (each helper started only when its own message was finished, then read two files
+before writing); the helpers needed 19 s more; and the lead's check took 14 s, in three round trips
+to read the files. The helpers were writing for about 20 of those 70 s. A big change had the same
+shape: the lead waited for its helper before making its own changes.
+
+Direct helpers keep the lead, its plan, its check and its memory, and take the waiting out: nobody
+waits to be asked, nothing is read from a file, and the check is one answer. On the same six
+requests, one at a time:
+
+| | Subagents (the default) | Direct helpers |
+|---|---|---|
+| Something new appears after | 68 s (54 to 85) | 43 s (36 to 47) |
+| A small change ("make the truck green and add fire") | 9 s (6 to 12) | 7 s (4 to 10) |
+| A big change (two or three things at once) | 49 s (36 to 59) | 31 s (23 to 40) |
+| The pass that grows it, while the kid plays | 99 and 118 s (two creations) | 73 s (42 to 126, five creations) |
+
+In the app itself, a monster truck show appeared after 47 s: Sparky answered after 3 s, the first
+parts' pictures were on the building card at 15 s, "I'm making the purple monster truck, the row of
+cars and the show arena!" came at 17 s and "Now I'm putting it all together!" at 31 s.
+
+The creations were judged blind, side by side: a judge is given what the kid said, the list of what
+was asked for, each version's code and two screenshots of each, and isn't told how either was built.
+On the six first versions and the six big changes, direct helpers' creations were preferred 8 times
+out of 12 (3 of them clearly; none of the 4 the other way was), had 57 of the 58 things asked for
+fully there and working, against 47 of 58, and scored 8.3 out of 10 on average, against 7.3. The
+small changes, judged in an earlier round, came out even (3 to 3). One judge looked at each pair,
+so this is a direction, not a measurement to the decimal - but it pointed the same way each time:
+the round before, first versions were preferred 4 times out of 6 too, and in a round of six more
+first versions made with the screenshot, 5 times out of 6 (8.0 against 7.2).
+
+(Those rounds and times were measured before the lead was handed a screenshot, except that last
+one. The screenshot itself takes one to two seconds where it could be timed; the test machine has
+no graphics card and takes far longer than a real computer to photograph a plain-canvas page, so
+its share of the wait is an estimate: with it, first versions came to about 41 s on average.)
+
+Three things got first versions there, each found by reading what the judges marked down:
+
+- **Parts tell each other what happens through one line of shared code** (`on('crush', ...)`,
+  `tell('crush', car)`), never through a list of events that's emptied every frame. With such a
+  list, a part that ran earlier in the frame missed everything: twice the crowd never cheered a
+  crush.
+- **Everything asked for is on the first screen, big enough to know at a glance** - a world just
+  big enough to hold it, not a map shown tiny - and a helper's first line names the features that
+  make its piece unmistakable (a T-rex: huge head, big teeth, tiny arms, thick tail), then draws
+  them.
+- **The check runs the numbers as they are** (is the jump high and long enough to clear the row?)
+  and follows what one part tells to the parts that should react.
+
+It uses about as much of a Claude plan as the subagents do: a town, its small change and its big
+change came to about 15% more, going by the cost Claude Code itself reports for each program.
+
+Three things tried along the way were left out. Haiku as the helpers was quicker and its parts
+were plainly weaker. Showing the creation before the lead's check would save about ten seconds
+and show the kid the truck that never crushes the cars. And Claude's fast mode would cut the
+lead's writing - the largest share of the wait that's left - but it's paid from extra usage
+credits, so it stays a choice (*Claude speed* in the panel).
+
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build
 Buddy changes.
@@ -596,6 +729,7 @@ server/main.mjs      web server, API, full-screen browser launcher
 server/ai.mjs        Sparky's instructions, AI backends (claude / codex / agy / command), reply parsing
 server/team.mjs      team mode: a lead and helpers that build a creation together, at the same time
 server/agents.mjs    team mode, the agent way: one lead that remembers the creation, helpers for its parts
+server/crew.mjs      the agent way's direct helpers: each starts as the lead writes its job; the lead's fixes go into the files
 server/solo.mjs      solo mode: one Claude session per creation that remembers it and keeps improving it
 server/speech.mjs    whisper.cpp (listening), Kokoro and Piper (talking)
 server/watch.mjs     the overwatch: a stronger model that checks on games and fixes them
@@ -608,7 +742,8 @@ start.sh             starts the app
 install-launcher.sh  adds Build Buddy to your Linux app launcher
 ```
 
-No dependencies to `npm install`. The server uses only Node's standard library.
+No dependencies to `npm install`. The server uses only Node's standard library. `npm test` runs the
+tests of the code that reads the lead's replies as they're written (`server/crew.test.mjs`).
 
 ## Credits
 

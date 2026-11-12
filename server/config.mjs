@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const DATA = path.join(ROOT, 'data');
+// (KIDBUILD_DATA: another folder for everything Build Buddy keeps - for trying things side by side.)
+export const DATA = process.env.KIDBUILD_DATA ? path.resolve(process.env.KIDBUILD_DATA) : path.join(ROOT, 'data');
 const FILE = path.join(ROOT, 'config.json');
 
 export const DEFAULTS = {
@@ -68,14 +69,23 @@ export const DEFAULTS = {
     checker: { model: '', effort: 'medium' },
     polisher: { model: '', effort: 'high' },
     tester: { model: '', effort: 'medium' },
-    // agents: true (the default) builds team mode the agent way (server/agents.mjs): one lead Claude
-    // that keeps the creation in mind and hands its parts to helpers (subagents), then makes them fit.
-    // false: team mode's usual way. agentLead is
-    // the lead (model, effort and args as for a role; thinking: how long it may think while the kid
-    // waits, and when it looks its creation over); agentHelper.model is the helpers' model, as an alias
-    // (sonnet, opus, haiku or fable: the Agent tool takes no full model names).
+    // agents: true (the default) builds team mode the agent way: one lead Claude that keeps the
+    // creation in mind and hands its parts to helpers, then makes them fit. false: team mode's usual
+    // way. agentLead is the lead (model, effort and args as for a role; thinking: how long it may
+    // think while the kid waits, when it's handed the parts, and when it looks its creation over);
+    // agentHelper.model is the helpers' model, as an alias (sonnet, opus, haiku or fable: the Agent
+    // tool takes no full model names).
     agents: true,
-    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, look: 10000 } },
+    // agentHelpers: who writes the agent way's parts. "subagents" (the default): Claude Code
+    // subagents the lead calls one after another (server/agents.mjs). "direct": programs of Build
+    // Buddy's own, each started on its job the moment the lead has written it (server/crew.mjs) -
+    // in test runs something new appeared in about two thirds of the time. Also `./start.sh --direct`.
+    agentHelpers: 'subagents',
+    // peek: with direct helpers, before something new or a big change is shown, the app runs it out
+    // of sight and the lead is handed a screenshot of it with its helpers' parts (about 2 s): what's
+    // black, hidden, cut off or missing shows in a picture, not in the code.
+    peek: true,
+    agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, fit: 700, look: 10000 } },
     agentHelper: { model: 'sonnet' },
   },
   // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
@@ -160,18 +170,21 @@ function readUserConfig() {
 }
 
 // The way of building for this run only, without changing config.json: `./start.sh --solo`,
-// `--agents`, `--team` or `--classic` (or KIDBUILD_SOLO=1, KIDBUILD_AGENTS=1, KIDBUILD_TEAM=1 or 0).
+// `--agents`, `--direct` (the agent way with direct helpers), `--team` or `--classic` (or
+// KIDBUILD_SOLO=1, KIDBUILD_AGENTS=1, KIDBUILD_DIRECT=1, KIDBUILD_TEAM=1 or 0).
 // Picking a way of building in the panel replaces it.
 let runMode =
   process.argv.includes('--solo') || process.env.KIDBUILD_SOLO === '1'
     ? 'solo'
-    : process.argv.includes('--agents') || process.env.KIDBUILD_AGENTS === '1'
-      ? 'agents'
-      : process.argv.includes('--team') || process.env.KIDBUILD_TEAM === '1'
-        ? 'team'
-        : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
-          ? 'classic'
-          : null;
+    : process.argv.includes('--direct') || process.env.KIDBUILD_DIRECT === '1'
+      ? 'direct'
+      : process.argv.includes('--agents') || process.env.KIDBUILD_AGENTS === '1'
+        ? 'agents'
+        : process.argv.includes('--team') || process.env.KIDBUILD_TEAM === '1'
+          ? 'team'
+          : process.argv.includes('--classic') || process.env.KIDBUILD_TEAM === '0'
+            ? 'classic'
+            : null;
 // (Team, the agent way and solo are Claude's ways of building, so asking for one puts Claude first.
 // That lasts the whole run - picking how Claude builds in the panel doesn't end it - unless a grown-up
 // picks brains there: theirs win, and the run's own order is never saved.)
@@ -181,7 +194,13 @@ const withRunTeam = c => ({
   ...c,
   ...(run.claudeFirst && { backends: claudeFirst(c.backends) }),
   ...(runMode !== null && {
-    team: { ...c.team, enabled: runMode === 'team' || runMode === 'agents', agents: runMode === 'agents' },
+    // (--agents is the agent way with its subagents, --direct with direct helpers, whatever is saved.)
+    team: {
+      ...c.team,
+      enabled: ['team', 'agents', 'direct'].includes(runMode),
+      agents: runMode === 'agents' || runMode === 'direct',
+      ...((runMode === 'agents' || runMode === 'direct') && { agentHelpers: runMode === 'direct' ? 'direct' : 'subagents' }),
+    },
     solo: { ...c.solo, enabled: runMode === 'solo' },
   }),
 });

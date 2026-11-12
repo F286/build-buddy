@@ -938,7 +938,7 @@ async function classic({ page, history, text, alt, fix }, emit, state, skip = nu
   return { ...r, html: newHtml, edited, backend: reply.backend };
 }
 
-export async function build({ text, alt, fix, last = false }, emit) {
+export async function build({ text, alt, fix, last = false, peeks = false }, emit) {
   if (busy) throw new Error('busy');
   busy = true;
   const state = { said: '' };
@@ -972,7 +972,7 @@ export async function build({ text, alt, fix, last = false }, emit) {
       // (The agent way - agents.mjs - is team mode with one lead that keeps the creation in mind.)
       const way = agents.enabled() ? 'agents' : 'team';
       try {
-        r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore, last }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
+        r = way === 'agents' ? await agents.build({ page, history, text, alt, fix, title: titleBefore, last, peeks }, emit, state) : await team.build({ page, history, text, alt, fix, title: titleBefore }, emit, state);
       } catch (err) {
         if (isQuitting()) throw err; // (stopped because Build Buddy quits: nothing builds it again)
         const next = leadBrain() === 'agy' && config().backends.find(n => n !== 'agy' && backends[n] && installed(n));

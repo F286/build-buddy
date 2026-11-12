@@ -228,6 +228,11 @@
   }
 
   if (trial && window.HTMLMediaElement) HTMLMediaElement.prototype.play = () => Promise.resolve();
+  // ... nor take the keyboard from the creation on stage (Phaser focuses its window when it starts).
+  if (trial) {
+    window.focus = () => {};
+    if (window.HTMLElement) HTMLElement.prototype.focus = () => {};
+  }
 
   addEventListener('message', e => {
     const d = e.data;
@@ -236,6 +241,17 @@
     if (d.type === 'unmute') contexts.forEach(c => c.state === 'suspended' && c.resume());
     if (d.type === 'keep?') post({ type: 'keep', keep: copy(kept), id: d.id });
     if (d.type === 'inspect?') inspect().then(r => post({ type: 'inspect', report: r, id: d.id }));
+    // A peek (the builder's, before a new version is shown): the picture as it is after two more
+    // frames and the errors so far - no counting frames, the kid is waiting.
+    if (d.type === 'peek?') {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          Promise.race([snapshot(), new Promise(r => setTimeout(r, 1500))])
+            .catch(() => null)
+            .then(shot => post({ type: 'peek', id: d.id, screenshot: shot?.url || '', blank: Boolean(shot?.blank), errors: errors.slice() })),
+        ),
+      );
+    }
     if (d.type === 'fps?') {
       // Count animation frames for a second (shown in the grown-up panel).
       let frames = 0;

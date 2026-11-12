@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node server/main.mjs",
     "dev": "node server/main.mjs --no-browser",
-    "window": "node server/main.mjs --window"
+    "window": "node server/main.mjs --window",
+    "test": "node --test server/crew.test.mjs"
   },
   "engines": {
     "node": ">=20"
