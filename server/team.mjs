@@ -27,7 +27,7 @@ import { spawn, execFile } from 'node:child_process';
 import { config } from './config.mjs';
 import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
-import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, providedImports, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
+import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, providedImports, libVersion, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
 
 // Team mode needs Claude Code: it's on when switched on and Claude is the first brain.
 export function enabled() {
@@ -263,11 +263,11 @@ Check:
 3. The start: the main character and the main action are on screen and clearly visible - not off-screen, clipped at an edge, behind something, too small, or out of the camera's view; things don't start on top of each other.
 4. It keeps working: what runs on its own never freezes or runs away; spawned things stay under about 200 and levels between empty and full; speeds stay sensible; what the kid placed or grew stays; nothing jumps or teleports.
 5. Smoothness: no CSS or SVG filters (drop-shadow, blur) or box-shadow on things that move, no canvas shadowBlur, no objects created every frame. If it runs below about 30 frames per second, find what makes each frame heavy and lighten it (fewer shadow-casting or moving things, drawing once instead of every frame).
-6. It runs: no APIs that don't exist, no lookups of elements that are never made, and none of the errors the page reported while running.
+6. It runs: no APIs that don't exist${libVersion('phaser') ? ` (a page that imports 'phaser' runs on Phaser ${libVersion('phaser').split('.')[0]}, which has no Phaser.Geom.Point)` : ''}, no lookups of elements that are never made, and none of the errors the page reported while running.
 6b. Carrying on: the page starts again after every change. If what the kid would miss isn't kept in KB.keep - the score, the level, where the player is, what they grew, built or placed, the world's numbers they changed - (so a change would start the kid over), keep it with a small edit - its default in KB.keep({ ... }), updated as it changes, put back (on screen) when the page starts; never rename or remove a keep field.
 7. How it looks (if there's a screenshot, look at it first with the Read tool). If it's blank or nearly empty, find out why nothing is drawn (in 3D: is renderer.render(scene, camera) called every frame?). nothing important cut off or sliced at an edge, overlapping, hidden behind something or blocking the view; the star of it big enough and facing the kid; nothing too faint, too dark or lost in an empty screen.
 
-The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it) and the ${providedImports()} imports: they exist.
+The app itself provides KB.keep(...) (it carries the kid's progress to the next version - always keep it)${providedImports() ? ` and the ${providedImports()} imports: they exist.` : ': it exists.'}
 
 Don't restyle it and don't change what the kid chose (silly potty humor included - a poop they asked for stays a poop); beyond fixing, only add the small answers and celebrations above. If nothing is really wrong, reply with just: OK
 Otherwise reply with WHY: <what you fixed, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits that fix the real problems, each as:
@@ -296,7 +296,7 @@ Make the 2 or 3 changes that matter most, for example:
 - A sound never stops, plays twice at once, or is harsh.
 - A bug you can see in the code (something that can never be reached, caught or eaten; a count that's wrong; a thing that jumps).
 
-Keep it the kid's creation: don't change what they chose (silly potty humor included), don't add big new things they didn't ask for (what makes their thing what it is counts as asked for), don't restyle it, keep the controls and the KB.keep names (the app provides KB.keep and the ${providedImports()} imports). Keep it smooth: no CSS or SVG filters, shadowBlur, or objects made every frame.
+Keep it the kid's creation: don't change what they chose (silly potty humor included), don't add big new things they didn't ask for (what makes their thing what it is counts as asked for), don't restyle it, keep the controls and the KB.keep names (the app provides KB.keep${providedImports() ? ` and the ${providedImports()} imports` : ''}). Keep it smooth: no CSS or SVG filters, shadowBlur, or objects made every frame.
 
 If it's already as good as it can be, reply with just: OK
 Otherwise reply with WHY: <what you improved, in one short sentence for the grown-ups' log>, then only FIND/REPLACE edits, each as:
@@ -727,13 +727,14 @@ export function blankProblems(html) {
   const code = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join('\n');
   const problems = [];
   if (/from\s*['"]three['"]/.test(code) && !/\.render\s*\(/.test(code)) problems.push('It never draws: nothing calls renderer.render(scene, camera), so the screen stays blank. Call it at the end of every frame of the main loop.');
-  // Matter.js works out where things are only when its engine is stepped. A page that never does
-  // shows everything hanging where it was made, and throws nothing. (With its Engine under a name
-  // of the page's own there's no telling from here, so nothing is said.)
-  if (/from\s*['"]matter-js['"]/.test(code)) {
-    const stepped = /\b(?:Engine\.(?:update|run)|Runner\.(?:run|tick))\s*\(/.test(code) || /\.update\s*\(\s*[\w.$]*engine\b/i.test(code);
-    const renamed = /\bEngine\s*(?::|\bas\b)\s*[\w$]|=\s*(?:Matter\.)?Engine\s*[;,\n]/.test(code);
-    if (!stepped && !renamed) problems.push('Nothing would move: the page uses Matter.js and nothing steps its engine. Step it in the main loop, in fixed steps: `acc = Math.min(acc + dt * 1000, 50); while (acc >= 1000 / 60) { Engine.update(engine, 1000 / 60); acc -= 1000 / 60; }` (dt in seconds).');
+  // Matter.js works out where things are only when its engine is stepped. A page that makes an
+  // engine and never steps it shows everything hanging where it was made, and throws nothing.
+  // (With Matter's Engine or Runner under a name of the page's own there's no telling from here,
+  // so nothing is said: a wrong alarm costs the kid a turn of waiting, and its cure a second step.)
+  if (/from\s*['"]matter-js['"]/.test(code) && /\bEngine\.create\s*\(/.test(code)) {
+    const stepped = /\b(?:Engine\.(?:update|run)|Runner\.(?:run|tick))\b/.test(code) || /\.update\s*\(\s*[\w.$]*engine\b/i.test(code);
+    const renamed = /\b(?:Engine|Runner)\s*(?::|\bas\b)\s*[\w$]|=\s*(?:[\w$]+\.)?(?:Engine|Runner)\s*(?:[;,\n})]|\/[/*]|$)/.test(code);
+    if (!stepped && !renamed) problems.push('Nothing would move: the page uses Matter.js and nothing steps its engine. Step it in the main loop, in fixed steps: `acc = Math.min(acc + dt * 1000, 50); while (acc >= 1000 / 60) { Engine.update(engine, 1000 / 60); acc -= 1000 / 60; }` (acc starts at 0; dt in seconds).');
   }
   const lookups = {};
   for (const m of html.matchAll(/getElementById\(\s*(['"`])([\w-]+)\1\s*\)|querySelector\(\s*(['"`])#([\w-]+)\3\s*\)/g)) lookups[m[2] || m[4]] = (lookups[m[2] || m[4]] || 0) + 1;

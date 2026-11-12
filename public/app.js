@@ -1628,6 +1628,7 @@ function showParentStatus() {
   $('#parentStatus').textContent =
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
+    (c.physics === false ? '2D physics (Matter.js) NOT installed (run setup.sh): until then, things that pile up and tumble are faked. ' : '') +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
     brainsSaid(c) +
     `Showing: ${state.project?.title || 'blank page'}` +

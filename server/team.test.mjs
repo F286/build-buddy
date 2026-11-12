@@ -30,8 +30,21 @@ test('Matter.js physics that is stepped, in any of the ways it can be, is not', 
     "import Matter from 'matter-js';\nconst { Engine: Phys } = Matter;\nconst world = Phys.create();\nfunction tick() { Phys.update(world, 1000 / 60); }",
     "import Matter from 'matter-js';\nconst Phys = Matter.Engine;\nconst world = Phys.create();\nfunction tick() { Phys.update(world, 1000 / 60); }",
   ]) assert.deepEqual(blankProblems(page(renamed)), [], renamed);
+  // So with its Runner, and with its update under a name of the page's own.
+  for (const stepped of [
+    'const { Runner: R } = Matter;\nR.run(R.create(), engine);',
+    'const Run = Matter.Runner;\nRun.run(Run.create(), engine);',
+    'const step = Engine.update;\nstep(engine, 1000 / 60);',
+  ]) assert.deepEqual(blankProblems(page(`${MATTER}${stepped}`)), [], stepped);
   // Named imports work like the default one.
   assert.match(blankProblems(page("import { Engine, Bodies } from 'matter-js';\nconst engine = Engine.create();"))[0], /nothing steps its engine/);
+  // A Runner the page names and never runs steps nothing.
+  assert.match(blankProblems(page(`${MATTER}const { Runner } = Matter;\nconst runner = Runner.create();`))[0], /nothing steps its engine/);
+});
+
+test('Matter.js used for its arithmetic alone, with no engine, has nothing to step', () => {
+  assert.deepEqual(blankProblems(page("import Matter from 'matter-js';\nconst v = Matter.Vector.add({ x: 1, y: 1 }, { x: 2, y: 2 });")), []);
+  assert.deepEqual(blankProblems(page("import Matter from 'matter-js';\nconst { Engine, Bodies, Body, Composite, Constraint, Query, Events } = Matter;")), []);
 });
 
 test('a page without Matter.js is not asked to step anything, and a 3D page must draw', () => {

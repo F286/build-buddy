@@ -92,6 +92,7 @@ function publicConfig() {
     voices: speech.KOKORO_VOICES,
     watch: { enabled: c.watch.enabled, firstAfterSec: c.watch.firstAfterSec, everySec: c.watch.everySec },
     speech: speech.status(),
+    physics: Boolean(ai.libVersion('matter')), // (is Matter.js installed? for the panel)
   };
 }
 
@@ -310,8 +311,9 @@ const routes = {
 const LIBS = ['three', 'matter', 'phaser'];
 
 function serveStatic(res, pathname) {
-  // Creations run in a sandboxed frame with no origin of their own, so libraries need CORS; they
-  // never change, so let the browser keep them.
+  // Creations run in a sandboxed frame with no origin of their own, so libraries need CORS. Such a
+  // frame fetches them afresh for every creation it shows, whatever the caching headers say, so
+  // nothing here pretends otherwise: what setup.sh last installed is what the next creation gets.
   const libName = /^\/lib\/([a-z]+)\//.exec(pathname)?.[1];
   const lib = LIBS.includes(libName);
   const base = lib ? path.join(ROOT, 'vendor', libName) : PUBLIC;
@@ -322,7 +324,7 @@ function serveStatic(res, pathname) {
     if (err) return send(res, 404, { error: 'not found' });
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
-      'Cache-Control': lib ? 'max-age=31536000, immutable' : 'no-cache',
+      'Cache-Control': 'no-cache',
       ...(lib && { 'Access-Control-Allow-Origin': '*' }),
     });
     res.end(buf);

@@ -151,7 +151,8 @@ fi
 # ---------------------------------------------------------------------------- Matter.js
 say "2D physics: Matter.js"
 MATTER_VERSION=0.20.0
-if [ -s vendor/matter/matter.esm.js ] && [ "$(cat vendor/matter/VERSION 2>/dev/null)" = "$MATTER_VERSION" ] && grep -q "into the world" vendor/matter/matter.esm.js; then
+MATTER_WRAPPER=2 # (one more whenever the module written around it below changes, so every install gets the new one)
+if [ -s vendor/matter/matter.esm.js ] && [ "$(cat vendor/matter/VERSION 2>/dev/null)" = "$MATTER_VERSION" ] && [ "$(cat vendor/matter/WRAPPER 2>/dev/null)" = "$MATTER_WRAPPER" ]; then
   echo "already installed"
 else
   tmp=$(mktemp -d)
@@ -185,11 +186,14 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
   Matter.Composite[name] = Matter.World[name] = (composite, ...rest) => was(composite && composite.world && !composite.bodies ? composite.world : composite, ...rest);
 }
 export default Matter;
-export const { Axes, Bodies, Body, Bounds, Collision, Common, Composite, Composites, Constraint, Detector, Engine, Events, Mouse, MouseConstraint, Pair, Pairs, Plugin, Query, Render, Resolver, Runner, SAT, Sleeping, Svg, Vector, Vertices, World } = Matter;
+export const { Axes, Bodies, Body, Bounds, Collision, Common, Composite, Composites, Constraint, Contact, Detector, Engine, Events, Grid, Mouse, MouseConstraint, Pair, Pairs, Plugin, Query, Render, Resolver, Runner, SAT, Sleeping, Svg, Vector, Vertices, World } = Matter;
 MODULE
-  } > vendor/matter/matter.esm.js
+  } > vendor/matter/matter.esm.js.new
+  # (Written beside it and moved into place whole: the app may be showing a creation that imports it.)
+  mv vendor/matter/matter.esm.js.new vendor/matter/matter.esm.js
   cp "$tmp/package/LICENSE" vendor/matter/
   echo "$MATTER_VERSION" > vendor/matter/VERSION
+  echo "$MATTER_WRAPPER" > vendor/matter/WRAPPER
   rm -rf "$tmp"
 fi
 

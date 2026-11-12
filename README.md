@@ -689,6 +689,110 @@ Buddy changes.
 - **Smooth by default.** The AI follows a short performance checklist, and creations render at no
   more than 1.5× pixel density, so sharp screens don't quadruple the work.
 
+### What 2D creations are built with
+
+What moves in 2D is drawn on a plain canvas and moved by the AI's own arithmetic.
+[Matter.js](https://brm.io/matter-js/), a 2D physics library (85 KB), is there for when many things
+must really pile up, tumble and knock each other about. There is no 2D game engine. Build Buddy
+used to ship one, [Phaser](https://phaser.io) (1.4 MB), and told the AI to build whatever moves in
+2D with it. Measured, the engine made creations worse, so it went. The physics kids liked in those
+games stayed, because it was Matter.js all along: Phaser carries a copy, and the Phaser builds
+whose blocks really toppled had switched it on.
+
+**The test.** Ten requests of the kind kids make, each asking for five or six things at once. Five
+everyday ones: a monster truck show, a town to drive around, a toilet that shoots poop at a
+dinosaur, a car wash, a rocket that visits planets. Five where physics matters: a block tower and
+a wrecking ball, a marble run, a catapult and a castle, a ball pit with a puppy, a row of dominoes.
+Each was built in the default way of building (Opus leading, subagents helping), the set-ups side
+by side so they waited under the same load, and then given a big change ("add a crane that I can
+drive to pick up blocks and a little worker guy who runs away when the tower falls"). Claude, as a
+judge that isn't told which version is which, got the versions of one request together, played each
+one (taps, drags, key presses, pictures of what happens next), went down the list of what was asked
+for, and scored it from 1 to 10. Every version was judged twice, by judges who saw the versions in
+different orders; the two were within a point of each other 89% of the time.
+
+**First, four set-ups** (20 builds each):
+
+| | Phaser, as it was (the AI chose when) | Phaser for everything | Plain canvas only | Plain canvas, Matter.js for physics (first wording) |
+|---|---|---|---|---|
+| Everyday requests: score | 6.5 | 6.7 | 7.6 | 7.7 |
+| ... things asked for that were fully there | 76% | 74% | 88% | 89% |
+| Physics requests: score | 5.9 | 5.5 | 6.4 | 5.0 |
+| First versions that crashed when first tried (of 10) | 1 | 2 | 0 | 0 |
+| Wait for something new | 65 s | 69 s | 68 s | 63 s |
+| Wait for a big change | 52 s | 50 s | 57 s | 46 s |
+
+- **The engine made everyday creations worse.** A point lower, and a quarter of what was asked for
+  wasn't fully there, against an eighth on a plain canvas. It didn't make them quicker to build
+  either.
+- **Its pages crashed on calls it doesn't have.** Three of the 20 Phaser first versions crashed when
+  first tried and had to be repaired while the kid waited, two of them on the same made-up call
+  (`fillStar`). None of the 20 without Phaser did. An engine is thousands of names to remember
+  right, and Phaser 4, out since April 2026, changed some of the ones the models know from years of
+  Phaser 3; a canvas has a few dozen, unchanged for fifteen years.
+- **Real physics is for free-for-alls; a set course is surer as arithmetic.** Where many things
+  tumble freely the physics library won: the ball pit scored 7.8 with Matter.js, and 4.0 to 6.0
+  with the other three. Where things must follow a course to its end it lost: a row of dominoes
+  written as plain arithmetic scored 8.8, and the simulated one, whose chain stalled after two
+  dominoes, 3.5; marbles that were simply moved down their run reached the bucket, and simulated
+  ones jammed or missed it. So the AI is told both: move what must arrive with your own numbers,
+  and leave the heap to Matter.js.
+- **Matter.js has quirks, and the judges found them.** Each was then reproduced in the stage's own
+  sandbox and measured, and the AI is told the way round it: a stack with rounded corners falls
+  over by itself (square corners stand); with the usual friction a ball sticks on a gentle ramp;
+  with the usual air friction a thrown rock lands at 60% of the distance the arithmetic says (with
+  none, where it should). Three more are put right in the small module `setup.sh` writes around the
+  library, so nobody has to remember them: a castle wall between two towers creeps apart and falls
+  down under its 6 and 4 solver passes, and stands under 10 and 8; the older way of starting it
+  (`Runner.run(engine)`) silently did nothing; and a body added to the engine instead of its world
+  stopped the whole page.
+
+**Then what was kept**, built afresh and judged next to the old set-up and to plain canvas alone
+(all ten requests, new and changed, two judges each):
+
+| | Phaser, as it was | Plain canvas only | Plain canvas, Matter.js for free-for-alls (kept) |
+|---|---|---|---|
+| Everyday requests: score | 6.8 | 7.9 | 7.4 |
+| Physics requests: score | 5.9 | 6.3 | 7.0 |
+| All twenty versions: score | 6.3 | 7.1 | 7.2 |
+| ... things asked for that were fully there | 74% | 79% | 82% |
+| Ranked best of the three (of 40 judgments) | 6 | 18 | 16 |
+| Ranked last of the three | 21 | 9 | 10 |
+| Versions that crashed when first tried (of 20) | 1 | 0 | 0 |
+
+Against Phaser, the kept set-up is most of a point better and comes last half as often. Against
+plain canvas alone it is level overall and better where physics matters: the ball pit (8.8 against
+6.2), the catapult and its castle (9.0 and 8.8 against 6.5 and 4.5) and the marble run (8.0
+against 5.5), which the AI now moves down its course itself. On everyday requests the two draw on
+the same plain canvas, so the half point between them there is the luck of the build (in the first
+round it went the other way). The one request the kept set-up lost was the row of dominoes (3.0 and
+3.8): its build moved the chain along as told and stopped it short with a slip of its own. Three
+more builds of that request all ran to the bell.
+
+The wait didn't change. Built in pairs under the same load (eight requests, each new and then
+changed), something new took 70 s as it was and 71 s as kept, and a big change 49 s and 51 s.
+
+**Other libraries looked at.** About thirty, by reading what they ship, every claim checked by a
+second reader. No other 2D engine looked easier for a model than a plain canvas: KAPLAY's names
+changed with every generation and it can't roll or topple things, PixiJS draws and nothing more,
+p5.js is a canvas with shorter names for 1.2 MB. Among physics libraries, Planck (a Box2D port) was
+run through the same sandbox tests: balls roll and dominoes fall exactly as they should, where
+Matter.js needs its recipes, but a plain column of 14 boxes falls over, it thinks in metres, and
+models know its names less well. It's the one to try if Matter.js's quirks keep biting. The
+WebAssembly engines (Rapier, Box2D 3) are megabytes with an asynchronous start.
+
+**What this test can't say.** There was one build per set-up and request, and a single request
+swings by several points with the luck of the build: only the averages mean something. Physics
+requests stay the hardest for any set-up to get right in one go (scores from 2 to 9). The test
+computer has no graphics card, so frame rates there say nothing about a real one; so that every
+version was judged at full speed, Phaser's pages were played through Phaser's own canvas renderer,
+which looks the same.
+
+**If you're updating:** run `./setup.sh` once more - it fetches Matter.js (until then the grown-up
+panel says it's missing, and what tumbles is faked with arithmetic). Creations made with Phaser
+before keep working wherever `vendor/phaser` is still installed (`setup.sh` no longer fetches it),
+and are changed as they are, with Phaser.
+
 ## Safety and privacy
 
 - **Hard to break.** In full-screen mode there's no address bar, tabs or menus. With
