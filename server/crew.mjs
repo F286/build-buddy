@@ -941,6 +941,7 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
       typeof fit === 'function' ? fit(Boolean(before)) : fit,
     ].filter(Boolean).join('\n\n');
     if (opts.fitThinking != null) await s.think(opts.fitThinking);
+    if (stop?.aborted) throw new Error('interrupted'); // (stopped for the kid while the page was looked over)
     const second = await askLead(s, shot ? [{ type: 'text', text: back }, shot] : back, opts);
     return { text: `${first.text}\n${second.text}`, jobs: crew.jobs, fresh: Boolean(before) };
   } catch (err) {
@@ -978,6 +979,10 @@ async function buildWith(s, p, { page, history, text, alt, fix, title = '', look
   const t0 = Date.now();
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
   const w = workFor(p.id);
+  // (A page kept from before parts were put in without their own `// @part` lines, or built another
+  // way, may hold one inside a part's code: taken in without, it is what the files put together to,
+  // and never goes back into page.html with a part line that has no file.)
+  page = page && unmarked(page);
   // Sparky answers out loud right away, while the team builds (and before a pass at work has stopped).
   let over = false;
   const sayNow = line => {
@@ -1106,7 +1111,7 @@ export async function check({ projectId, version, report, screenshot }) {
   if ((w.passes >= passes() && !w.grow) || w.tries >= passes() + 2) return { skipped: 'polished enough' };
   if (w.checking || w.repairing) return { skipped: 'busy' };
   const s = sessionFor(projectId);
-  const page = store.html(p);
+  const page = unmarked(store.html(p)); // (as in buildWith)
   const t0 = Date.now();
   const took = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   const stale = () => {
@@ -1227,7 +1232,7 @@ export async function repair({ version, errors, keep, accept = false }) {
     return { version: p.current };
   }
   if (!errors) return { skipped: 'no errors' };
-  const page = store.html(p);
+  const page = unmarked(store.html(p)); // (as in buildWith)
   const w = workFor(p.id);
   const s = sessionFor(p.id);
   // (The kid waits for a repair: a pass at work makes way for it, as for a request.)

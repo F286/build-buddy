@@ -532,10 +532,13 @@ async function build(body) {
           // two - and can take many seconds without one, with this app held up meanwhile, since the
           // page runs in the same process. One that slow, or that came back with no picture at all
           // - the page's own 1.5 s for taking it ran out - and this computer isn't asked again.)
+          // (Not counted while the app's window is hidden: a page out of sight draws nothing then, and
+          // answers nothing, however quick the computer.)
           const asked = performance.now();
+          const shown = !document.hidden;
           peek(ev.html)
             .then(seen => {
-              if (!seen.screenshot || performance.now() - asked > 2600) state.peeksTooSlow = true;
+              if (shown && !document.hidden && (!seen.screenshot || performance.now() - asked > 2600)) state.peeksTooSlow = true;
               return api('/api/peeked', { id: ev.id, ...seen });
             })
             .catch(() => {});

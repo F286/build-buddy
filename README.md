@@ -260,7 +260,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `team.agents` | `true` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers and makes them fit, then grows and polishes it while the kid plays. `false` is team mode's usual way. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents` (or `--direct`, or `--team`). |
 | `team.agentHelpers` | `"subagents"` | Who writes the agent way's parts. `"subagents"`: Claude Code's subagents, which the lead calls one after another. `"direct"`: [direct helpers](#with-direct-helpers-new) - programs of Build Buddy's own, each started on its part the moment the lead has written that part's job; in test runs something new appeared in about two thirds of the time. In the panel as *The same team with direct helpers*, and for one run with `./start.sh --direct`. |
-| `team.peek` | `true` | With direct helpers: before something new or a big change is shown, the app runs it out of sight for a moment and the lead is handed a screenshot of it (and any error it threw) together with its helpers' parts - so a school drawn black, a car hidden under a cloud or people cut off at the edge are fixed before the kid sees them. It takes a second or two with a graphics card. Without one, photographing a page can take many seconds and hold the app up meanwhile: after one try that slow, or one that brings no picture back, it isn't asked again until Build Buddy restarts. `data/log.txt` says how long each one took. |
+| `team.peek` | `true` | With direct helpers: before something new or a big change is shown, the app runs it out of sight for a moment and the lead is handed a screenshot of it (and any error it threw) together with its helpers' parts - so a school drawn black, a car hidden under a cloud or people cut off at the edge are fixed before the kid sees them. It takes a second or two with a graphics card. Without one, photographing a page can take many seconds and hold the app up meanwhile, so after one peek that takes longer than about two and a half seconds or brings no picture back, it isn't asked for again until Build Buddy restarts. `data/log.txt` says how long each one took. |
 | `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "fit": 700, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`), when it's handed the parts to make them fit (`fit`, with direct helpers) and when it looks its creation over (`look`). Opus 5.5 and Sonnet 5.5 decide for themselves how long to think whatever these say, so the lead's instructions ask it to start writing at once. `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
 | `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable`. Haiku writes half again as fast (532 characters a second against 336), but its parts were plainly weaker - a ramp the wrong shape, a word on a sign, things in the wrong band of the screen - so Sonnet stays. |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo` (which puts Claude first for that run). Used when Claude leads. |
@@ -538,7 +538,8 @@ a rocket visiting planets - each with five or six things asked for at once) show
   behind when their planets moved.
 - **It remembers the code.** The same session wrote the page, so a small change is two exact edits
   and takes 6 to 12 s - nothing is read again or written again.
-- **Opus leads well.** Its first word comes after about 3 s, without a long think first, and its
+- **Opus leads well.** It starts writing without a long think first - after about 3 s when it's
+  asked for a piece of writing on its own, 8 s as the lead planning the build timed below - and its
   edits are exact. (It writes 236 characters a second; Sonnet writes 336 and Haiku 532, which is
   why the helpers aren't Opus. Fable writes 212 after thinking for about 13 s first, every time:
   fuller creations and a longer wait.)
@@ -593,8 +594,8 @@ Three things got first versions there, each found by reading what the judges mar
 - **The check runs the numbers as they are** (is the jump high and long enough to clear the row?)
   and follows what one part tells to the parts that should react.
 
-It uses about as much of a Claude plan as before: a town, its small change and its big change came
-to about 15% more, going by the cost Claude Code itself reports for each program.
+It uses about as much of a Claude plan as the subagents do: a town, its small change and its big
+change came to about 15% more, going by the cost Claude Code itself reports for each program.
 
 Three things tried along the way were left out. Haiku as the helpers was quicker and its parts
 were plainly weaker. Showing the creation before the lead's check would save about ten seconds
