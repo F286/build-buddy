@@ -349,6 +349,49 @@ scene('a block (friction 0.33) creeping down a ramp of 20 degrees: how far it sl
   return R(block.position.x - x);
 }, (on, off) => Math.abs(on - off) <= Math.max(10, off * 0.1));
 
+const wall = () => { const bricks = []; for (let r = 0; r < 6; r++) for (let c = 0; c < 3; c++) bricks.push(B.rectangle(620 + c * 40, G - 20 - r * 40, 40, 40, { friction: 0.8 })); return bricks; };
+const wrecker = (x, density) => {
+  const ball = B.circle(x - 300 * Math.sin(1), 300 + 300 * Math.cos(1), 30, { frictionAir: 0.002, density });
+  return [ball, Constraint.create({ pointA: { x, y: 300 }, bodyB: ball, length: 300, stiffness: 1 })];
+};
+scene('a wrecking ball that swings into a wall and comes to rest leaning on the rubble: furthest a brick moves by itself from 60 s to 120 s (px)', engine => {
+  ground(engine);
+  const bricks = wall();
+  Composite.add(engine.world, [...bricks, ...wrecker(575, 0.02)]);
+  step(engine, 3600);
+  const start = places(bricks);
+  step(engine, 3600);
+  return R(far(bricks, start));
+}, on => on <= 2);
+scene('a wrecking ball let go as the wall is made, so that it strikes about when the wall would first be held: furthest a brick is knocked in the second after (px)', engine => {
+  ground(engine);
+  const bricks = wall(), [ball, rope] = wrecker(540, 0.004);
+  Composite.add(engine.world, [...bricks, ball, rope]);
+  const start = places(bricks);
+  let hit = -1;
+  for (let i = 0; i < 400 && (hit < 0 || i < hit + 60); i++) {
+    Engine.update(engine, 1000 / 60);
+    if (hit < 0 && engine.pairs.list.some(p => p.isActive && (p.bodyA === ball || p.bodyB === ball))) hit = i;
+  }
+  return R(far(bricks, start));
+}, (on, off) => on >= off * 0.8);
+for (const [what, run] of [
+  ['a tall plank 1 degree past its balance: its lean after 5 s (hundredths of a radian)', engine => {
+    const lean = Math.atan(30 / 200) + Math.PI / 180, half = Math.hypot(15, 100);
+    const plank = B.rectangle(600 + half * Math.sin(lean - Math.atan(30 / 200)), G - half * Math.cos(lean - Math.atan(30 / 200)), 30, 200, { friction: 0.8, angle: lean });
+    Composite.add(engine.world, plank);
+    step(engine, 600, null, 1000 / 120);
+    return R(Math.abs(plank.angle) * 100);
+  }],
+  ['a ball rolling at 9 px a second: how far it gets in 20 s (px)', engine => {
+    Composite.allBodies(engine.world)[0].friction = 0;
+    const ball = B.circle(300, G - 20, 20, { friction: 0, frictionAir: 0 }); Composite.add(engine.world, ball);
+    Body.setVelocity(ball, { x: 0.15, y: 0 });
+    step(engine, 2400, null, 1000 / 120);
+    return R(ball.position.x - 300);
+  }],
+]) scene(`with two steps of 1/120 s a frame, ${what}`, engine => { ground(engine); return run(engine); }, same(10));
+
 // What goes away without a touch, and what is tied together.
 scene('a plank leaning on a block that the page then puts somewhere else at once (Body.setPosition): the plank\'s lean 5 s later (hundredths of a radian)', engine => {
   ground(engine);
