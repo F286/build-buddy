@@ -692,7 +692,7 @@ Buddy changes.
 ### What 2D creations are built with
 
 What moves in 2D is drawn on a plain canvas and moved by the AI's own arithmetic.
-[Matter.js](https://brm.io/matter-js/), a 2D physics library (93 KB), is there for when many things
+[Matter.js](https://brm.io/matter-js/), a 2D physics library (95 KB), is there for when many things
 must really pile up, tumble and knock each other about. There is no 2D game engine. Build Buddy
 used to ship one, [Phaser](https://phaser.io) (1.4 MB), and told the AI to build whatever moves in
 2D with it. Measured, the engine made creations worse, so it went. The physics kids liked in those
@@ -754,14 +754,16 @@ number of passes cures it. One of three castles the AI built crumbled within a m
 of being left alone. No judge had seen it, because a judge plays for seconds. Matter's own cure,
 putting resting bodies to sleep, has gaps every page would have to know about: a sleeping body
 ignores a push until it is woken, and hangs in the air when what it stood on goes away. So the
-module around the library does it instead: what has been at rest for a second is held exactly
-where it is, and let go, with everything it touches, the moment something really moves it.
-Measured in the sandbox, ten kinds of structure (castles of two brick sizes, walls, towers of up
-to 20 blocks, a pile of balls) stand for 5 minutes, and a hit, a grab, a block pulled out from
-underneath, a throw and gravity turned upside down come out as in plain Matter.js. All 58
+module around the library does it instead: what has rested on something for a second is held
+exactly where it is, and let go, with everything it touches or is tied to, the moment something
+really moves it. `test/matter.html` runs 50 scenes with it and without: castles, walls, towers of
+up to 20 blocks, a pile of balls and a heap of rubble stay exactly as they came to rest (in plain
+Matter.js the castles fall and the heaps never stop stirring), and hits, grabs, a block pulled out
+from underneath, throws, ropes, seesaws, slopes, stopped time and gravity turned upside down come
+out as in plain Matter.js. Its price: what creeps along slower than 5 px a second stops. All 58
 Matter.js creations of this test still run on it. Twelve of them were then played on both builds
-of the library by judges who weren't told which was which: nine played the same, three were better
-with it (that castle stood, and rubble stopped creeping about), none worse.
+of the library by judges who weren't told which was which: eleven played the same, one was better
+with it (that castle stood), none worse.
 
 **Then what was kept** was built afresh and judged next to the first round's builds of the old
 set-up and of plain canvas alone (all ten requests, new and changed, two judges each):
@@ -795,7 +797,11 @@ work; a third request of the kind, made up for the purpose (a silly machine: a b
 seesaw that throws a toy mouse into a basket), worked 4 times of 4. Two other wordings of the
 advice for what must follow a course ("a path it can't leave", "close the course, so nothing gets
 lost") were tried side by side with it, four builds a request. Neither scored better (7.1 against
-7.4, and 6.7 against 7.1), so the wording stayed.
+7.4, and 6.7 against 7.1), so the wording stayed. Three smaller additions went through the same
+check, and two came out again: told that what rests is held, the AI wrote its own holding and left
+blocks hanging in the air; told how far a ball on a rope swings, it hung the ball outside the
+window. With the wording as it now stands, the three requests that use Matter.js were built once
+more (the tower twice) and judged against the round before: 7.4 and 7.4.
 
 The wait didn't change. Built in pairs under the same load (eight requests, each new and then
 changed), something new took 70 s as it was and 71 s as kept, and a big change 49 s and 51 s.
