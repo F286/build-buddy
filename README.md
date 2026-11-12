@@ -692,7 +692,7 @@ Buddy changes.
 ### What 2D creations are built with
 
 What moves in 2D is drawn on a plain canvas and moved by the AI's own arithmetic.
-[Matter.js](https://brm.io/matter-js/), a 2D physics library (95 KB), is there for when many things
+[Matter.js](https://brm.io/matter-js/), a 2D physics library (96 KB), is there for when many things
 must really pile up, tumble and knock each other about. There is no 2D game engine. Build Buddy
 used to ship one, [Phaser](https://phaser.io) (1.4 MB), and told the AI to build whatever moves in
 2D with it. Measured, the engine made creations worse, so it went. The physics kids liked in those
@@ -756,7 +756,7 @@ putting resting bodies to sleep, has gaps every page would have to know about: a
 ignores a push until it is woken, and hangs in the air when what it stood on goes away. So the
 module around the library does it instead: what has rested on something for a second is held
 exactly where it is, and let go, with everything it touches or is tied to, the moment something
-really moves it. `test/matter.html` runs 50 scenes with it and without: castles, walls, towers of
+really moves it. `test/matter.html` runs 56 scenes with it and without: castles, walls, towers of
 up to 20 blocks, a pile of balls and a heap of rubble stay exactly as they came to rest (in plain
 Matter.js the castles fall and the heaps never stop stirring), and hits, grabs, a block pulled out
 from underneath, throws, ropes, seesaws, slopes, stopped time and gravity turned upside down come

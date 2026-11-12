@@ -195,8 +195,8 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
 // other body, so nothing about touching it changes, and it is let go - with everything it touches,
 // and everything that touches - as soon as it is really pushed or turned, the page moves or pushes
 // it (Body.setPosition and the like, or a force), something on the move touches it, it no longer
-// touches what it rested on (a body taken away from under it), what it is tied to pulls it, or
-// gravity changes. What touches nothing is never held.
+// touches what it rested on or hangs on what held it (a body taken away from under it, a rope
+// cut), what it is tied to pulls it, or gravity changes. What touches nothing is never held.
 // (What it costs: what creeps along something slower than 5 px a second stops there - a marble on
 // a slope of half a degree, a ball with friction on one of 3 degrees or less, which plain Matter
 // moves a few pixels a second. Engine.create({ settling: false }) is plain Matter, and so is an
@@ -206,9 +206,10 @@ const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and ra
 const FAR = 5, FAR_TURN = 0.03; // and no further than this from where that began (or it is going somewhere, slowly);
 const SPOT = 0.5, SPOT_TURN = 0.01; // or shaking on the spot: no further than this from where it was
 const PUSH = 0.5, PUSH_NO_GRAVITY = 0.05, PUSH_TURN = 0.005; // pushed: faster than this share of one step of free fall (px a step where nothing falls), or radians a step
-const states = new WeakMap(); // body -> { x, y, angle, slow, fromX, fromY, fromAngle, spot, held, at, touches, rested, tied }
+const states = new WeakMap(); // body -> { x, y, angle, slow, fromX, fromY, fromAngle, spot, held, step, at, touches, rested, tied }
 const handled = new WeakSet(); // bodies the page itself has just moved, pushed or changed
 const pulls = new WeakMap(); // engine -> its gravity as last seen
+const settled = new WeakMap(); // engine -> the step it was last settled in
 const NO_SPEED = { x: 0, y: 0 };
 const put = { position: Body.setPosition, angle: Body.setAngle, velocity: Body.setVelocity, spin: Body.setAngularVelocity };
 for (const name of ['setPosition', 'setAngle', 'setVelocity', 'setAngularVelocity', 'setSpeed', 'setAngularSpeed', 'translate', 'rotate', 'scale', 'applyForce', 'setStatic', 'setMass', 'setDensity', 'setInertia', 'setVertices', 'setParts', 'setCentre']) {
@@ -219,8 +220,8 @@ for (const name of ['setPosition', 'setAngle', 'setVelocity', 'setAngularVelocit
     return was.apply(this, arguments);
   };
 }
-const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, fromX: 0, fromY: 0, fromAngle: 0, spot: 0, held: false, at: 0, touches: 0, rested: 0, tied: 0 }).get(body);
-let now = 0; // (counts the steps settled: `at` is the last one a body touched something in, `touches` how many things)
+const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, fromX: 0, fromY: 0, fromAngle: 0, spot: 0, held: false, step: 0, at: 0, touches: 0, rested: 0, tied: 0 }).get(body);
+let now = 0; // (counts the steps settled: `step` is the last one a body was settled in, `at` the last one it touched something in, `touches` how many things)
 const touch = body => {
   if (body.isStatic) return;
   const s = stateOf(body);
@@ -230,10 +231,21 @@ const touch = body => {
   }
   s.touches++;
 };
+// (What a rope, a pin or an axle holds counts with what a body touches - so one taken away is one
+// thing fewer - but only for a body that touches something: what merely hangs is never held.)
+const tie = end => {
+  if (!end || end.isStatic) return;
+  const s = stateOf(end.parent || end);
+  s.tied = now;
+  if (s.at === now) s.touches++;
+};
 function settle(engine) {
+  // (Switched off: what was held is forgotten, or it would jump back when switched on again.)
+  if (engine.settling === false || engine.enableSleeping) return void settled.delete(engine);
   const step = engine.timing.lastDelta;
-  if (engine.settling === false || engine.enableSleeping || !step) return; // (no time has passed: nothing has rested either)
-  now++;
+  if (!step) return; // (no time has passed: nothing has rested either)
+  const last = settled.get(engine);
+  settled.set(engine, ++now);
   const bodies = Composite.allBodies(engine.world);
   const gravity = engine.gravity;
   // Gravity changed: everything is let go.
@@ -249,11 +261,11 @@ function settle(engine) {
     touch(pair.bodyA.parent);
     touch(pair.bodyB.parent);
   }
-  // (What a rope, a pin or an axle is tied to: a Constraint, Matter's own mouse constraint included.)
+  // (A Constraint, Matter's own mouse constraint included.)
   const ties = Composite.allConstraints(engine.world);
-  for (const tie of ties) {
-    if (tie.bodyA && !tie.bodyA.isStatic) stateOf(tie.bodyA.parent || tie.bodyA).tied = now;
-    if (tie.bodyB && !tie.bodyB.isStatic) stateOf(tie.bodyB.parent || tie.bodyB).tied = now;
+  for (const rope of ties) {
+    tie(rope.bodyA);
+    tie(rope.bodyB);
   }
   const loose = []; // what is let go this step, to begin with
   for (const body of bodies) {
@@ -264,16 +276,21 @@ function settle(engine) {
       continue;
     }
     const s = stateOf(body);
-    if (byHand || all) loose.push(body);
+    // (Not here in the step before: it was out of the world meanwhile, or is new.)
+    const back = s.step !== last;
+    s.step = now;
+    if (byHand || all || back) loose.push(body);
     else if (s.at !== now) {
       // What touches nothing is never held (it would hang in the air), and takes a second to count as at rest again.
       if (s.held) loose.push(body);
       s.slow = s.spot = 0;
     } else if (s.held) {
-      // Held, a body touches the same things step after step: fewer means one of them has gone.
+      // Held, a body touches the same things step after step: fewer means one of them has gone
+      // (more means something has come to rest on it, and is counted from now on).
       // And only what it is tied to can move it without a touch (the solver's own little
       // starts, in a heap that has come to rest, are not that).
       if (s.touches < s.rested || (s.tied === now && (body.speed > push || body.angularSpeed > PUSH_TURN))) loose.push(body);
+      else s.rested = s.touches;
     } else {
       if (body.speed < SLOW && body.angularSpeed < SLOW_TURN) {
         if (!s.slow++) {
@@ -311,10 +328,10 @@ function settle(engine) {
       link(pair.bodyA.parent, pair.bodyB.parent);
       link(pair.bodyB.parent, pair.bodyA.parent);
     }
-    for (const tie of ties) {
-      if (!tie.bodyA || !tie.bodyB) continue;
-      link(tie.bodyA.parent || tie.bodyA, tie.bodyB.parent || tie.bodyB);
-      link(tie.bodyB.parent || tie.bodyB, tie.bodyA.parent || tie.bodyA);
+    for (const rope of ties) {
+      if (!rope.bodyA || !rope.bodyB) continue;
+      link(rope.bodyA.parent || rope.bodyA, rope.bodyB.parent || rope.bodyB);
+      link(rope.bodyB.parent || rope.bodyB, rope.bodyA.parent || rope.bodyA);
     }
     for (let i = 0; i < loose.length; i++) {
       for (const other of touching.get(loose[i]) || []) {
