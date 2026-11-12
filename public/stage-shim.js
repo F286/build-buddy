@@ -28,6 +28,25 @@
     report(`Unhandled promise rejection: ${e.reason?.message || e.reason}`);
   });
 
+  // A frame's timestamp is when the browser began the frame, which can be before the page asked for
+  // it (measured: for one request in three made outside a frame, by up to 30 ms). The usual loop -
+  // `let last = performance.now()`, then `dt = now - last` in the frame - so took its first step
+  // backwards in time, and one creation's star divided nought by nought there and was never seen
+  // again. Here such a frame is stamped with the time its callback runs instead, and at least a
+  // tenth of a millisecond (the clock's step) after the moment it was asked for. (Not that moment
+  // itself: it is the very instant of `last`, so the first step came out as exactly 0 on every
+  // third load, and a creation that divides by its step lost all its balls.) A loop whose frames
+  // keep up with the screen is left as it was (4 of 3,300 frames restamped on eleven creations);
+  // where a frame's own work takes longer than the screen's frame and the next frame is asked for
+  // at the end of it (the creations' own loops, Phaser), every frame is restamped, and the steps
+  // still add up to the time that passed.
+  const frame = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = callback => {
+    if (typeof callback !== 'function') return frame(callback);
+    const asked = performance.now();
+    return frame(now => callback(now > asked ? now : Math.max(performance.now(), asked + 0.1)));
+  };
+
   let lastInput = performance.now();
   for (const type of ['keydown', 'pointerdown', 'touchstart']) {
     addEventListener(type, () => (lastInput = performance.now()), { capture: true, passive: true });

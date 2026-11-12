@@ -757,7 +757,7 @@ plain-canvas builds):
 | Where physics matters (12): score | 6.2 | 6.8 | 6.5 |
 | All: score | 6.58 | 6.65 | 6.65 |
 | ... things asked for that were fully there | 72% | 74% | 74% |
-| Wait for something new, and for a big change | 65 s, 47 s | 67 s, 52 s | not timed side by side |
+| Wait for something new, and for a big change | 65 s, 47 s | 67 s, 52 s | |
 
 Overall they are level: the point gained on the ten did not carry over. The plain reason is that
 the old Build Buddy, though told to use Phaser for whatever moves in 2D, drew most of these on a
@@ -773,12 +773,18 @@ higher, but on so few requests that one build decides it:
   against 6.8) and bowling pins (8.0 against 8.2), 3 of the 28. Its pins tip over and shove each
   other, where arithmetic made them fade away, but the two bowling games scored alike.
 - **The luck of the build is large.** Four builds that didn't work make most of the differences
-  between the kinds: a maze whose mouse never appeared (as kept: a slip in the arithmetic of its
-  first frame) and, as it was, that slingshot, a pinball table whose ball never came down, and a
-  pizza shop that froze at every delivery once changed. Without those four requests the games
-  score 6.9 as it was and 6.6 as kept, the toys 6.9 and 7.1, the physics requests 7.0 and 6.7.
-  Versions that scored 3.5 or less: 5 of 56 as it was, 2 as kept.
-- **Changes took 5 s longer** as kept (52 s against 47 s; something new, 67 s against 65 s).
+  between the kinds: a maze whose mouse never appeared (as kept) and, as it was, that slingshot, a
+  pinball table whose ball never came down, and a pizza shop that froze at every delivery once
+  changed. Without those four requests the games score 6.9 as it was and 6.6 as kept, the toys
+  6.9 and 7.1, the physics requests 7.0 and 6.7. Versions that scored 3.5 or less: 5 of 56 as it
+  was, 2 as kept. (The maze's cause is gone for every creation since: the browser stamps a frame
+  with the time it began, which can be before the page asked for it, so the usual loop took its
+  first step backwards in time, and the mouse divided nought by nought. No frame is stamped
+  earlier than its asking any more.)
+- **The wait is about the same.** In the builds of the table a big change took 52 s as kept
+  against 47 s as it was. Built side by side once more, with the instructions that ship, it took
+  46 s against 49 s (plain canvas alone: 47 s): a run of 28 swings that much. Something new took
+  2 s longer as kept both times (67 s against 65 s, then 66 s against 64 s).
 
 Two variations were tried and not kept. With the long instructions for Matter.js moved to a file
 the AI reads only when it uses the library, the 28 requests scored the same (6.7) and the AI used
@@ -893,7 +899,7 @@ server/watch.mjs     the overwatch: a stronger model that checks on games and fi
 server/store.mjs     creations and their versions, saved in data/projects/
 server/config.mjs    settings and their defaults
 public/              the kid-facing screen
-public/stage-shim.js runs inside every creation: crash reports, talk keys, KB.keep, overwatch reports
+public/stage-shim.js runs inside every creation: crash reports, talk keys, KB.keep, overwatch reports, frame times
 setup.sh             downloads and builds everything in vendor/ (and writes the small module around Matter.js)
 test/matter.html     tests of that module, run in a browser
 start.sh             starts the app

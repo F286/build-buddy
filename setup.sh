@@ -200,9 +200,10 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
 // (What it costs: what gets less than 5 px in a second stops there - a marble on a slope of up to
 // half a degree, which plain Matter has rolling at 50 px a second ten seconds later, and a ball
 // with friction on one of up to 5 degrees, which plain Matter moves a pixel or two a second - and
-// what comes up against a held body slower than 12 px a second (24, if it weighs the same) is
-// stopped by it and doesn't push it. Engine.create({ settling: false }) is plain Matter, and so
-// is an engine with Matter's own sleeping switched on. test/matter.html has the tests.)
+// what comes up against a held body slower than 12 px a second (24 if it weighs the same, faster
+// the lighter it is) is stopped by it and doesn't push it. Engine.create({ settling: false }) is
+// plain Matter, and so is an engine with Matter's own sleeping switched on. test/matter.html has
+// the tests.)
 const REST = 60; // sixtieths of a second a body must be at rest before it is held: a second
 const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step all that time,
 const FAR = 5, FAR_TURN = 0.03; // and no further than this from where that began (or it is going somewhere, slowly);
