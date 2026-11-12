@@ -162,6 +162,41 @@ else
   rm -rf "$tmp"
 fi
 
+# ---------------------------------------------------------------------------- Matter.js
+say "2D physics: Matter.js"
+MATTER_VERSION=0.20.0
+if [ -s vendor/matter/matter.esm.js ] && [ "$(cat vendor/matter/VERSION 2>/dev/null)" = "$MATTER_VERSION" ]; then
+  echo "already installed"
+else
+  tmp=$(mktemp -d)
+  curl -fsSL "https://registry.npmjs.org/matter-js/-/matter-js-$MATTER_VERSION.tgz" | tar xz -C "$tmp"
+  mkdir -p vendor/matter
+  # Its browser build is one file for a <script> tag, and creations import modules: so it gets a
+  # module to export from around it. Both ways of importing it then work -
+  # import Matter from 'matter-js' and import { Engine, Bodies } from 'matter-js'.
+  {
+    echo "// Matter.js $MATTER_VERSION (build/matter.min.js), as an ES module."
+    echo "const module = { exports: {} };"
+    echo "(function (module, exports, define) {"
+    cat "$tmp/package/build/matter.min.js"
+    echo
+    cat <<'MODULE'
+}).call(globalThis, module, module.exports);
+const Matter = module.exports;
+// Most examples written before this version start the engine with Runner.run(engine) or
+// Engine.run(engine). This version wants Runner.run(runner, engine) and, handed only an engine,
+// runs nothing and says nothing - so here both spellings work.
+const run = Matter.Runner.run;
+Matter.Runner.run = Matter.Engine.run = (runner, engine) => (engine ? run(runner, engine) : run(Matter.Runner.create(), runner));
+export default Matter;
+export const { Axes, Bodies, Body, Bounds, Collision, Common, Composite, Composites, Constraint, Detector, Engine, Events, Mouse, MouseConstraint, Pair, Pairs, Plugin, Query, Render, Resolver, Runner, SAT, Sleeping, Svg, Vector, Vertices, World } = Matter;
+MODULE
+  } > vendor/matter/matter.esm.js
+  cp "$tmp/package/LICENSE" vendor/matter/
+  echo "$MATTER_VERSION" > vendor/matter/VERSION
+  rm -rf "$tmp"
+fi
+
 # ---------------------------------------------------------------------------- AI brains
 say "AI brains"
 found=0

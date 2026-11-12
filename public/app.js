@@ -259,6 +259,7 @@ const LIB = `${location.origin}/lib/`;
 const IMPORT_MAP = JSON.stringify({
   imports: {
     phaser: `${LIB}phaser/phaser.esm.min.js`,
+    'matter-js': `${LIB}matter/matter.esm.js`,
     three: `${LIB}three/build/three.module.js`,
     'three/addons/': `${LIB}three/addons/`,
   },

@@ -305,7 +305,7 @@ const routes = {
 };
 
 // Libraries creations may import, served from vendor/ (see the import map in public/app.js).
-const LIBS = ['three', 'phaser'];
+const LIBS = ['three', 'phaser', 'matter'];
 
 function serveStatic(res, pathname) {
   // Creations run in a sandboxed frame with no origin of their own, so libraries need CORS; they
