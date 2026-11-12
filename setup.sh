@@ -206,9 +206,9 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
 // rest: what comes up against it has to come at 24 px a second if it weighs the same, faster the
 // lighter it is (or, turning on the spot, at 14 degrees a second, however big it is), and a
 // weight that would move it little by little may not move it at all - a block set down softly
-// on the end of a plank balanced on another doesn't tip it, a ball let into the dip between two
-// others on ice doesn't part them. Engine.create({ settling: false }) is plain Matter, and so is
-// an engine with Matter's own sleeping switched on. test/matter.html has the tests.)
+// on the end of a plank balanced on another doesn't tip it, a ball set at rest in the dip between
+// two others on ice may not part them. Engine.create({ settling: false }) is plain Matter, and so
+// is an engine with Matter's own sleeping switched on. test/matter.html has the tests.)
 const REST = 60; // sixtieths of a second a body must be at rest before it is held: a second
 const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step all that time,
 const FAR = 5, FAR_TURN = 0.03; // and no further than this from where that began (or it is going somewhere, slowly);

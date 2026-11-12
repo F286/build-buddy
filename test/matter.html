@@ -652,13 +652,13 @@ scene('a ball on ice hit by one of its own weight around the step in which it wo
   }
   return R(sum);
 }, moved(200, 10));
-scene('three balls in a row on ice, each touching the next, hit softly at one end around the step in which they would begin to be held (three timings, a quarter of a step apart): how far the far ball has gone a second after, summed (px)', first => {
+scene('three balls of bounce 0.5 in a row on ice, each touching the next, hit softly at one end around the step in which they would begin to be held (three timings, a quarter of a step apart): how far the far ball has gone a second after, summed (px)', first => {
   let sum = 0;
   for (const wait of [59.75, 60, 60.25]) {
     const engine = Engine.create(first.settling === false ? { settling: false } : undefined);
     ground(engine);
     Composite.allBodies(engine.world)[0].friction = 0;
-    const icy = { friction: 0, frictionAir: 0, frictionStatic: 0, restitution: 1 };
+    const icy = { friction: 0, frictionAir: 0, frictionStatic: 0, restitution: 0.5 };
     const row = Array.from({ length: 3 }, (_, i) => B.circle(600 + i * 39.5, G - 20, 20, icy)), cue = B.circle(560 - wait, G - 20, 20, icy);
     Composite.add(engine.world, [...row, cue]);
     Body.setVelocity(cue, { x: 1, y: 0 });
@@ -666,7 +666,7 @@ scene('three balls in a row on ice, each touching the next, hit softly at one en
     sum += row[2].position.x - 679;
   }
   return R(sum);
-}, (on, off) => off > 30 && on > off * 0.8); // (the hit takes two steps to arrive, and what the first one brings may be lost: but not all of it, as when one ball of the row is held and the next is not)
+}, moved(30, 5));
 // (And what lands on something built and is stopped by it sets nothing going: the building stays held.)
 scene('a small box set down on a thin wall that has stood 4 s: bricks that move at all in the second after', engine => {
   ground(engine);

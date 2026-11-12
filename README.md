@@ -824,10 +824,11 @@ existed, so twelve Matter.js creations of that test (the tower, the ball pit and
 two builds of each, new and changed) were then played on both builds of the module by judges who
 weren't told which was which: nine played the same, three scored better with it (two for what it
 does: that castle stood, and knocked-down blocks stayed where they landed), none worse. The eight
-Matter.js creations of the never-seen requests played the same on both. (One thing was mended
+Matter.js creations of the never-seen requests played the same on both. (Two things were mended
 after that judging: a held thing hit by something that the hit itself stops, a ball by a ball of
-its own weight, stayed where it was. It is let go now.) The AI isn't told about it: told that
-what rests is held, it wrote its own holding and left blocks hanging in the air.
+its own weight, stayed where it was, and a hit that came just as a thing began to be held was
+partly lost.) The AI isn't told about it: told that what rests is held, it wrote its own holding
+and left blocks hanging in the air.
 
 **Other libraries looked at:** about thirty. No other 2D engine looked easier for a model than a
 plain canvas. Planck (a Box2D port) is the physics library to try if Matter.js's quirks keep
