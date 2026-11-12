@@ -299,6 +299,17 @@ export function stop() {
   session = null;
 }
 
+// The agent way stays on after the settings were saved: the lead of the way its helpers aren't run
+// any more (subagents here, or direct helpers - crew.mjs) stops, with any pass of its own at work. The
+// next request starts the other way's lead, which is handed the creation as it is. (Nothing to stop,
+// when the way wasn't changed.)
+export function stopOther() {
+  if (crew.on()) {
+    session?.end();
+    session = null;
+  } else crew.stop();
+}
+
 // Was this version made by the agent way (itself, or an overwatch fix on top of one of its versions)?
 export function madeByAgents(p, version) {
   let v = p.versions.find(x => x.n === version);

@@ -293,6 +293,7 @@ const routes = {
     saveConfig(patch);
     if (!solo.enabled()) solo.stop(); // (its program isn't needed any more)
     if (!ai.agentWay()) agents.stop();
+    else agents.stopOther();
     if (leadBrain() !== 'claude') team.stopPrograms({ warmOnly: true }); // (Claude's waiting helpers aren't needed)
     return publicConfig();
   },

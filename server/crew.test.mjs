@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { JobReader, changesIn, fixed, applyReply, codeOf, tagOf, keepFields, looseEnds } from './crew.mjs';
+import { JobReader, changesIn, fixed, applyReply, taken, assemble, codeOf, tagOf, keepFields, looseEnds, peeked, peekThrough } from './crew.mjs';
 
 // A reply read in small chunks, as it arrives.
 function read(text, chunk = 5) {
@@ -59,6 +59,8 @@ test('nothing inside a FIX block, a whole file or a snippet counts as a job or a
 
 test('a job tag: its picture and its words', () => {
   assert.deepEqual(tagOf('🚚 the monster truck'), { emoji: '🚚', words: 'the monster truck' });
+  assert.deepEqual(tagOf('🇯🇵 the flag'), { emoji: '🇯🇵', words: 'the flag' }); // (a flag is two letters)
+  assert.deepEqual(tagOf('🏴‍☠️ the pirate flag'), { emoji: '🏴‍☠️', words: 'the pirate flag' });
   assert.deepEqual(tagOf('⚙️ how it works!'), { emoji: '⚙️', words: 'how it works' });
   assert.deepEqual(tagOf('the cars'), { emoji: '', words: 'the cars' });
   assert.deepEqual(tagOf(undefined), { emoji: '', words: '' });
@@ -192,4 +194,109 @@ test('taking lines out: a divider written twice is an empty replacement, and no 
   // A second ======= with code after it: not taken in (it would put a line of ='s into the code).
   const [garbled] = changesIn('FIX parts/a.js\n<<<<<<< FIND\na();\n=======\nb();\n=======\nc();\n>>>>>>> REPLACE\n');
   assert.match(fixed('a();', garbled).why, /holds a ======= line/);
+});
+
+test('FILE page.html and its block are that file written again, not the page of something new', () => {
+  const r = read(`FILE page.html\n\`\`\`html\n${PAGE}\n\`\`\`\n\nFIX parts/truck.js\n<<<<<<< FIND\na\n=======\nb\n>>>>>>> REPLACE\nDONE: ok`, 9);
+  assert.equal(r.pages, 0);
+  assert.equal(r.page, null);
+  assert.deepEqual(r.names, []);
+  const changes = changesIn(`FILE page.html\n\`\`\`html\n${PAGE}\n\`\`\`\n`);
+  assert.deepEqual(changes, [{ path: 'page.html', content: PAGE }]);
+  // The page of something new is still one: TITLE, then the block.
+  assert.equal(read(`TITLE: 🚚 Trucks\n\`\`\`html\n${PAGE}\n\`\`\``).pages, 1);
+  // A FILE head is the line right before the block: prose in between, and the block is its own.
+  assert.equal(read(`FILE parts/a.js\nHere is the page:\n\`\`\`html\n${PAGE}\n\`\`\``).pages, 1);
+});
+
+// A creation's folder with these files, for a test.
+function folder(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crew-'));
+  fs.mkdirSync(path.join(dir, 'parts'));
+  for (const [rel, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, rel), text);
+  return dir;
+}
+
+test('the page put together: each part in place of its line, a missing one named', () => {
+  const dir = folder({ 'page.html': 'a\n// @part truck [🚚 the truck]: makeTruck() - big\n  // @part cars\n// @part crowd: cheer()\nb\n', 'parts/truck.js': "const cost = '$& $1';\n", 'parts/cars.js': 'cars();\n' });
+  assert.deepEqual(assemble(dir), { html: "a\n// ---- truck\nconst cost = '$& $1';\n// ---- cars\ncars();\n// @part crowd: cheer()\nb\n", missing: ['crowd'] });
+  assert.equal(assemble(fs.mkdtempSync(path.join(os.tmpdir(), 'crew-'))), null);
+});
+
+test("a part that begins with its own job line: put together, the page has no part line left - and goes back into page.html as itself", () => {
+  // (As a helper is handed its job, and often writes it back as its first line.)
+  const echoed = '// @part brushes: tall fluffy roller brushes, spinning\nfunction makeBrushes() { return {}; }';
+  assert.equal(codeOf(echoed), '// brushes: tall fluffy roller brushes, spinning\nfunction makeBrushes() { return {}; }');
+  // A part file that still has one (written before, or some other way) is put in without it too.
+  const dir = folder({ 'page.html': 'top\n// @part brushes [🧽 the brushes]: makeBrushes() - tall\nmakeBrushes();\n', 'parts/brushes.js': `${echoed}\n` });
+  const built = assemble(dir);
+  assert.deepEqual(built.missing, []);
+  assert.doesNotMatch(built.html, /@part/);
+  // The whole page back as page.html in an empty folder (after an undo): it puts together to itself.
+  const again = folder({ 'page.html': built.html });
+  assert.deepEqual(assemble(again), { html: built.html, missing: [] });
+  assert.equal(read(built.html).names.length, 0);
+  // The lead writing a part itself, or fixing one: no part line gets in that way either.
+  applyReply(dir, 'FILE parts/sounds.js\n\n```js\n// @part sounds: beeps\nfunction beep() {}\n```\n\nFIX parts/brushes.js\n<<<<<<< FIND\nfunction makeBrushes() { return {}; }\n=======\n// @part brushes\nfunction makeBrushes() { return { spin() {} }; }\n>>>>>>> REPLACE\n');
+  assert.equal(fs.readFileSync(path.join(dir, 'parts/sounds.js'), 'utf8'), '// sounds: beeps\nfunction beep() {}\n');
+  assert.doesNotMatch(fs.readFileSync(path.join(dir, 'parts/brushes.js'), 'utf8'), /@part/);
+  // ... while page.html's own part lines are the lead's to write.
+  applyReply(dir, 'FIX page.html\n<<<<<<< FIND\nmakeBrushes();\n=======\n// @part sounds [🔊 the sounds]: beep() - beeps\nmakeBrushes();\n>>>>>>> REPLACE\n');
+  assert.match(fs.readFileSync(path.join(dir, 'page.html'), 'utf8'), /^\/\/ @part sounds /m);
+});
+
+test('a whole file after a blank line, as the lead writes its fences', () => {
+  const reply = 'FILE parts/truck.js\n\n```js\nfunction makeTruck() {}\n```\nDONE: ok';
+  assert.deepEqual(changesIn(reply), [{ path: 'parts/truck.js', content: 'function makeTruck() {}' }]);
+  const dir = folder({ 'page.html': '// @part truck\n' });
+  assert.deepEqual(applyReply(dir, reply), []);
+  assert.equal(fs.readFileSync(path.join(dir, 'parts/truck.js'), 'utf8'), 'function makeTruck() {}\n');
+  // FILE with nothing fenced after it is no change (and the lines after it are read as usual).
+  assert.deepEqual(changesIn('FILE parts/a.js\n\nFIX page.html\n<<<<<<< FIND\na\n=======\nb\n>>>>>>> REPLACE'), [{ path: 'page.html', find: 'a', replace: 'b' }]);
+});
+
+test("a change that doesn't fit goes back to the lead once, with the file as it is", async () => {
+  const dir = folder({ 'page.html': 'const speed = 1;\nconst color = "red";\n' });
+  const asked = [];
+  const session = answer => ({ dir, ask: async prompt => (asked.push(prompt), typeof answer === 'function' ? answer() : { text: answer }) });
+  const first = 'FIX page.html\n<<<<<<< FIND\nconst speed = 2;\n=======\nconst speed = 3;\n>>>>>>> REPLACE\n\nFIX page.html\n<<<<<<< FIND\nconst color = "red";\n=======\nconst color = "pink";\n>>>>>>> REPLACE\nDONE: faster and pink';
+  // What it said the first time comes back; its second answer is taken into the file.
+  assert.equal(await taken(session('FIX page.html\n<<<<<<< FIND\nconst speed = 1;\n=======\nconst speed = 3;\n>>>>>>> REPLACE'), first), first);
+  assert.equal(fs.readFileSync(path.join(dir, 'page.html'), 'utf8'), 'const speed = 3;\nconst color = "pink";\n');
+  assert.equal(asked.length, 1);
+  assert.match(asked[0], /This change didn't fit[\s\S]*its FIND isn't in the file[\s\S]*=== page\.html, as it is now\nconst speed = 1;\nconst color = "pink";/);
+  // Nothing to ask when everything fits.
+  assert.equal(await taken(session('never'), 'FIX page.html\n<<<<<<< FIND\nconst speed = 3;\n=======\nconst speed = 4;\n>>>>>>> REPLACE'), 'FIX page.html\n<<<<<<< FIND\nconst speed = 3;\n=======\nconst speed = 4;\n>>>>>>> REPLACE');
+  assert.equal(asked.length, 1);
+  // Stopped for the kid while asking again: that goes on up; any other failure of the second ask doesn't.
+  const miss = 'FIX page.html\n<<<<<<< FIND\nnope\n=======\nx\n>>>>>>> REPLACE';
+  await assert.rejects(taken(session(() => Promise.reject(new Error('interrupted'))), miss), /interrupted/);
+  assert.equal(await taken(session(() => Promise.reject(new Error('timed out'))), miss), miss);
+});
+
+test('a peek: the picture and what it threw; a one-color picture with no error is no picture', async () => {
+  const shot = 'data:image/jpeg;base64,AAAA';
+  const ask = () => {
+    const events = [];
+    const seen = peekThrough(ev => events.push(ev))('<html></html>');
+    return { id: events[0].id, event: events[0], seen };
+  };
+  let a = ask();
+  assert.deepEqual([a.event.type, a.event.html], ['peek', '<html></html>']);
+  assert.deepEqual(peeked({ id: a.id, screenshot: shot, errors: [], blank: false }), {});
+  assert.deepEqual(await a.seen, { screenshot: shot, blank: false, errors: [] });
+  // Blank, and it threw: the blank screen is the news.
+  a = ask();
+  peeked({ id: a.id, screenshot: shot, errors: ['TypeError: x is undefined (line 3)'], blank: true });
+  assert.deepEqual(await a.seen, { screenshot: shot, blank: true, errors: ['TypeError: x is undefined (line 3)'] });
+  // Blank with no error: maybe it just hasn't drawn yet - not shown to the lead as a page with nothing on it.
+  a = ask();
+  peeked({ id: a.id, screenshot: shot, errors: [], blank: true });
+  assert.deepEqual(await a.seen, { screenshot: '', blank: false, errors: [] });
+  // An answer nobody is waiting for (too late, or made up) is nothing; odd input doesn't throw.
+  assert.deepEqual(peeked({ id: 'nope', screenshot: shot }), { late: true });
+  assert.deepEqual(peeked(), { late: true });
+  a = ask();
+  peeked({ id: a.id, screenshot: 42, errors: 'x', blank: 1 });
+  assert.deepEqual(await a.seen, { screenshot: '', blank: false, errors: [] });
 });

@@ -228,6 +228,11 @@
   }
 
   if (trial && window.HTMLMediaElement) HTMLMediaElement.prototype.play = () => Promise.resolve();
+  // ... nor take the keyboard from the creation on stage (Phaser focuses its window when it starts).
+  if (trial) {
+    window.focus = () => {};
+    if (window.HTMLElement) HTMLElement.prototype.focus = () => {};
+  }
 
   addEventListener('message', e => {
     const d = e.data;

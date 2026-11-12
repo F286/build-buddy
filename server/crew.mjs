@@ -184,6 +184,11 @@ Write the scores under NOTES:, and for each below 9, what keeps it there. Then f
 // (Worked out when needed: ai.mjs, which sets WORK_DIR, loads this module first.)
 const folderOf = projectId => path.join(WORK_DIR, 'crew', String(projectId).replace(/[^\w-]/g, '') || 'creation');
 
+// A part's code without `// @part` lines of its own. A helper often starts its file with its job
+// line, as it was handed it; put into the page, that line would be a second part line - and when the
+// page goes back into page.html as one file (after an undo, an overwatch fix), a part with no file.
+const unmarked = code => String(code).replace(/^([ \t]*\/\/) ?@part\b/gm, '$1');
+
 // The page, put together: each `// @part <name>` line becomes that part's file. Null without a page.
 export function assemble(dir) {
   let page;
@@ -195,7 +200,7 @@ export function assemble(dir) {
   const missing = [];
   const html = page.replace(/^[ \t]*\/\/ ?@part[ \t]+([\w-]+).*$/gm, (line, name) => {
     try {
-      return `// ---- ${name}\n${fs.readFileSync(path.join(dir, 'parts', `${name}.js`), 'utf8').trim()}`;
+      return `// ---- ${name}\n${unmarked(fs.readFileSync(path.join(dir, 'parts', `${name}.js`), 'utf8')).trim()}`;
     } catch {
       missing.push(name);
       return line;
@@ -213,7 +218,8 @@ function snapshot(dir) {
     } catch {}
   };
   read('page.html');
-  for (const f of fs.existsSync(path.join(dir, 'parts')) ? fs.readdirSync(path.join(dir, 'parts')) : []) read(path.join('parts', f));
+  // (Keys with a forward slash on every system: they're looked up as `parts/<name>.js`, and shown to the lead.)
+  for (const f of fs.existsSync(path.join(dir, 'parts')) ? fs.readdirSync(path.join(dir, 'parts')) : []) read(`parts/${f}`);
   return files;
 }
 
@@ -277,7 +283,9 @@ function sessionArgs() {
 function sessionFor(projectId, { renew = false } = {}) {
   const s = session;
   const usable = s?.alive && s.projectId === projectId;
-  if (usable && (s.kidWaiting || !renew || (s.turns < MAX_TURNS && s.key === JSON.stringify(sessionArgs())))) return s;
+  // (A build under way is the kid waiting, between its turns too - while its helpers write, no turn
+  // of the lead's is in flight - so the kid starting to talk again doesn't end the session under it.)
+  if (usable && (s.kidWaiting || s.building || !renew || (s.turns < MAX_TURNS && s.key === JSON.stringify(sessionArgs())))) return s;
   s?.end();
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
@@ -290,7 +298,10 @@ function sessionFor(projectId, { renew = false } = {}) {
 // What's still to do for a creation (kept apart from the session, so a new one carries on).
 let work = { projectId: null };
 function workFor(projectId) {
-  if (work.projectId !== projectId) work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, asked: '', rules: null };
+  if (work.projectId !== projectId) {
+    work.stopPass?.(); // (a pass still at work on the creation before: nobody is waiting for it)
+    work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', checking: false, repairing: false, stopPass: null, asked: '', rules: null };
+  }
   return work;
 }
 
@@ -308,9 +319,11 @@ function undone(s, w, why) {
   w.note = `Your last changes were taken out (${why}): the files are back to how they were before them, as shown here.`;
 }
 
-// What the kid says comes first: a pass at work stops, and any waiting are dropped.
+// What the kid says comes first: a pass at work stops - its lead's turn, and its helpers too, whose
+// writing isn't a turn of the lead's to interrupt - and any waiting are dropped.
 function makeWay(s) {
   if (s.current?.kind === 'polish' || s.current?.kind === 'repair') s.interrupt();
+  work.stopPass?.();
   for (const t of s.queue.filter(t => t.kind === 'polish' || t.kind === 'repair')) {
     s.queue.splice(s.queue.indexOf(t), 1);
     t.finish(new Error('stale'));
@@ -331,6 +344,7 @@ export function warm() {
 }
 
 export function stop() {
+  work.stopPass?.(); // (a pass's helpers too)
   session?.end();
   session = null;
 }
@@ -482,10 +496,11 @@ function looseEnds(files) {
 // A job's tag, apart: its picture and its words ("🚚 the monster truck").
 function tagOf(tag) {
   const t = String(tag || '').trim();
-  const m = /^((?:\p{Extended_Pictographic}|\p{Regional_Indicator})[\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}\p{Extended_Pictographic}]*)\s*(.*)$/u.exec(t);
+  const m = /^((?:\p{Extended_Pictographic}|\p{Regional_Indicator})[\u{FE0F}\u{200D}\u{1F3FB}-\u{1F3FF}\p{Extended_Pictographic}\p{Regional_Indicator}]*)\s*(.*)$/u.exec(t);
   return { emoji: m ? m[1] : '', words: (m ? m[2] : t).replace(/[^\p{L}\p{N} '-]/gu, '').trim().slice(0, 40) };
 }
 
+const FILE_HEAD = /^[ \t>*_`#-]*FILE[ \t]+`?[\w./-]+`?[*_`:]*[ \t]*$/; // `FILE <path>`, as changesIn reads it
 class JobReader {
   constructor(onJob, onPage = () => {}) {
     this.onJob = onJob;
@@ -496,6 +511,7 @@ class JobReader {
     this.fence = false; // an html block has begun: its first line shows whether it's a page
     this.other = false; // inside some other fenced block
     this.fixing = false; // inside a FIX block's FIND/REPLACE
+    this.afterFile = false; // the line before was `FILE <path>`: the block that follows is that file
     this.page = null; // the page of something new, once its block has closed
     this.names = new Set();
   }
@@ -530,7 +546,14 @@ class JobReader {
         [this.block, this.fenced] = [from, true];
         return this.onPage();
       }
-      if (/^[ \t]*```/.test(l)) return void (/^[ \t]*```html\b/i.test(l) ? (this.fence = true) : (this.other = true));
+      if (/^[ \t]*```/.test(l)) {
+        // (An html block may be the page of something new - not after `FILE page.html`: that's the
+        // file written again, and the creation with its parts stays.)
+        const maybePage = !this.afterFile && /^[ \t]*```html\b/i.test(l);
+        this.afterFile = false;
+        return void (maybePage ? (this.fence = true) : (this.other = true));
+      }
+      if (l.trim()) this.afterFile = FILE_HEAD.test(l);
       if (!whole) return this.handOut(l);
       [this.block, this.fenced] = [from, false]; // (a bare page, without the block around it)
       return this.onPage();
@@ -568,10 +591,13 @@ function changesIn(text) {
   let fixing = null;
   for (let i = 0; i < lines.length; i++) {
     const file = head('FILE', lines[i]);
-    if (file && /^[ \t]*```/.test(lines[i + 1] || '')) {
-      const end = lines.findIndex((l, j) => j > i + 1 && /^[ \t]*```[ \t]*$/.test(l));
+    // (Its block follows, after blank lines or none: the lead puts one before a fence almost every time.)
+    let at = i + 1;
+    while (file && at < lines.length && !lines[at].trim()) at++;
+    if (file && /^[ \t]*```/.test(lines[at] || '')) {
+      const end = lines.findIndex((l, j) => j > at && /^[ \t]*```[ \t]*$/.test(l));
       if (end < 0) break;
-      out.push({ path: file, content: lines.slice(i + 2, end).join('\n') });
+      out.push({ path: file, content: lines.slice(at + 1, end).join('\n') });
       [i, fixing] = [end, null];
       continue;
     }
@@ -616,14 +642,14 @@ function applyReply(dir, text) {
       misses.push({ ...c, why: `${c.path} isn't one of the creation's files (page.html, parts/<name>.js)` });
     } else if (c.content != null) {
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, `${c.content.replace(/\n+$/, '')}\n`);
+      fs.writeFileSync(file, `${(c.path === 'page.html' ? c.content : unmarked(c.content)).replace(/\n+$/, '')}\n`);
     } else {
       let was = null;
       try {
         was = fs.readFileSync(file, 'utf8');
       } catch {}
       const r = was == null ? { why: "that file isn't there" } : fixed(was, c);
-      if (r.text != null) fs.writeFileSync(file, r.text);
+      if (r.text != null) fs.writeFileSync(file, c.path === 'page.html' ? r.text : unmarked(r.text));
       else misses.push({ ...c, why: r.why });
     }
   }
@@ -693,7 +719,12 @@ function peekThrough(emit) {
 export function peeked({ id, screenshot, errors, blank } = {}) {
   const answer = peeks.get(id);
   if (!answer) return { late: true };
-  answer({ screenshot: typeof screenshot === 'string' ? screenshot : '', blank: Boolean(blank), errors: Array.isArray(errors) ? errors.map(e => String(e).slice(0, 300)).slice(0, 5) : [] });
+  const threw = Array.isArray(errors) ? errors.map(e => String(e).slice(0, 300)).slice(0, 5) : [];
+  // (A picture that is all one color, from a page that threw nothing, may just be one that hasn't
+  // drawn yet - a slow start, a slow computer: the lead isn't told a page that works shows nothing.
+  // It counts as no picture. With an error, the blank screen is the news.)
+  const seen = typeof screenshot === 'string' && !(blank && !threw.length) ? screenshot : '';
+  answer({ screenshot: seen, blank: Boolean(blank) && Boolean(seen), errors: threw });
   return {};
 }
 
@@ -702,7 +733,7 @@ function codeOf(reply) {
   const text = String(reply || '').replace(/\r/g, '');
   const blocks = [...text.matchAll(/```[a-z]*[ \t]*\n([\s\S]*?)\n[ \t]*```/gi)].map(m => m[1]);
   const code = blocks.length ? blocks.sort((a, b) => b.length - a.length)[0] : text.replace(/^[ \t]*```[a-z]*[ \t]*\n/i, '');
-  return code.trim();
+  return unmarked(code).trim();
 }
 
 // A helper that hasn't written a word after this long gets a second one on the same job (how soon
@@ -730,14 +761,19 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
         },
       }).then(reply => ({ reply, i }));
     const first = one(0);
+    let hedged = false;
     const second = new Promise((resolve, reject) => {
+      const none = () => (clearTimeout(timer), reject(new Error('not needed')));
       const timer = setTimeout(() => {
         // (Not while the kid plays: a helper may think a fuller part through first.)
         if (wrote || stopAll.signal.aborted || !quick) return reject(new Error('not needed'));
+        hedged = true;
         log(`agents: the helper for ${job.name} hasn't started writing after ${HEDGE_MS / 1000}s, starting a second one`);
         one(1).then(resolve, reject);
       }, HEDGE_MS);
-      first.then(() => (clearTimeout(timer), reject(new Error('not needed'))), () => {});
+      // (The first one done, or failed before a second was started: no second one - a failure is
+      // tried again at once, not when the timer would have rung.)
+      first.then(none, () => hedged || none());
     });
     return Promise.any([first, second]).then(
       ({ reply, i }) => (stops[1 - i].abort(), reply),
@@ -766,7 +802,7 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
         .then(reply => {
           const code = codeOf(reply.text);
           if (!code) throw new Error('it wrote nothing');
-          if (stopAll.signal.aborted) throw new Error('stopped');
+          if (stopAll.signal.aborted || job.dropped) throw new Error('stopped');
           fs.mkdirSync(path.join(s.dir, 'parts'), { recursive: true });
           fs.writeFileSync(path.join(s.dir, 'parts', `${job.name}.js`), `${code}\n`);
           [job.state, job.code, job.doneAt] = ['done', code, Date.now()];
@@ -779,16 +815,29 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
     },
     settled: () => Promise.all(jobs.map(j => j.finished)),
     stop: () => stopAll.abort(),
+    // Only these jobs count (the lead's reply was read again, and holds no others): a helper at
+    // work on any other writes nothing.
+    only(names) {
+      for (const job of jobs.filter(j => !names.has(j.name))) {
+        job.dropped = true;
+        jobs.splice(jobs.indexOf(job), 1);
+      }
+    },
   };
 }
+
+// Parts a kid doesn't see being made (by the names leads give them): said last, if at all.
+const UNSEEN = /^(rules?|logic|game|main|controls?|input|sounds?|audio|music|sfx|effects?|fx|particles?)$/i;
 
 // One turn of the lead's, with its helpers: its reply is read as it's written and every job in it
 // starts a helper; when it and they are done, it's handed what they wrote and makes it fit (another
 // reply of the same turn, as far as the caller goes). Resolves with all it said, and what was handed out.
 //   about(job)   what its helpers are told about the creation ({ asked, latest, look })
-//   fit          how the handing-back message ends (what it's to do with the parts)
+//   fit          how the handing-back message ends (what it's to do with the parts); or a function
+//                of whether its reply was a whole new page, giving that
 //   peek(html)   a look at the page running before it's shown ({ screenshot, blank, errors }, or null)
-async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onProgress = () => {}, narrate = null, peek = null, ...opts }) {
+//   stop         (a pass) an AbortSignal: the kid asked for something - its helpers stop at once
+async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onProgress = () => {}, narrate = null, peek = null, stop = null, ...opts }) {
   const crew = makeCrew(s, about, { quick, onChange: n => onProgress(n, crew) });
   let before = null; // its reply is a whole new page: the files as they were (the folder starts again)
   // (What its helpers are making, said to the kid once three of them are at it - or, with fewer, a
@@ -796,8 +845,11 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
   let told = !narrate;
   let soon = null;
   const announce = (all = false) => {
-    const making = crew.jobs.map(j => j.words).filter(Boolean).slice(0, 3);
-    if (told || !making.length || (!all && making.length < 3) || crew.done === crew.jobs.length) return;
+    // (What a kid can see first - the truck, the cars - before the rules, the sounds and the effects.)
+    const named = crew.jobs.filter(j => j.words);
+    const seen = named.filter(j => !UNSEEN.test(j.name));
+    const making = [...seen, ...named.filter(j => UNSEEN.test(j.name))].slice(0, 3).map(j => j.words);
+    if (told || !making.length || (!all && seen.length < 3) || crew.done === crew.jobs.length) return;
     told = true;
     narrate(`I'm making ${making.length > 1 ? `${making.slice(0, -1).join(', ')} and ${making.at(-1)}` : making[0]}!`);
   };
@@ -816,23 +868,53 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
   try {
     const first = await s.ask(prompt, { ...opts, onText: chunk => (reader.push(chunk), onProgress(chunk.length, crew)) });
     reader.end();
-    if (reader.page != null) fs.writeFileSync(path.join(s.dir, 'page.html'), `${reader.page}\n`);
+    let newPage = reader.page;
+    if (reader.text !== first.text.replace(/\r/g, '')) {
+      // Its stream was retried: what it had written until then was dropped from its reply (solo.mjs),
+      // after it had been read here as it came. The reply as it stands is what counts: its page,
+      // and its jobs (helpers already at work on a job it still has carry on).
+      const stands = new JobReader(job => crew.jobs.some(j => j.name === job.name) || crew.start(job, pageNow));
+      stands.push(first.text);
+      stands.end();
+      newPage = stands.page;
+      crew.only(stands.names);
+      if (before && newPage == null) {
+        restore(s.dir, before); // (the page that had begun isn't in it: the creation is as it was)
+        before = null;
+      }
+    }
+    if (newPage != null) fs.writeFileSync(path.join(s.dir, 'page.html'), `${newPage}\n`);
+    const pageFile = () => {
+      try {
+        return fs.readFileSync(path.join(s.dir, 'page.html'), 'utf8');
+      } catch {
+        return '';
+      }
+    };
+    const partNames = text => text.split('\n').map(l => [/^[ \t]*\/\/ ?@part[ \t]+([\w-]+)/.exec(l)?.[1], l]).filter(([name]) => name);
+    // A part the new page still names is as it was - before the reply's own fixes to it are taken in.
+    for (const [name] of before ? partNames(pageFile()) : []) {
+      const file = path.join(s.dir, 'parts', `${name}.js`);
+      if (!crew.jobs.some(j => j.name === name) && !fs.existsSync(file) && before[`parts/${name}.js`] != null) fs.writeFileSync(file, before[`parts/${name}.js`]);
+    }
     await taken(s, first.text, opts);
-    let page = '';
-    try {
-      page = fs.readFileSync(path.join(s.dir, 'page.html'), 'utf8');
-    } catch {}
-    for (const l of page.split('\n')) {
-      const name = /^[ \t]*\/\/ ?@part[ \t]+([\w-]+)/.exec(l)?.[1];
-      if (!name || crew.jobs.some(j => j.name === name) || fs.existsSync(path.join(s.dir, 'parts', `${name}.js`))) continue;
-      // (A part the new page still names, as it was...)
-      if (before?.[`parts/${name}.js`] != null) fs.writeFileSync(path.join(s.dir, 'parts', `${name}.js`), before[`parts/${name}.js`]);
-      // (... and a job written into page.html some other way: its helper starts now.)
-      else if (PART_LINE.test(l)) crew.start({ name, ...tagOf(PART_LINE.exec(l)[2]), job: PART_LINE.exec(l)[3].trim(), again: false, partial: false, page: assemble(s.dir)?.html || page }, pageNow);
+    if (stop?.aborted) throw new Error('interrupted'); // (stopped for the kid meanwhile)
+    // A job written into page.html some other way (a FIX, the whole file): its helper starts now.
+    const page = pageFile();
+    for (const [name, l] of partNames(page)) {
+      if (crew.jobs.some(j => j.name === name) || fs.existsSync(path.join(s.dir, 'parts', `${name}.js`)) || !PART_LINE.test(l)) continue;
+      crew.start({ name, ...tagOf(PART_LINE.exec(l)[2]), job: PART_LINE.exec(l)[3].trim(), again: false, partial: false, page: assemble(s.dir)?.html || page }, pageNow);
     }
     if (!crew.jobs.length) return { text: first.text, jobs: [], fresh: Boolean(before) };
     announce(true);
-    await crew.settled();
+    // (Stopped for the kid while its helpers write: over at once, as an interrupted turn of the lead's is.)
+    const stopped = new Promise((_, reject) => {
+      if (stop?.aborted) reject(new Error('interrupted'));
+      stop?.addEventListener('abort', () => reject(new Error('interrupted')), { once: true });
+    });
+    stopped.catch(() => {});
+    await Promise.race([crew.settled(), stopped]);
+    if (stop?.aborted) throw new Error('interrupted');
     const failed = crew.jobs.filter(j => j.state === 'failed');
     const built = assemble(s.dir);
     const problems = failed.length ? [] : await problemsIn(built);
@@ -848,7 +930,7 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
       loose.length && `Build Buddy read the files and found ${loose.length > 1 ? 'these loose ends' : 'this loose end'} between the parts - to fix:\n${loose.map(l => `- ${l}`).join('\n')}`,
       seen?.errors.length && `Run just now, out of sight, it threw:\n${seen.errors.join('\n')}`,
       shot && (seen.blank ? PEEK_BLANK : PEEK),
-      fit,
+      typeof fit === 'function' ? fit(Boolean(before)) : fit,
     ].filter(Boolean).join('\n\n');
     if (opts.fitThinking != null) await s.think(opts.fitThinking);
     const second = await askLead(s, shot ? [{ type: 'text', text: back }, shot] : back, opts);
@@ -873,19 +955,22 @@ const FIT_PASS = `Now make what they wrote fit: fix any name or call that doesn'
 // One build. Resolves like the classic way: { say, done, title, emoji, html, edited, backend }.
 // Throws if it couldn't (the classic way takes over).
 
-export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), peeks = false }, emit, state) {
+export async function build(asked, emit, state) {
+  const p = store.currentProject();
+  const s = sessionFor(p.id, { renew: true });
+  s.building = true; // (see sessionFor)
+  try {
+    return await buildWith(s, p, asked, emit, state);
+  } finally {
+    s.building = false;
+  }
+}
+
+async function buildWith(s, p, { page, history, text, alt, fix, title = '', look = pickLook(), peeks = false }, emit, state) {
   const t0 = Date.now();
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
-  const p = store.currentProject();
   const w = workFor(p.id);
-  const s = sessionFor(p.id, { renew: true });
-  makeWay(s);
-  await settled(w);
-  await s.use(page ? lead().model : lead().firstModel || lead().model);
-  await s.think(lead().thinking.build);
-  makeWay(s); // (one that started meanwhile)
-
-  // Sparky answers out loud right away, while the team builds.
+  // Sparky answers out loud right away, while the team builds (and before a pass at work has stopped).
   let over = false;
   const sayNow = line => {
     if (over || state.said) return;
@@ -893,6 +978,16 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     emit({ type: 'say', text: line });
   };
   if (!fix) speakFirst({ history, text, alt, title }, sayNow).catch(err => log(`agents voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
+  try {
+    makeWay(s);
+    await settled(w);
+    await s.use(page ? lead().model : lead().firstModel || lead().model);
+    await s.think(lead().thinking.build);
+    makeWay(s); // (one that started meanwhile)
+  } catch (err) {
+    over = true; // (nothing more is said for a build that couldn't start)
+    throw err;
+  }
 
   const known = s.turns > 0 && Boolean(page) && s.files === page;
   const files = sync(s, page);
@@ -929,7 +1024,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   ].filter(Boolean).join('\n\n');
   let reply;
   try {
-    reply = await leadTurn(s, prompt, { about, fit: page ? FIT_CHANGE : FIT_NEW, quick: true, pageNow: page || '', onProgress: progress, narrate: fix ? null : text => emit({ type: 'narrate', text }), peek: peeks && !fix && config().team?.peek !== false ? peekThrough(emit) : null, fitThinking: lead().thinking.fit, priority: true, timeoutSec: Math.max(config().timeoutSec, 360), stallSec: 120 });
+    reply = await leadTurn(s, prompt, { about, fit: fresh => (fresh || !page ? FIT_NEW : FIT_CHANGE), quick: true, pageNow: page || '', onProgress: progress, narrate: fix ? null : text => emit({ type: 'narrate', text }), peek: peeks && !fix && config().team?.peek !== false ? peekThrough(emit) : null, fitThinking: lead().thinking.fit, priority: true, timeoutSec: Math.max(config().timeoutSec, 360), stallSec: 120 });
   } finally {
     over = true;
   }
@@ -1010,6 +1105,8 @@ export async function check({ projectId, version, report, screenshot }) {
     return now.id !== projectId || now.current !== version || isBusy();
   };
   w.checking = true;
+  const stopper = new AbortController();
+  w.stopPass = () => stopper.abort();
   let before = null;
   const shot = picture(screenshot);
   try {
@@ -1030,7 +1127,7 @@ export async function check({ projectId, version, report, screenshot }) {
     w.note = '';
     w.tries++;
     // (Its helpers write fuller parts while the kid plays.)
-    const reply = await leadTurn(s, shot ? [{ type: 'text', text: prompt }, shot] : prompt, { about: () => rules, fit: FIT_PASS, quick: false, pageNow: page, timeoutSec: 600, stallSec: 150, kind: 'polish' });
+    const reply = await leadTurn(s, shot ? [{ type: 'text', text: prompt }, shot] : prompt, { about: () => rules, fit: FIT_PASS, quick: false, pageNow: page, stop: stopper.signal, timeoutSec: 600, stallSec: 150, kind: 'polish' });
     const why = field(reply.text, 'WHY', true) || 'made it better';
     const done = () => {
       w.passes++;
@@ -1080,6 +1177,7 @@ export async function check({ projectId, version, report, screenshot }) {
     return { skipped: err.message === 'interrupted' ? 'stale' : 'failed' };
   } finally {
     w.checking = false;
+    w.stopPass = null;
   }
 }
 
@@ -1123,6 +1221,9 @@ export async function repair({ version, errors, keep, accept = false }) {
   const page = store.html(p);
   const w = workFor(p.id);
   const s = sessionFor(p.id);
+  // (The kid waits for a repair: a pass at work makes way for it, as for a request.)
+  if (s.current?.kind === 'polish') s.interrupt();
+  w.stopPass?.();
   await settled(w);
   const note = sync(s, page);
   const before = snapshot(s.dir);
@@ -1163,4 +1264,4 @@ export async function repair({ version, errors, keep, accept = false }) {
 }
 
 // (For server/crew.test.mjs.)
-export { JobReader, changesIn, fixed, applyReply, codeOf, tagOf, keepFields, looseEnds };
+export { JobReader, changesIn, fixed, applyReply, taken, codeOf, tagOf, keepFields, looseEnds, peekThrough };

@@ -732,7 +732,6 @@ function peek(html) {
     const errors = [];
     let asked = false;
     const done = seen => {
-      clearTimeout(askAnyway);
       clearTimeout(giveUp);
       removeEventListener('message', onMessage);
       trial.remove();
@@ -752,8 +751,7 @@ function peek(html) {
       if (d.type === 'peek') done(d);
     };
     addEventListener('message', onMessage);
-    // (Not loaded after 1.5 s: asked anyway - its first frames may be there. No answer after 3 s: no picture.)
-    const askAnyway = setTimeout(ask, 1500);
+    // (A page that hasn't loaded isn't asked: its picture would be of nothing. No answer after 3 s: no picture.)
     const giveUp = setTimeout(() => done(null), 3000);
     document.body.append(trial);
     trial.srcdoc = wrap(html, { trial: true });
