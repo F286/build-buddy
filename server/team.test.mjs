@@ -36,8 +36,19 @@ test('Matter.js physics that is stepped, in any of the ways it can be, is not', 
     'const Run = Matter.Runner;\nRun.run(Run.create(), engine);',
     'const step = Engine.update;\nstep(engine, 1000 / 60);',
   ]) assert.deepEqual(blankProblems(page(`${MATTER}${stepped}`)), [], stepped);
-  // Named imports work like the default one.
+  // The page makes its engine with Matter's own name and steps it through another: nothing is said either.
+  for (const renamed of [
+    "import Matter from 'matter-js';\nconst { Engine } = Matter;\nconst world = Engine.create();\nconst E = Engine;\nE.update(world, 16);",
+    "import Matter from 'matter-js';\nconst { Engine: Phys } = Matter;\nconst world = Matter.Engine.create();\nPhys.update(world, 16);",
+    "import Matter, { Engine as Phys } from 'matter-js';\nconst world = Matter.Engine.create();\nPhys.update(world, 16);",
+  ]) assert.deepEqual(blankProblems(page(renamed)), [], renamed);
+  // Named imports work like the default one, and so does Matter's own way of naming its parts.
   assert.match(blankProblems(page("import { Engine, Bodies } from 'matter-js';\nconst engine = Engine.create();"))[0], /nothing steps its engine/);
+  for (const same of [
+    "import Matter from 'matter-js';\nconst Engine = Matter.Engine, Bodies = Matter.Bodies;\nconst engine = Engine.create();",
+    "import Matter from 'matter-js';\nconst Engine = Matter.Engine;\nconst Runner = Matter.Runner;\nconst engine = Engine.create();\nconst runner = Runner.create();",
+  ]) assert.match(blankProblems(page(same))[0], /nothing steps its engine/, same);
+  assert.deepEqual(blankProblems(page("import Matter from 'matter-js';\nconst Engine = Matter.Engine, Runner = Matter.Runner;\nconst engine = Engine.create();\nRunner.run(Runner.create(), engine);")), []);
   // A Runner the page names and never runs steps nothing.
   assert.match(blankProblems(page(`${MATTER}const { Runner } = Matter;\nconst runner = Runner.create();`))[0], /nothing steps its engine/);
 });

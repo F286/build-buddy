@@ -1,0 +1,358 @@
+<!doctype html>
+<!--
+  Tests of the module setup.sh writes around Matter.js (vendor/matter/matter.esm.js): above all of
+  its settling - what has come to rest stays exactly where it is until something really moves it.
+
+  To run them: serve the repository's folder with any static web server and open this page, e.g.
+      python3 -m http.server 8123        then        http://127.0.0.1:8123/test/matter.html
+  Every row should say "ok" (the page's title counts them). Each scene is stepped as fast as the
+  computer goes, with settling (on) and as plain Matter.js (off: Engine.create({ settling: false })),
+  and the same numbers are read from both.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>matter.html: running</title>
+<script type="importmap">{ "imports": { "matter-js": "../vendor/matter/matter.esm.js" } }</script>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 24px; }
+  table { border-collapse: collapse; }
+  td, th { border: 1px solid #ccc; padding: 4px 8px; text-align: left; vertical-align: top; }
+  .ok { color: #0a7a2f; } .bad { color: #c0182b; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>The module around Matter.js</h1>
+<table id="rows"><tr><th>scene</th><th></th><th>with settling</th><th>plain Matter.js</th></tr></table>
+<script type="module">
+import Matter from 'matter-js';
+const { Engine, Bodies: B, Body, Composite, Constraint, Events, Query, Runner } = Matter;
+const W = 1280, G = 656; // (the ground's top)
+const R = Math.round;
+
+// ---- things to build
+function castle(S) { // two towers, a wall of bricks laid over the gaps between them
+  const out = [], add = (x, y, w = S) => out.push(B.rectangle(x, y, w, S, { friction: 0.8, restitution: 0, frictionStatic: 1 }));
+  const x0 = W * 0.62, n = Math.max(7, Math.floor((W * 0.28) / S));
+  for (let r = 0; r < 8; r++) {
+    const y = G - S / 2 - r * S;
+    for (const c of [0, 1, n - 2, n - 1]) add(x0 + c * S + S / 2, y);
+    if (r < 6) {
+      const odd = r % 2 === 1, a = x0 + 2 * S, e = x0 + (n - 2) * S;
+      if (odd) { add(a + S / 4, y, S / 2); for (let x = a + S / 2; x + S <= e - S / 2 + 0.1; x += S) add(x + S / 2, y); add(e - S / 4, y, S / 2); }
+      else for (let x = a; x + S <= e + 0.1; x += S) add(x + S / 2, y);
+    }
+  }
+  return out;
+}
+const thinWall = () => { const out = []; for (let r = 0; r < 12; r++) { const odd = r % 2; for (let c = 0; c < (odd ? 5 : 6); c++) out.push(B.rectangle(500 + (odd ? 20 : 0) + c * 40, G - 7 - r * 14, 38, 14, { friction: 0.8 })); } return out; };
+const column = (n, S = 40, x = 700) => Array.from({ length: n }, (_, r) => B.rectangle(x, G - S / 2 - r * S, S, S, { friction: 0.8 }));
+const pile = () => Array.from({ length: 40 }, (_, i) => B.circle(400 + (i % 8) * 44 + (i % 3), G - 22 - Math.floor(i / 8) * 44, 22, { restitution: 0.5, friction: 0.05 }));
+function ground(engine) {
+  Composite.add(engine.world, [B.rectangle(W / 2, G + 100, 10000, 200, { isStatic: true, friction: 0.8 }), B.rectangle(-100, 300, 200, 4000, { isStatic: true }), B.rectangle(W + 100, 300, 200, 4000, { isStatic: true })]);
+}
+const step = (engine, n, each, dt = 1000 / 60) => { for (let i = 0; i < n; i++) { if (each) each(i); Engine.update(engine, dt); } };
+const far = (bodies, start) => Math.max(...bodies.map((b, i) => Math.hypot(b.position.x - start[i].x, b.position.y - start[i].y)));
+const places = bodies => bodies.map(b => ({ ...b.position }));
+// (A held body is put back with no speed at all after every step; a body merely at rest never is that still.)
+const held = bodies => bodies.filter(b => b.speed === 0 && b.angularSpeed === 0).length;
+
+// ---- the scenes: each returns what it measured; `ok(on, off)` says whether that is right
+const scenes = [];
+const scene = (name, run, ok, options) => scenes.push({ name, run, ok, options });
+const same = (tolerance = 1) => (on, off) => Math.abs(on - off) <= tolerance;
+
+// What's built stays built (plain Matter.js lets the castles fall, which is why this exists).
+for (const [name, make, settles = 5] of [['a castle of 40 px bricks', () => castle(40)], ['a castle of 30 px bricks', () => castle(30)], ['a wall of thin bricks', thinWall], ['a column of 14', () => column(14)], ['a column of 20 small blocks', () => column(20, 30)], ['a pile of 40 balls', pile, 10]]) {
+  scene(`${name} left alone for 2 minutes: furthest any piece moves after the first ${settles} s (px)`, engine => {
+    ground(engine);
+    const bodies = make(); Composite.add(engine.world, bodies);
+    step(engine, settles * 60);
+    const start = places(bodies);
+    step(engine, 7200 - settles * 60);
+    return R(far(bodies, start));
+  }, on => on <= 2);
+}
+scene('a castle with a ball added beside it every half second, and one taken away every second: furthest a brick moves in a minute (px)', engine => {
+  ground(engine);
+  const bricks = castle(40); Composite.add(engine.world, bricks);
+  step(engine, 300);
+  const start = places(bricks), balls = [];
+  step(engine, 3600, i => {
+    if (i % 30 === 0) { balls.push(B.circle(150 + (i % 7) * 20, 100, 16, { restitution: 0.5 })); Composite.add(engine.world, balls.at(-1)); B.circle(0, 0, 10); }
+    if (i % 60 === 59) Composite.remove(engine.world, balls.shift());
+  });
+  return R(far(bricks, start));
+}, on => on <= 2);
+scene('nothing is heard while a castle stands: collisionStart and collisionEnd events in 5 s', engine => {
+  ground(engine);
+  Composite.add(engine.world, castle(40));
+  step(engine, 300);
+  let n = 0;
+  Events.on(engine, 'collisionStart', e => (n += e.pairs.length));
+  Events.on(engine, 'collisionEnd', e => (n += e.pairs.length));
+  step(engine, 300);
+  return n;
+}, on => on === 0);
+
+// What is held still answers to everything that happens to it.
+scene('a rock thrown into a castle that has stood for 10 s: bricks knocked over 20 px away', engine => {
+  ground(engine);
+  const bricks = castle(40); Composite.add(engine.world, bricks);
+  step(engine, 600);
+  const start = places(bricks);
+  const rock = B.circle(300, 500, 28, { density: 0.02, frictionAir: 0 }); Composite.add(engine.world, rock);
+  Body.setVelocity(rock, { x: 22, y: -6 });
+  step(engine, 300);
+  return bricks.filter((b, i) => Math.hypot(b.position.x - start[i].x, b.position.y - start[i].y) > 20).length;
+}, on => on >= 20);
+scene('a slow ball rolled into a column of 5: how far its bottom block is pushed (px)', engine => {
+  ground(engine);
+  const col = column(5, 50); Composite.add(engine.world, col);
+  step(engine, 300);
+  const ball = B.circle(400, G - 30, 30, { density: 0.01, friction: 0, frictionAir: 0 }); Composite.add(engine.world, ball);
+  Body.setVelocity(ball, { x: 4, y: 0 });
+  step(engine, 300);
+  return R(col[0].position.x - 700);
+}, same(8));
+scene('the bottom block of a column taken away: how far the top block falls (px)', engine => {
+  ground(engine);
+  const col = column(5, 50); Composite.add(engine.world, col);
+  step(engine, 300);
+  const y = col[4].position.y;
+  Composite.remove(engine.world, col[0]);
+  step(engine, 120);
+  return R(col[4].position.y - y);
+}, same(2));
+scene('a block dragged out of the middle of a column (setPosition each frame): how far the top block falls (px)', engine => {
+  ground(engine);
+  const col = column(5, 50); Composite.add(engine.world, col);
+  step(engine, 300);
+  const y = col[4].position.y, b = col[1], p = { ...b.position };
+  step(engine, 60, () => { p.x += 4; Body.setPosition(b, p); Body.setVelocity(b, { x: 0, y: 0 }); });
+  step(engine, 120);
+  return R(col[4].position.y - y);
+}, same(2));
+scene('a column shoved by a block the page drags into it at 1 px a frame: how far it is pushed (px)', engine => {
+  ground(engine);
+  const col = column(3, 50); Composite.add(engine.world, col);
+  const pusher = B.rectangle(560, G - 25, 50, 50, { friction: 0.8 }); Composite.add(engine.world, pusher);
+  step(engine, 300);
+  const p = { ...pusher.position };
+  step(engine, 120, () => { p.x += 1; Body.setPosition(pusher, p); Body.setVelocity(pusher, { x: 0, y: 0 }); });
+  return R(col[0].position.x - 700);
+}, same(3));
+scene('a shelf taken away from under a box (Composite.removeBody): how far the box falls in a second (px)', engine => {
+  ground(engine);
+  const shelf = B.rectangle(400, 300, 200, 20, { isStatic: true }), box = B.rectangle(400, 265, 50, 50);
+  Composite.add(engine.world, [shelf, box]);
+  step(engine, 300);
+  Composite.removeBody(engine.world, shelf);
+  const y = box.position.y;
+  step(engine, 60);
+  return R(box.position.y - y);
+}, same(2));
+scene('the same with steps of 1/30 s', engine => {
+  ground(engine);
+  const shelf = B.rectangle(400, 300, 200, 20, { isStatic: true }), box = B.rectangle(400, 265, 50, 50);
+  Composite.add(engine.world, [shelf, box]);
+  step(engine, 300, null, 1000 / 30);
+  Composite.removeBody(engine.world, shelf);
+  const y = box.position.y;
+  step(engine, 30, null, 1000 / 30);
+  return R(box.position.y - y);
+}, same(2));
+scene('the same under weak gravity (0.15), in 2 s', engine => {
+  engine.gravity.y = 0.15;
+  ground(engine);
+  const shelf = B.rectangle(400, 300, 200, 20, { isStatic: true }), box = B.rectangle(400, 265, 50, 50);
+  Composite.add(engine.world, [shelf, box]);
+  step(engine, 400);
+  Composite.removeBody(engine.world, shelf);
+  const y = box.position.y;
+  step(engine, 120);
+  return R(box.position.y - y);
+}, same(2));
+scene('gravity turned upside down under a settled pile: balls that have risen over 100 px after 3 s', engine => {
+  ground(engine);
+  Composite.add(engine.world, B.rectangle(W / 2, -100, 10000, 200, { isStatic: true }));
+  const balls = pile(); Composite.add(engine.world, balls);
+  step(engine, 600);
+  const y = balls.map(b => b.position.y);
+  engine.gravity.y = -1;
+  step(engine, 180);
+  return balls.filter((b, i) => y[i] - b.position.y > 100).length;
+}, same(0));
+for (const [how, launch] of [['Body.setVelocity', b => Body.setVelocity(b, { x: 8, y: -12 })], ['Body.applyForce', b => Body.applyForce(b, b.position, { x: 0.05, y: -0.12 })], ['writing body.force', b => { b.force.x += 0.05; b.force.y -= 0.12; }]]) {
+  scene(`a settled ball launched with ${how}: how high it rises (px)`, engine => {
+    ground(engine);
+    const ball = B.circle(300, G - 30, 30); Composite.add(engine.world, ball);
+    step(engine, 300);
+    launch(ball);
+    let top = G;
+    step(engine, 90, () => (top = Math.min(top, ball.position.y)));
+    return R(G - 30 - top);
+  }, same(1));
+}
+scene('a balloon lifted by a force written in the page\'s own beforeUpdate, after resting for 3 s: how far it rises in 30 s (px)', engine => {
+  ground(engine);
+  const b = B.circle(600, G - 30, 30, { frictionAir: 0.1 }); Composite.add(engine.world, b);
+  step(engine, 180);
+  Events.on(engine, 'beforeUpdate', () => { b.force.y -= b.mass * 0.001 * 1.05; });
+  step(engine, 1800);
+  return R(G - 30 - b.position.y);
+}, same(2));
+scene('wind (a fifth of its weight, written into body.force) on a box settled on ice: how far it slides in 2 s (px)', engine => {
+  ground(engine);
+  Composite.allBodies(engine.world)[0].friction = 0;
+  const b = B.rectangle(300, G - 25, 50, 50, { friction: 0, frictionAir: 0 }); Composite.add(engine.world, b);
+  step(engine, 180);
+  step(engine, 120, () => { b.force.x += b.mass * 0.001 * 0.2; });
+  return R(b.position.x - 300);
+}, same(3));
+scene('a wrecking ball that has hung still for 5 s, pulled aside by the page and let go: how far it swings through (x)', engine => {
+  const ball = B.circle(600, 400, 30, { frictionAir: 0.002, density: 0.02 });
+  Composite.add(engine.world, [ball, Constraint.create({ pointA: { x: 600, y: 100 }, bodyB: ball, length: 300, stiffness: 1 })]);
+  step(engine, 300);
+  Body.setPosition(ball, { x: 600 - 300 * Math.sin(1), y: 100 + 300 * Math.cos(1) }); Body.setVelocity(ball, { x: 0, y: 0 });
+  let x = 0;
+  step(engine, 240, () => (x = Math.max(x, ball.position.x)));
+  return R(x);
+}, same(2));
+scene('its rope cut: how far it has fallen a second later (px)', engine => {
+  ground(engine);
+  const ball = B.circle(600, 400, 30, { density: 0.02 });
+  const rope = Constraint.create({ pointA: { x: 600, y: 100 }, bodyB: ball, length: 300, stiffness: 1 });
+  Composite.add(engine.world, [ball, rope]);
+  step(engine, 300);
+  Composite.remove(engine.world, rope);
+  step(engine, 60);
+  return R(ball.position.y - 400);
+}, same(2));
+scene('a crane: a settled block on a rope whose top end the page lifts at 0.5 px a step: how far it is lifted (px)', engine => {
+  ground(engine);
+  const block = B.rectangle(600, G - 25, 50, 50);
+  const rope = Constraint.create({ pointA: { x: 600, y: G - 125 }, bodyB: block, length: 100, stiffness: 1 });
+  Composite.add(engine.world, [block, rope]);
+  step(engine, 300);
+  const y = block.position.y;
+  step(engine, 240, () => (rope.pointA.y -= 0.5));
+  return R(y - block.position.y);
+}, same(2));
+for (const v of [1, 0.1]) scene(`a box riding a platform that a rope end pulls sideways at ${v} px a step: how far the box is carried (px)`, engine => {
+  ground(engine);
+  const platform = B.rectangle(400, G - 140, 200, 20, { friction: 0.9, inertia: Infinity });
+  const rope = Constraint.create({ pointA: { x: 400, y: G - 140 }, bodyB: platform, length: 0, stiffness: 0.9 });
+  const box = B.rectangle(400, G - 175, 50, 50, { friction: 0.9 });
+  Composite.add(engine.world, [platform, rope, box]);
+  step(engine, 300);
+  step(engine, R(200 / v), () => (rope.pointA.x += v));
+  step(engine, 60);
+  return R(box.position.x - 400);
+}, same(5));
+scene('a settled seesaw with a ball dropped on one end: how far it tilts (hundredths of a radian)', engine => {
+  ground(engine);
+  const plank = B.rectangle(600, G - 60, 400, 20, { friction: 0.8 });
+  Composite.add(engine.world, [plank, Constraint.create({ pointA: { x: 600, y: G - 60 }, bodyB: plank, length: 0, stiffness: 1 }), B.rectangle(600, G - 25, 20, 50, { isStatic: true })]);
+  step(engine, 300);
+  Composite.add(engine.world, B.circle(760, 300, 25, { density: 0.01 }));
+  let tilt = 0;
+  step(engine, 180, () => (tilt = Math.max(tilt, Math.abs(plank.angle))));
+  return R(tilt * 100);
+}, same(3));
+for (const degrees of [2, 5, 15]) scene(`a ball left at rest on a slope of ${degrees} degrees: how far it has rolled after 4 s (px)`, engine => {
+  const a = (degrees * Math.PI) / 180;
+  Composite.add(engine.world, B.rectangle(600, 300, 1000, 20, { isStatic: true, angle: a, friction: 0 }));
+  const ball = B.circle(600 - 450 * Math.cos(a) + 31 * Math.sin(a), 300 - 450 * Math.sin(a) - 31 * Math.cos(a), 20, { friction: 0, frictionAir: 0.002 });
+  Composite.add(engine.world, ball);
+  const x = ball.position.x;
+  step(engine, 240);
+  return R(ball.position.x - x);
+}, same(3));
+scene('a feather (gravity 0.05, air friction 0.1): how far it falls in 30 s (px)', engine => {
+  engine.gravity.y = 0.05;
+  const f = B.rectangle(600, 100, 30, 10, { frictionAir: 0.1 }); Composite.add(engine.world, f);
+  step(engine, 1800);
+  return R(f.position.y - 100);
+}, same(2));
+scene('a puck gliding at 9 px a second where nothing falls: how far it gets in 30 s (px)', engine => {
+  engine.gravity.y = 0;
+  const p = B.circle(100, 300, 20, { frictionAir: 0, friction: 0 }); Composite.add(engine.world, p);
+  Body.setVelocity(p, { x: 0.15, y: 0 });
+  step(engine, 1800);
+  return R(p.position.x - 100);
+}, same(2));
+scene('time stopped for 2 s (timeScale 0) with a ball rolling: how far it rolls in the half second after (px)', engine => {
+  ground(engine);
+  const ball = B.circle(300, G - 20, 20, { friction: 0, frictionAir: 0 }); Composite.add(engine.world, ball);
+  Body.setVelocity(ball, { x: 6, y: 0 });
+  step(engine, 10);
+  engine.timing.timeScale = 0; step(engine, 120); engine.timing.timeScale = 1;
+  const x = ball.position.x;
+  step(engine, 30);
+  return R(ball.position.x - x);
+}, same(2));
+scene('a settled box made static by writing isStatic, slid 300 px away and made dynamic again: where it ends (x)', engine => {
+  ground(engine);
+  const b = B.rectangle(400, G - 25, 50, 50); Composite.add(engine.world, b);
+  step(engine, 180);
+  b.isStatic = true;
+  step(engine, 30, i => Body.setPosition(b, { x: 400 + (i + 1) * 10, y: G - 25 }));
+  b.isStatic = false;
+  step(engine, 60);
+  return R(b.position.x);
+}, same(2));
+scene('a ball dropped into a settled pit: balls it moves over 5 px', engine => {
+  ground(engine);
+  const balls = pile(); Composite.add(engine.world, balls);
+  step(engine, 600);
+  const start = places(balls);
+  Composite.add(engine.world, B.circle(560, 100, 40, { density: 0.01, restitution: 0.3 }));
+  step(engine, 240);
+  return balls.filter((b, i) => Math.hypot(b.position.x - start[i].x, b.position.y - start[i].y) > 5).length;
+}, (on, off) => on >= off - 8);
+scene('a block picked off a settled column (found with Query.point), put on the floor and let go: blocks held 2 s later', engine => {
+  ground(engine);
+  const col = column(4, 50); Composite.add(engine.world, col);
+  step(engine, 300);
+  const b = Query.point(Composite.allBodies(engine.world), { x: 700, y: G - 175 }).find(body => !body.isStatic);
+  if (b !== col[3]) return -1;
+  step(engine, 30, () => { Body.setPosition(b, { x: 900, y: G - 25 }); Body.setVelocity(b, { x: 0, y: 0 }); });
+  step(engine, 120);
+  return held(col);
+}, on => on === 4);
+
+// The module's other mendings.
+scene('Engine.create() gives 10 position and 8 velocity passes, and a page can ask for others', () => {
+  const a = Engine.create(), b = Engine.create({ positionIterations: 6, velocityIterations: 4 });
+  return `${a.positionIterations}+${a.velocityIterations}, ${b.positionIterations}+${b.velocityIterations}`;
+}, on => on === '10+8, 6+4');
+scene('a body added to the engine instead of its world lands in the world', engine => {
+  Composite.add(engine, B.circle(0, 0, 10));
+  return Composite.allBodies(engine).length;
+}, on => on === 1);
+scene('Runner.run(engine) and Engine.run(engine) return a runner (stopped at once here)', engine => {
+  const a = Runner.run(engine), b = Engine.run(engine);
+  Runner.stop(a); Runner.stop(b);
+  return Number(Boolean(a && b && 'enabled' in a));
+}, on => on === 1);
+
+// ---- run them
+let bad = 0, n = 0;
+for (const { name, run, ok, options } of scenes) {
+  const result = {};
+  for (const mode of ['on', 'off']) {
+    try { result[mode] = run(Engine.create({ ...(mode === 'off' && { settling: false }), ...options })); } catch (e) { result[mode] = `ERROR ${e.message}`; }
+  }
+  const good = typeof result.on !== 'string' || !result.on.startsWith('ERROR') ? Boolean(ok(result.on, result.off)) : false;
+  n++;
+  if (!good) bad++;
+  const row = document.getElementById('rows').insertRow();
+  for (const [text, cls] of [[name], [good ? 'ok' : 'WRONG', good ? 'ok' : 'bad'], [result.on], [result.off]]) { const cell = row.insertCell(); cell.textContent = text; if (cls) cell.className = cls; }
+  document.title = `matter.html: ${n - bad} of ${n} ok${n < scenes.length ? ' (running)' : ''}`;
+  await new Promise(r => setTimeout(r));
+}
+window.__results = [...document.querySelectorAll('#rows tr')].slice(1).map(r => [...r.cells].map(c => c.textContent));
+</script>
+</body>
+</html>

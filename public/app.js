@@ -360,7 +360,7 @@ addEventListener('message', e => {
   const d = e.data;
   if (e.source !== frame.contentWindow || !d?.kidbuild) return;
   if (d.type === 'key') handleKey(d);
-  if (d.type === 'error') pageError(d.message);
+  if (d.type === 'error') pageError(d.message, d.load);
   if (d.type === 'keep' && d.keep && !state.sketch) state.kept = { projectId: state.project?.id, keep: d.keep };
   if (d.id && answers.has(d.id)) {
     answers.get(d.id)(d);
@@ -374,12 +374,13 @@ addEventListener('message', e => {
 
 // When a page crashes, quietly ask the AI to fix it (at most twice in a row).
 let fixTimer = null;
-function pageError(message) {
+function pageError(message, load) {
   if (/ResizeObserver|^Script error/i.test(message)) return;
   if (state.sketch) return; // a first look, about to be replaced: nothing to fix
   // Crashed right after being handed the kid's progress? Maybe the old values don't suit the
-  // new version: start this version fresh instead (no fix needed yet).
-  if (state.restoredAt && Date.now() - state.restoredAt < 5000) {
+  // new version: start this version fresh instead (no fix needed yet). (Not when it couldn't
+  // even load - `load`: starting fresh can't cure that, and would throw the progress away.)
+  if (!load && state.restoredAt && Date.now() - state.restoredAt < 5000) {
     console.warn('crashed with restored progress, starting fresh:', message);
     showPage(state.html);
     return;

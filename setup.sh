@@ -151,7 +151,7 @@ fi
 # ---------------------------------------------------------------------------- Matter.js
 say "2D physics: Matter.js"
 MATTER_VERSION=0.20.0
-MATTER_WRAPPER=2 # (one more whenever the module written around it below changes, so every install gets the new one)
+MATTER_WRAPPER=3 # (one more whenever the module written around it below changes, so every install gets the new one)
 if [ -s vendor/matter/matter.esm.js ] && [ "$(cat vendor/matter/VERSION 2>/dev/null)" = "$MATTER_VERSION" ] && [ "$(cat vendor/matter/WRAPPER 2>/dev/null)" = "$MATTER_WRAPPER" ]; then
   echo "already installed"
 else
@@ -170,23 +170,187 @@ else
     cat <<'MODULE'
 }).call(globalThis, module, module.exports);
 const Matter = module.exports;
+export default Matter;
+export const { Axes, Bodies, Body, Bounds, Collision, Common, Composite, Composites, Constraint, Contact, Detector, Engine, Events, Grid, Mouse, MouseConstraint, Pair, Pairs, Plugin, Query, Render, Resolver, Runner, SAT, Sleeping, Svg, Vector, Vertices, World } = Matter;
 // Most examples written before this version start the engine with Runner.run(engine) or
 // Engine.run(engine). This version wants Runner.run(runner, engine) and, handed only an engine,
 // runs nothing and says nothing - so here both spellings work.
-const run = Matter.Runner.run;
-Matter.Runner.run = Matter.Engine.run = (runner, engine) => (engine ? run(runner, engine) : run(Matter.Runner.create(), runner));
-// More solver passes than its own 6 and 4, unless a page asks otherwise: with those, things built of
-// many pieces (a castle wall between two towers) creep apart and fall down before anything hits them.
-const create = Matter.Engine.create;
-Matter.Engine.create = options => create({ positionIterations: 10, velocityIterations: 8, ...options });
+const run = Runner.run;
+Runner.run = Engine.run = (runner, engine) => (engine ? run(runner, engine) : run(Runner.create(), runner));
 // A body added to the engine instead of its world - Composite.add(engine, body) - throws from deep
 // inside, in the middle of a frame, and the page's loop stops for good. Here it goes into the world.
 for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'allComposites']) {
-  const was = Matter.Composite[name];
-  Matter.Composite[name] = Matter.World[name] = (composite, ...rest) => was(composite && composite.world && !composite.bodies ? composite.world : composite, ...rest);
+  const was = Composite[name];
+  Composite[name] = World[name] = (composite, ...rest) => was(composite && composite.world && !composite.bodies ? composite.world : composite, ...rest);
 }
-export default Matter;
-export const { Axes, Bodies, Body, Bounds, Collision, Common, Composite, Composites, Constraint, Contact, Detector, Engine, Events, Grid, Mouse, MouseConstraint, Pair, Pairs, Plugin, Query, Render, Resolver, Runner, SAT, Sleeping, Svg, Vector, Vertices, World } = Matter;
+
+// What has come to rest stays exactly where it is until something really moves it.
+// Left to itself, Matter keeps nudging resting things by a fraction of a pixel a step, and a wall of
+// bricks laid like a real one creeps apart and falls down by itself, whatever the solver passes:
+// measured, a castle of 40 px bricks loses its first brick after 26 s and one of 30 px bricks after
+// 4 s. Matter's own sleeping stops that, but a sleeping body is deaf to a push or a throw until it
+// is woken, hangs in the air when what it rested on goes away, and has its contacts reported as
+// ending and starting again. So here a body that has rested on something for a second is held:
+// after every step it is put back where it was, with no speed. It stays in the solver like any
+// other body, so nothing about touching it changes, and it is let go - with everything it touches,
+// and everything that touches - as soon as it is really pushed or turned, the page moves or pushes
+// it (Body.setPosition and the like, or a force), something on the move touches it, it no longer
+// touches what it rested on (a body taken away from under it), or gravity changes.
+// (What it costs: a ball left at rest on a slope of half a degree stays there, and what physics
+// alone moves along the ground slower than 12 px a second can stop. Engine.create({ settling: false })
+// is plain Matter, and so is an engine with Matter's own sleeping switched on.)
+const REST = 60; // steps a body must be at rest before it is held: a second
+const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step,
+const SPOT = 0.5, SPOT_TURN = 0.01; // or shaking on the spot: no further than this from where it was
+const PUSH = 0.5, PUSH_NO_GRAVITY = 0.05, PUSH_TURN = 0.005; // pushed: faster than this share of one step of free fall (px a step where nothing falls), or radians a step
+const states = new WeakMap(); // body -> { x, y, angle, slow, spot, held, at, touches, rested }
+const handled = new WeakSet(); // bodies the page itself has just moved, pushed or changed
+const pulls = new WeakMap(); // engine -> its gravity as last seen
+const NO_SPEED = { x: 0, y: 0 };
+const put = { position: Body.setPosition, angle: Body.setAngle, velocity: Body.setVelocity, spin: Body.setAngularVelocity };
+for (const name of ['setPosition', 'setAngle', 'setVelocity', 'setAngularVelocity', 'setSpeed', 'setAngularSpeed', 'translate', 'rotate', 'scale', 'applyForce', 'setStatic', 'setMass', 'setDensity', 'setInertia', 'setVertices', 'setParts', 'setCentre']) {
+  const was = Body[name];
+  if (!was) continue;
+  Body[name] = function (body) {
+    if (body && typeof body === 'object') handled.add(body.parent || body);
+    return was.apply(this, arguments);
+  };
+}
+const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, spot: 0, held: false, at: 0, touches: 0, rested: 0 }).get(body);
+let now = 0; // (counts the steps settled: `at` is the last one a body touched something in, `touches` how many things)
+const touch = body => {
+  if (body.isStatic) return;
+  const s = stateOf(body);
+  if (s.at !== now) {
+    s.at = now;
+    s.touches = 0;
+  }
+  s.touches++;
+};
+function settle(engine) {
+  const step = engine.timing.lastDelta;
+  if (engine.settling === false || engine.enableSleeping || !step) return; // (no time has passed: nothing has rested either)
+  now++;
+  const bodies = Composite.allBodies(engine.world);
+  const gravity = engine.gravity;
+  // Gravity changed: everything is let go.
+  const pull = `${gravity.x},${gravity.y},${gravity.scale}`;
+  const all = pulls.has(engine) && pulls.get(engine) !== pull;
+  pulls.set(engine, pull);
+  // (body.speed is in px a step of 1/60 s, whatever the step.)
+  const fall = Math.hypot(gravity.x, gravity.y) * (gravity.scale ?? 0.001) * step * (1000 / 60);
+  const push = fall > 0 ? PUSH * fall : PUSH_NO_GRAVITY;
+  const pairs = engine.pairs.list;
+  for (const pair of pairs) {
+    if (!pair.isActive || pair.isSensor) continue;
+    touch(pair.bodyA.parent);
+    touch(pair.bodyB.parent);
+  }
+  const loose = []; // what is let go this step, to begin with
+  for (const body of bodies) {
+    const byHand = handled.delete(body);
+    if (body.isStatic) {
+      states.delete(body);
+      if (byHand) loose.push(body);
+      continue;
+    }
+    const s = stateOf(body);
+    if (byHand || all) loose.push(body);
+    else if (s.at !== now) {
+      // What touches nothing is never held (it would hang in the air), and takes a second to count as at rest again.
+      if (s.held) loose.push(body);
+      s.slow = s.spot = 0;
+    } else if (s.held) {
+      // (Held, a body touches the same things step after step: fewer means one of them has gone.)
+      if (body.speed > push || body.angularSpeed > PUSH_TURN || s.touches < s.rested) loose.push(body);
+    } else {
+      s.slow = body.speed < SLOW && body.angularSpeed < SLOW_TURN ? s.slow + 1 : 0;
+      if (Math.abs(body.position.x - s.x) > SPOT || Math.abs(body.position.y - s.y) > SPOT || Math.abs(body.angle - s.angle) > SPOT_TURN) {
+        s.spot = 0;
+        s.x = body.position.x;
+        s.y = body.position.y;
+        s.angle = body.angle;
+      } else s.spot++;
+    }
+  }
+  // Something on the move (fast enough to see, and getting somewhere) lets go of what it touches.
+  const moving = body => {
+    const s = states.get(body);
+    return s && !s.held && s.slow === 0 && s.spot < 3;
+  };
+  for (const pair of pairs) {
+    if (!pair.isActive || pair.isSensor) continue;
+    const a = pair.bodyA.parent, b = pair.bodyB.parent;
+    if (states.get(b)?.held && moving(a)) loose.push(b);
+    else if (states.get(a)?.held && moving(b)) loose.push(a);
+  }
+  // What is let go takes along everything it touches, and everything that touches.
+  const free = new Set(loose);
+  if (loose.length) {
+    const touching = new Map();
+    const link = (a, b) => (touching.get(a) || touching.set(a, []).get(a)).push(b);
+    for (const pair of pairs) {
+      if (!pair.isActive || pair.isSensor) continue;
+      link(pair.bodyA.parent, pair.bodyB.parent);
+      link(pair.bodyB.parent, pair.bodyA.parent);
+    }
+    for (let i = 0; i < loose.length; i++) {
+      for (const other of touching.get(loose[i]) || []) {
+        if (other.isStatic || free.has(other)) continue;
+        free.add(other);
+        loose.push(other);
+      }
+    }
+  }
+  for (const body of bodies) {
+    if (body.isStatic) continue;
+    const s = states.get(body);
+    if (free.has(body)) {
+      s.held = false;
+      s.slow = s.spot = 0;
+      s.x = body.position.x;
+      s.y = body.position.y;
+      s.angle = body.angle;
+      continue;
+    }
+    if (!s.held) {
+      if (s.slow < REST && s.spot < REST) continue;
+      s.held = true;
+      s.rested = s.touches;
+      s.x = body.position.x;
+      s.y = body.position.y;
+      s.angle = body.angle;
+    }
+    if (body.position.x !== s.x || body.position.y !== s.y) put.position(body, s);
+    if (body.angle !== s.angle) put.angle(body, s.angle);
+    put.velocity(body, NO_SPEED);
+    put.spin(body, 0);
+    body.positionImpulse.x = body.positionImpulse.y = 0;
+  }
+}
+// A force the page wrote straight into a body (body.force.y -= 0.01, in its loop or in its own
+// 'beforeUpdate') is the page pushing it too. By 'beforeSolve' a body's force is gravity's own
+// and nothing else, unless the page added to it.
+function pushed(engine) {
+  if (engine.settling === false || engine.enableSleeping) return;
+  const gravity = engine.gravity, scale = gravity.scale ?? 0.001;
+  const pulls = (gravity.x !== 0 || gravity.y !== 0) && scale !== 0;
+  for (const body of Composite.allBodies(engine.world)) {
+    if (body.isStatic || body.isSleeping) continue;
+    const x = pulls ? body.mass * gravity.x * scale : 0, y = pulls ? body.mass * gravity.y * scale : 0;
+    if (body.force.x !== x || body.force.y !== y || body.torque) handled.add(body);
+  }
+}
+// More solver passes than Matter's own 6 and 4, unless a page asks otherwise: things built of many
+// pieces hold together better while they are being knocked about and before they are held (that
+// castle loses its first brick after 3 s with 6 and 4).
+const create = Engine.create;
+Engine.create = options => {
+  const engine = create({ positionIterations: 10, velocityIterations: 8, ...options });
+  Events.on(engine, 'beforeSolve', () => pushed(engine));
+  Events.on(engine, 'afterUpdate', () => settle(engine));
+  return engine;
+};
 MODULE
   } > vendor/matter/matter.esm.js.new
   # (Written beside it and moved into place whole: the app may be showing a creation that imports it.)

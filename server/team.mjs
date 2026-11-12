@@ -729,11 +729,12 @@ export function blankProblems(html) {
   if (/from\s*['"]three['"]/.test(code) && !/\.render\s*\(/.test(code)) problems.push('It never draws: nothing calls renderer.render(scene, camera), so the screen stays blank. Call it at the end of every frame of the main loop.');
   // Matter.js works out where things are only when its engine is stepped. A page that makes an
   // engine and never steps it shows everything hanging where it was made, and throws nothing.
-  // (With Matter's Engine or Runner under a name of the page's own there's no telling from here,
-  // so nothing is said: a wrong alarm costs the kid a turn of waiting, and its cure a second step.)
+  // (With Matter's Engine or Runner under another name of the page's own there's no telling from
+  // here, so nothing is said: a wrong alarm costs the kid a turn of waiting, and its cure a second
+  // step. `const Engine = Matter.Engine` keeps the name, and is checked like any other page.)
   if (/from\s*['"]matter-js['"]/.test(code) && /\bEngine\.create\s*\(/.test(code)) {
     const stepped = /\b(?:Engine\.(?:update|run)|Runner\.(?:run|tick))\b/.test(code) || /\.update\s*\(\s*[\w.$]*engine\b/i.test(code);
-    const renamed = /\b(?:Engine|Runner)\s*(?::|\bas\b)\s*[\w$]|=\s*(?:[\w$]+\.)?(?:Engine|Runner)\s*(?:[;,\n})]|\/[/*]|$)/.test(code);
+    const renamed = /\b(Engine|Runner)\s*(?::|\bas\b)\s*(?!\1\b)[\w$]|(?<!\b(?:Engine|Runner)\s*)=\s*(?:[\w$]+\.)?(?:Engine|Runner)\s*(?:[;,\n})]|\/[/*]|$)/.test(code);
     if (!stepped && !renamed) problems.push('Nothing would move: the page uses Matter.js and nothing steps its engine. Step it in the main loop, in fixed steps: `acc = Math.min(acc + dt * 1000, 50); while (acc >= 1000 / 60) { Engine.update(engine, 1000 / 60); acc -= 1000 / 60; }` (acc starts at 0; dt in seconds).');
   }
   const lookups = {};

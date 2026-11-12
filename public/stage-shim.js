@@ -5,22 +5,23 @@
 (() => {
   const post = m => parent.postMessage({ kidbuild: true, ...m }, '*');
   const errors = [];
-  const report = message => {
+  const report = (message, more) => {
     errors.push(message);
     if (errors.length > 10) errors.shift();
-    post({ type: 'error', message });
+    post({ type: 'error', message, ...more });
   };
 
   addEventListener('error', e => {
     if (e.message) report(`${e.message} (line ${e.lineno})`);
   });
-  // A script that couldn't be loaded, or one of its imports (a library that isn't installed here),
+  // A module that couldn't be loaded, or one of its imports (a library that isn't installed here),
   // never runs and throws nothing: the page just stays empty. The browser only tells the script's
-  // own element, without a message - heard here on its way down.
+  // own element, without a message - heard here on its way down. (Not for a plain <script src>
+  // the sandbox turns away: the page may do without it, and says so itself if it can't.)
   addEventListener(
     'error',
     e => {
-      if (!e.message && e.target?.tagName === 'SCRIPT') report(`A script of this page, or one of its imports, could not be loaded${e.target.src ? ` (${e.target.src})` : ''}: what it imports isn't installed here.`);
+      if (!e.message && e.target?.tagName === 'SCRIPT' && e.target.type === 'module') report(`A module of this page, or one of its imports, could not be loaded${e.target.src ? ` (${e.target.src})` : ''}: what it imports isn't installed here.`, { load: true });
     },
     true,
   );
