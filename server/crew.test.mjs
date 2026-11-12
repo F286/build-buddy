@@ -182,3 +182,14 @@ test('looseEnds: a color of the wrong kind for what draws with it', () => {
   assert.deepEqual(looseEnds({ 'page.html': page('text'), 'parts/place.js': phaser }), ['parts/place.js draws with colors of the wrong kind, which come out black: C.red is text, and Phaser draws with numbers (0xff8800); C.sky is text, and Phaser draws with numbers (0xff8800)']);
   assert.deepEqual(looseEnds({ 'page.html': page('number'), 'parts/place.js': canvas }), ["parts/place.js draws with colors of the wrong kind, which come out black: C.red is a number, and a canvas draws with text ('#ff8800'); C.sky is a number, and a canvas draws with text ('#ff8800')"]);
 });
+
+test('taking lines out: a divider written twice is an empty replacement, and no marker line gets into a file', () => {
+  const twice = changesIn('FIX parts/a.js\n<<<<<<< FIND\n  g.strokePoints([], false);\n=======\n=======\n>>>>>>> REPLACE\n');
+  assert.deepEqual(twice, [{ path: 'parts/a.js', find: '  g.strokePoints([], false);', replace: '' }]);
+  assert.deepEqual(fixed('a();\n  g.strokePoints([], false);\nb();', twice[0]), { text: 'a();\n\nb();' });
+  const empty = changesIn('FIX parts/a.js\n<<<<<<< FIND\nb();\n=======\n>>>>>>> REPLACE\n');
+  assert.deepEqual(empty, [{ path: 'parts/a.js', find: 'b();', replace: '' }]);
+  // A second ======= with code after it: not taken in (it would put a line of ='s into the code).
+  const [garbled] = changesIn('FIX parts/a.js\n<<<<<<< FIND\na();\n=======\nb();\n=======\nc();\n>>>>>>> REPLACE\n');
+  assert.match(fixed('a();', garbled).why, /holds a ======= line/);
+});

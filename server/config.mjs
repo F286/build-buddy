@@ -81,6 +81,10 @@ export const DEFAULTS = {
     // something new appears in about two thirds of the time. "subagents": Claude Code subagents the
     // lead calls one after another (server/agents.mjs, as it was).
     agentHelpers: 'direct',
+    // peek: with direct helpers, before something new or a big change is shown, the app runs it out
+    // of sight and the lead is handed a screenshot of it with its helpers' parts (about 2 s): what's
+    // black, hidden, cut off or missing shows in a picture, not in the code.
+    peek: true,
     agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, fit: 700, look: 10000 } },
     agentHelper: { model: 'sonnet' },
   },

@@ -384,9 +384,12 @@ async function problemsIn(built) {
 // One build. Resolves like the classic way: { say, done, title, emoji, html, edited, backend }.
 // Throws if it couldn't (the classic way takes over).
 
-export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), last = false }, emit, state) {
+// The app's answer to a 'peek' event (POST /api/peeked): how a page not shown yet looks and runs.
+export const peeked = answer => crew.peeked(answer);
+
+export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), last = false, peeks = false }, emit, state) {
   if (leadBrain() === 'agy') return agyAgents.build({ page, history, text, alt, fix, title, look, last }, emit, state);
-  if (crew.on()) return crew.build({ page, history, text, alt, fix, title, look }, emit, state);
+  if (crew.on()) return crew.build({ page, history, text, alt, fix, title, look, peeks }, emit, state);
   const t0 = Date.now();
   const secs = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
   const p = store.currentProject();

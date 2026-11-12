@@ -168,7 +168,7 @@ const routes = {
   },
 
   'POST /api/build': async (req, res) => {
-    const { text, alt, fix, grace } = await readJson(req);
+    const { text, alt, fix, grace, peeks } = await readJson(req);
     if (!text?.trim() && !fix) return send(res, 400, { error: 'say something' });
     // (Busy first: a request turned away while building mustn't use up the last thing.)
     if (ai.isBusy()) return send(res, 409, { error: 'busy' });
@@ -180,7 +180,7 @@ const routes = {
     const started = Date.now();
     const endsAt = timerEndsAt;
     try {
-      await ai.build({ text: text?.trim(), alt: alt?.trim(), fix, last: Boolean(grace && timeIsUp()) }, emit);
+      await ai.build({ text: text?.trim(), alt: alt?.trim(), fix, last: Boolean(grace && timeIsUp()), peeks: Boolean(peeks) }, emit);
     } catch (err) {
       console.error('build failed:', err.message);
       emit({ type: 'error', message: err.message, blocked: /safety filter/i.test(err.message) });
@@ -203,6 +203,10 @@ const routes = {
     const b = await readJson(req);
     return builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.repair(b)) : team.repair(b);
   },
+
+  // The app's answer to a 'peek' event of a build under way: how the page looks and runs, out of
+  // sight, before it's shown (the agent way's lead is handed it with its helpers' parts).
+  'POST /api/peeked': async req => agents.peeked(await readJson(req)),
 
   // A team-built creation just appeared: take a careful look and fix what would spoil it.
   'POST /api/check': async req => {

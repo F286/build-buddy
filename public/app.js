@@ -502,7 +502,8 @@ async function build(body) {
 
   let result = null;
   try {
-    const res = await fetch('/api/build', { method: 'POST', headers: { 'content-type': 'application/json', 'x-kidbuild': '1' }, body: JSON.stringify(body) });
+    // (peeks: this app can run a page out of sight and send its picture back - see 'peek' below.)
+    const res = await fetch('/api/build', { method: 'POST', headers: { 'content-type': 'application/json', 'x-kidbuild': '1' }, body: JSON.stringify({ ...body, peeks: true }) });
     if (!res.ok) throw new Error((await res.json()).error || res.statusText);
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let buf = '';
@@ -524,6 +525,9 @@ async function build(body) {
         } else if (ev.type === 'say') {
           heardBack = true;
           if (!body.fix) say(ev.text);
+        } else if (ev.type === 'peek') {
+          // The builder wants to see its page running before it's shown: out of sight, right now.
+          peek(ev.html).then(seen => api('/api/peeked', { id: ev.id, ...seen }), () => {}).catch(() => {});
         } else if (ev.type === 'narrate') {
           // What it's making, said while the kid waits - only into a silence, never on top of the
           // first answer or the kid.
@@ -713,6 +717,47 @@ async function checkCreation({ urgent = false } = {}) {
   } finally {
     overwatch.running = false;
   }
+}
+
+// A peek at a page that isn't shown yet: it runs out of sight (silent, behind the stage, the stage's
+// size) until it has drawn, and its picture and the errors it threw come back - within 3 s at most.
+function peek(html) {
+  return new Promise(resolve => {
+    const trial = document.createElement('iframe');
+    trial.setAttribute('sandbox', 'allow-scripts');
+    trial.setAttribute('aria-hidden', 'true');
+    trial.tabIndex = -1;
+    const r = frame.getBoundingClientRect();
+    Object.assign(trial.style, { position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, border: '0', opacity: '0.01', pointerEvents: 'none', zIndex: '-1' });
+    const errors = [];
+    let asked = false;
+    const done = seen => {
+      clearTimeout(askAnyway);
+      clearTimeout(giveUp);
+      removeEventListener('message', onMessage);
+      trial.remove();
+      resolve({ screenshot: seen?.screenshot || '', blank: Boolean(seen?.blank), errors: [...new Set(errors)].filter(m => !/ResizeObserver|^Script error/i.test(m)).slice(0, 5) });
+    };
+    const ask = () => {
+      if (asked) return;
+      asked = true;
+      trial.contentWindow?.postMessage({ kidbuild: true, type: 'peek?', id: 1 }, '*');
+    };
+    const onMessage = e => {
+      const d = e.data;
+      if (e.source !== trial.contentWindow || !d?.kidbuild) return;
+      if (d.type === 'error') errors.push(d.message);
+      // (Loaded: its libraries are in and its first code has run. A little longer, and it has drawn.)
+      if (d.type === 'loaded') setTimeout(ask, 600);
+      if (d.type === 'peek') done(d);
+    };
+    addEventListener('message', onMessage);
+    // (Not loaded after 1.5 s: asked anyway - its first frames may be there. No answer after 3 s: no picture.)
+    const askAnyway = setTimeout(ask, 1500);
+    const giveUp = setTimeout(() => done(null), 3000);
+    document.body.append(trial);
+    trial.srcdoc = wrap(html, { trial: true });
+  });
 }
 
 // Run a page out of sight for a moment (silent, behind the stage, with a few arrow-key presses)

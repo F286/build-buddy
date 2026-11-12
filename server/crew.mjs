@@ -85,7 +85,7 @@ FIX <page.html or parts/<name>.js>
 <<<<<<< FIND
 <lines copied exactly from the file as it is now - just enough of them to match one place only>
 =======
-<what replaces them>
+<what replaces them - nothing at all, to take them out>
 >>>>>>> REPLACE
 - A whole file is \`FILE <path>\` on a line of its own, then the file in a \`\`\` block.
 You have no tools and need none - you know the files: you wrote page.html, you're shown every part when it's written, and whatever changes outside your own work is shown to you.
@@ -560,6 +560,7 @@ const filePath = (dir, rel) => (/^(page\.html|parts\/[\w-]+\.js)$/.test(rel) ? p
 
 // The changes in a reply, in the order it wrote them: whole files (FILE <path>, then a ``` block) and
 // FIX blocks (FIX <path>, then one or more FIND/REPLACE blocks).
+const MARKER = /^[ \t]*(={5,9}|<{5,9} ?FIND\b.*|>{5,9} ?REPLACE\b.*)[ \t]*$/; // a line of a FIX block's own, never a file's
 function changesIn(text) {
   const lines = String(text || '').replace(/\r/g, '').split('\n');
   const out = [];
@@ -579,7 +580,10 @@ function changesIn(text) {
       const mid = lines.findIndex((l, j) => j > i && /^[ \t]*={5,9}[ \t]*$/.test(l));
       const end = mid < 0 ? -1 : lines.findIndex((l, j) => j > mid && /^[ \t]*>{5,9} ?REPLACE\b/.test(l));
       if (end < 0) break;
-      out.push({ path: fixing, find: lines.slice(i + 1, mid).join('\n'), replace: lines.slice(mid + 1, end).join('\n') });
+      // (To take lines out it sometimes writes the divider twice, with nothing between: that's an
+      // empty replacement, not a line of ='s.)
+      const put = lines.slice(mid + 1, end);
+      out.push({ path: fixing, find: lines.slice(i + 1, mid).join('\n'), replace: put.every(l => MARKER.test(l)) ? '' : put.join('\n') });
       i = end;
     }
   }
@@ -590,6 +594,7 @@ function changesIn(text) {
 // either end). Returns the new text, or why it didn't fit.
 function fixed(text, { find, replace }) {
   if (!find.trim()) return { why: 'its FIND is empty' };
+  if (replace.split('\n').some(l => MARKER.test(l))) return { why: 'what replaces it holds a ======= line (one FIND, one =======, one REPLACE per block; leave the part after ======= empty to take lines out)' };
   const hits = text.split(find).length - 1;
   if (hits === 1) return { text: text.replace(find, () => replace) };
   if (hits > 1) return { why: `its FIND matches ${hits} places` };
@@ -654,6 +659,42 @@ async function taken(s, text, { onText, onEvent, ...opts } = {}) {
   misses = applyReply(s.dir, again.text);
   if (misses.length) log(`agents: ${misses.length} still didn't fit (${misses[0].path}: ${misses[0].why})`);
   return text; // (what it said the first time is what counts: its DONE, its WHY)
+}
+
+// A peek at a page before it's shown: the app runs it out of sight and answers with a screenshot and
+// the errors it threw (a 'peek' event in the build's stream; POST /api/peeked brings the answer). What's
+// black, hidden, cut off or missing shows in a picture, not in the code. Not answered in time (an
+// app that can't, a slow page): the lead goes by the code alone, as before - and after two in a row
+// with no picture, on a computer too slow to take one in time, it isn't asked again until Build
+// Buddy restarts (the kid would wait those seconds for nothing).
+const peekMs = () => Number(config().team?.peekMs) || 3500;
+const peeks = new Map();
+let peekCount = 0;
+let peekMisses = 0;
+function peekThrough(emit) {
+  if (peekMisses >= 2) return null;
+  return html =>
+    new Promise(resolve => {
+      const id = `${Date.now().toString(36)}-${++peekCount}`;
+      const t0 = Date.now();
+      const answer = seen => {
+        clearTimeout(timer);
+        peeks.delete(id);
+        peekMisses = seen?.screenshot ? 0 : peekMisses + 1;
+        log(`agents: ${seen?.screenshot ? `a peek at it, out of sight, in ${((Date.now() - t0) / 1000).toFixed(1)}s` : `no picture of it within ${((Date.now() - t0) / 1000).toFixed(1)}s`}${seen?.errors?.length ? ` - it threw: ${seen.errors[0].slice(0, 100)}` : ''}${peekMisses >= 2 ? ' (not asking again)' : ''}`);
+        resolve(seen);
+      };
+      const timer = setTimeout(() => answer(null), peekMs());
+      peeks.set(id, answer);
+      emit({ type: 'peek', id, html });
+    });
+}
+
+export function peeked({ id, screenshot, errors, blank } = {}) {
+  const answer = peeks.get(id);
+  if (!answer) return { late: true };
+  answer({ screenshot: typeof screenshot === 'string' ? screenshot : '', blank: Boolean(blank), errors: Array.isArray(errors) ? errors.map(e => String(e).slice(0, 300)).slice(0, 5) : [] });
+  return {};
 }
 
 // A part's code, from a helper's reply (which should be nothing but it).
@@ -746,7 +787,8 @@ function makeCrew(s, about, { quick, onChange = () => {} }) {
 // reply of the same turn, as far as the caller goes). Resolves with all it said, and what was handed out.
 //   about(job)   what its helpers are told about the creation ({ asked, latest, look })
 //   fit          how the handing-back message ends (what it's to do with the parts)
-async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onProgress = () => {}, narrate = null, ...opts }) {
+//   peek(html)   a look at the page running before it's shown ({ screenshot, blank, errors }, or null)
+async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onProgress = () => {}, narrate = null, peek = null, ...opts }) {
   const crew = makeCrew(s, about, { quick, onChange: n => onProgress(n, crew) });
   let before = null; // its reply is a whole new page: the files as they were (the folder starts again)
   // (What its helpers are making, said to the kid once three of them are at it - or, with fewer, a
@@ -795,17 +837,21 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
     const built = assemble(s.dir);
     const problems = failed.length ? [] : await problemsIn(built);
     const loose = failed.length ? [] : looseEnds(snapshot(s.dir));
+    if (narrate && before) narrate("Now I'm putting it all together!"); // (something new: the longest wait)
+    const seen = peek && built?.html && !failed.length && !problems.length ? await peek(built.html).catch(() => null) : null;
+    const shot = picture(seen?.screenshot);
     const back = [
       `Your helper${crew.jobs.length > 1 ? 's are' : ' is'} done - ${crew.jobs.length > 1 ? 'every part' : 'the part'}, as written and saved:`,
       ...crew.jobs.filter(j => j.state === 'done').map(j => `=== parts/${j.name}.js\n${j.code}`),
       failed.length && `${failed.map(j => `parts/${j.name}.js`).join(' and ')} didn't get written (${failed.length > 1 ? 'those helpers' : 'that helper'} failed): write ${failed.length > 1 ? 'them' : 'it'} yourself now - FILE parts/<name>.js, then the code in a \`\`\` block.`,
       problems.length && `Put together, the page doesn't run yet (page lines count the page with every part in place):\n${around(problems, built?.html).join('\n')}`,
       loose.length && `Build Buddy read the files and found ${loose.length > 1 ? 'these loose ends' : 'this loose end'} between the parts - to fix:\n${loose.map(l => `- ${l}`).join('\n')}`,
+      seen?.errors.length && `Run just now, out of sight, it threw:\n${seen.errors.join('\n')}`,
+      shot && (seen.blank ? PEEK_BLANK : PEEK),
       fit,
     ].filter(Boolean).join('\n\n');
     if (opts.fitThinking != null) await s.think(opts.fitThinking);
-    if (narrate && before) narrate("Now I'm putting it all together!"); // (something new: the longest wait)
-    const second = await askLead(s, back, opts);
+    const second = await askLead(s, shot ? [{ type: 'text', text: back }, shot] : back, opts);
     return { text: `${first.text}\n${second.text}`, jobs: crew.jobs, fresh: Boolean(before) };
   } catch (err) {
     crew.stop();
@@ -815,6 +861,10 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
   }
 }
 
+// (With the parts: what the page looks like, run out of sight just now.)
+const PEEK = `A screenshot of it running right now, put together from these parts, is attached. Look at it before the code - it shows what the kid would see: anything they asked for that's missing from it, black or blank where it should have its color, hidden behind something else, cut off at an edge or too small to know is yours to fix now.`;
+const PEEK_BLANK = `A screenshot of it running right now is attached: the whole screen is one color - nothing is showing. Find why in the code (what's drawn where, in what order, with what sizes) and fix that first.`;
+
 const FIT_NEW = `Now make it one creation that works. Go through your ASKED line, thing by thing: is each one there, on the first screen, big enough to see - and does what they wanted to happen really happen when this code runs, with its numbers as they are (a jump high and long enough to clear what it must, a thing that can be reached), from the key or the tap, through the parts - everything one part tells, heard by each part that should react - to the screen? Then the kid's first ten seconds: is the star whole on the screen from the start; does an arrow key move it the way it points, and a quick tap do something; and does the main thing happen however a 5-year-old goes at it, not only when they get it just right? Fix what's missing or wouldn't happen, any name or call that doesn't match, anything that would crash when it runs (a name nothing defines, a radius or size that can go below zero) or doesn't fit the plan or the look - with FIX blocks, in the part or in page.html. Change only what needs it - the kid is waiting - then end with DONE.`;
 const FIT_CHANGE = `Now make it fit: is everything the kid just asked for there - where they'll see it without looking for it - and working, with what was there before, from the key or the tap, through the parts, to the screen? Fix any name or call that doesn't match and anything missing or that would crash when it runs (a name nothing defines, a radius or size that can go below zero), with FIX blocks. Then end with DONE.`;
 const FIT_PASS = `Now make what they wrote fit: fix any name or call that doesn't match and anything missing or that would crash, with FIX blocks. Then end with the WHY line.`;
@@ -823,7 +873,7 @@ const FIT_PASS = `Now make what they wrote fit: fix any name or call that doesn'
 // One build. Resolves like the classic way: { say, done, title, emoji, html, edited, backend }.
 // Throws if it couldn't (the classic way takes over).
 
-export async function build({ page, history, text, alt, fix, title = '', look = pickLook() }, emit, state) {
+export async function build({ page, history, text, alt, fix, title = '', look = pickLook(), peeks = false }, emit, state) {
   const t0 = Date.now();
   const secs = (t = Date.now()) => `${((t - t0) / 1000).toFixed(1)}s`;
   const p = store.currentProject();
@@ -879,7 +929,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   ].filter(Boolean).join('\n\n');
   let reply;
   try {
-    reply = await leadTurn(s, prompt, { about, fit: page ? FIT_CHANGE : FIT_NEW, quick: true, pageNow: page || '', onProgress: progress, narrate: fix ? null : text => emit({ type: 'narrate', text }), fitThinking: lead().thinking.fit, priority: true, timeoutSec: Math.max(config().timeoutSec, 360), stallSec: 120 });
+    reply = await leadTurn(s, prompt, { about, fit: page ? FIT_CHANGE : FIT_NEW, quick: true, pageNow: page || '', onProgress: progress, narrate: fix ? null : text => emit({ type: 'narrate', text }), peek: peeks && !fix && config().team?.peek !== false ? peekThrough(emit) : null, fitThinking: lead().thinking.fit, priority: true, timeoutSec: Math.max(config().timeoutSec, 360), stallSec: 120 });
   } finally {
     over = true;
   }

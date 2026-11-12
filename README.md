@@ -259,6 +259,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.warm` | `true` | Start the team's programs while the kid is still talking, so none of them has to start up once the request arrives. |
 | `team.agents` | `true` | [The agent way](#team-mode-the-agent-way): team mode led by one Claude that keeps the creation in mind, hands its parts to helpers and makes them fit, then grows and polishes it while the kid plays. `false` is team mode's usual way. Also in the panel as *How Claude builds*, and for one run with `./start.sh --agents` (or `--team`). |
 | `team.agentHelpers` | `"direct"` | Who writes the agent way's parts. `"direct"`: programs of Build Buddy's own, each started on its part the moment the lead has written that part's job. `"subagents"`: Claude Code's subagents, which the lead calls one after another - the way it was, and about half again as long a wait. In the panel as *The same team, the way it was*. |
+| `team.peek` | `true` | With direct helpers: before something new or a big change is shown, the app runs it out of sight for a moment and the lead is handed a screenshot of it (and any error it threw) together with its helpers' parts - so a school drawn black, a car hidden under a cloud or people cut off at the edge are fixed before the kid sees them. It takes a second or two. On a computer too slow to take the picture in time (two misses in a row), it isn't asked again until Build Buddy restarts; `data/log.txt` says how long each one took. |
 | `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "fit": 700, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`), when it's handed the parts to make them fit (`fit`, with direct helpers) and when it looks its creation over (`look`). Opus 5.5 and Sonnet 5.5 decide for themselves how long to think whatever these say, so the lead's instructions ask it to start writing at once. `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
 | `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable`. Haiku writes half again as fast (532 characters a second against 336), but its parts were plainly weaker - a ramp the wrong shape, a word on a sign, things in the wrong band of the screen - so Sonnet stays. |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo` (which puts Claude first for that run). Used when Claude leads. |
@@ -442,6 +443,13 @@ instead, pick *A team of AIs at once* in the Ctrl+Shift+P panel, set `"team": { 
   lines that replace them), and Build Buddy takes them into the files. The lead has no tools at
   all: whatever it needs to see is put in front of it, so a check or a small change is one answer,
   never a trip to read a file first.
+- **It sees the creation before the kid does.** With the parts comes a screenshot: the app runs the
+  page as the helpers wrote it, out of sight and silent, and sends back its picture and anything
+  it threw. Whether everything asked for is there, whole and big enough to know, is something to
+  look at, not to work out from the code - and what the picture shows is fixed in the same answer.
+  In the test builds that's how a second crowd drawn over the first, clouds covering the car,
+  people cut off at the bottom of the screen and a star that crashed every frame were gone before
+  anyone saw them (`team.peek`).
 - **The kid sees and hears what's being made.** Each job carries a picture and a few words
   (`[🚚 the monster truck]`): the pictures appear on the building card as the helpers start, each
   one pops when its part is ready, and Sparky says "I'm making the monster truck, the row of cars
@@ -515,8 +523,14 @@ On the six first versions and the six big changes, direct helpers' creations wer
 out of 12 (3 of them clearly; none of the 4 the other way was), had 57 of the 58 things asked for
 fully there and working, against 47 of 58, and scored 8.3 out of 10 on average, against 7.3. The
 small changes, judged in an earlier round, came out even (3 to 3). One judge looked at each pair,
-so this is a direction, not a measurement to the decimal - but it pointed the same way twice: the
-round before, first versions were preferred 4 times out of 6 too.
+so this is a direction, not a measurement to the decimal - but it pointed the same way each time:
+the round before, first versions were preferred 4 times out of 6 too, and in a round of six more
+first versions made with the screenshot, 5 times out of 6 (8.0 against 7.2).
+
+(Those rounds and times were measured before the lead was handed a screenshot, except that last
+one. The screenshot itself takes one to two seconds where it could be timed; the test machine has
+no graphics card and takes far longer than a real computer to photograph a plain-canvas page, so
+its share of the wait is an estimate: with it, first versions came to about 41 s on average.)
 
 Three things got first versions there, each found by reading what the judges marked down:
 
