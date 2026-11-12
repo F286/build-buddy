@@ -11,17 +11,16 @@
     post({ type: 'error', message, ...more });
   };
 
-  addEventListener('error', e => {
-    if (e.message) report(`${e.message} (line ${e.lineno})`);
-  });
-  // A module that couldn't be loaded, or one of its imports (a library that isn't installed here),
-  // never runs and throws nothing: the page just stays empty. The browser only tells the script's
-  // own element, without a message - heard here on its way down. (Not for a plain <script src>
-  // the sandbox turns away: the page may do without it, and says so itself if it can't.)
+  // A module that couldn't be loaded, or one of its imports (a library that isn't installed here,
+  // or a file an installed one doesn't have), never runs and throws nothing: the page just stays
+  // empty. The browser only tells the script's own element, without a message - heard here on its
+  // way down (hence the capture). (Not for a plain <script src> the sandbox turns away: the page
+  // may do without it, and says so itself if it can't.)
   addEventListener(
     'error',
     e => {
-      if (!e.message && e.target?.tagName === 'SCRIPT' && e.target.type === 'module') report(`A module of this page, or one of its imports, could not be loaded${e.target.src ? ` (${e.target.src})` : ''}: what it imports isn't installed here.`, { load: true });
+      if (e.message) report(`${e.message} (line ${e.lineno})`);
+      else if (e.target?.tagName === 'SCRIPT' && e.target.type === 'module') report(`A module of this page, or one of its imports, could not be loaded${e.target.src ? ` (${e.target.src})` : ''}: an import names a library that isn't installed here, or a file an installed one doesn't have.`, { load: true });
     },
     true,
   );

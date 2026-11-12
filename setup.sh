@@ -151,7 +151,7 @@ fi
 # ---------------------------------------------------------------------------- Matter.js
 say "2D physics: Matter.js"
 MATTER_VERSION=0.20.0
-MATTER_WRAPPER=3 # (one more whenever the module written around it below changes, so every install gets the new one)
+MATTER_WRAPPER=4 # (one more whenever the module written around it below changes, so every install gets the new one)
 if [ -s vendor/matter/matter.esm.js ] && [ "$(cat vendor/matter/VERSION 2>/dev/null)" = "$MATTER_VERSION" ] && [ "$(cat vendor/matter/WRAPPER 2>/dev/null)" = "$MATTER_WRAPPER" ]; then
   echo "already installed"
 else
@@ -192,15 +192,17 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
 // is woken, hangs in the air when what it rested on goes away, and has its contacts reported as
 // ending and starting again. So here a body that has rested on something for a second is held:
 // after every step it is put back where it was, with no speed. It stays in the solver like any
-// other body, so nothing about touching it changes, and it is let go - with everything it touches,
-// and everything that touches - as soon as it is really pushed or turned, the page moves or pushes
-// it (Body.setPosition and the like, or a force), something on the move touches it, it no longer
+// other body, so nothing about touching it changes, and it is let go - with everything it touches
+// or is tied to, and everything those do - as soon as the page moves or pushes it
+// (Body.setPosition and the like, or a force), something on the move touches it, it no longer
 // touches what it rested on or hangs on what held it (a body taken away from under it, a rope
 // cut), what it is tied to pulls it, or gravity changes. What touches nothing is never held.
-// (What it costs: what creeps along something slower than 5 px a second stops there - a marble on
-// a slope of half a degree, a ball with friction on one of up to 5 degrees, which plain Matter
-// moves a pixel or two a second. Engine.create({ settling: false }) is plain Matter, and so is an
-// engine with Matter's own sleeping switched on. test/matter.html has the tests.)
+// (What it costs: what gets less than 5 px in a second stops there - a marble on a slope of up to
+// half a degree, which plain Matter has rolling at 50 px a second ten seconds later, and a ball
+// with friction on one of up to 5 degrees, which plain Matter moves a pixel or two a second - and
+// what comes up against a held body slower than 12 px a second (24, if it weighs the same) is
+// stopped by it and doesn't push it. Engine.create({ settling: false }) is plain Matter, and so
+// is an engine with Matter's own sleeping switched on. test/matter.html has the tests.)
 const REST = 60; // sixtieths of a second a body must be at rest before it is held: a second
 const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step all that time,
 const FAR = 5, FAR_TURN = 0.03; // and no further than this from where that began (or it is going somewhere, slowly);
@@ -224,6 +226,7 @@ for (const name of ['setPosition', 'setAngle', 'setVelocity', 'setAngularVelocit
 }
 const stateOf = body => states.get(body) || states.set(body, { x: body.position.x, y: body.position.y, angle: body.angle, slow: 0, fromX: 0, fromY: 0, fromAngle: 0, spot: 0, held: false, rested: null, step: 0, at: 0, tied: 0 }).get(body);
 let now = 0; // (counts the steps settled: `step` is the last one a body was settled in, `at` the last one it touched something in, `tied` the last one a rope held it in)
+const ends = (it, body) => (it.bodyA && (it.bodyA.parent || it.bodyA)) === body || (it.bodyB && (it.bodyB.parent || it.bodyB)) === body;
 function settle(engine) {
   // (Switched off: what was held is forgotten, or it would jump back when switched on again.)
   if (engine.settling === false || engine.enableSleeping) return void settled.delete(engine);
@@ -279,7 +282,9 @@ function settle(engine) {
       // step: if one of those is no longer there, it has gone (what has come to touch it since
       // doesn't count: it may come and go). And only what it is tied to can move it without a
       // touch (the solver's own little starts, in a heap that has come to rest, are not that).
-      if (s.rested.some(it => there.get(it) !== now) || (s.tied === now && (body.speed > push || body.angularSpeed > PUSH_TURN))) loose.push(body);
+      // A rope can also let go of a body without leaving the world: Matter's own mouse
+      // constraint does, when the finger lifts.
+      if (s.rested.some(it => there.get(it) !== now || !ends(it, body)) || (s.tied === now && (body.speed > push || body.angularSpeed > PUSH_TURN))) loose.push(body);
     } else {
       if (body.speed < SLOW && body.angularSpeed < SLOW_TURN) {
         if (!s.slow) {
@@ -378,7 +383,7 @@ function settle(engine) {
     if (body.angle !== s.angle) put.angle(body, s.angle);
     put.velocity(body, NO_SPEED);
     put.spin(body, 0);
-    body.positionImpulse.x = body.positionImpulse.y = 0;
+    body.positionImpulse.x = body.positionImpulse.y = 0; // (nor a shove left over in the solver for the next step)
   }
 }
 // A force the page wrote straight into a body (body.force.y -= 0.01, in its loop or in its own

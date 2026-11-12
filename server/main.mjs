@@ -311,9 +311,10 @@ const routes = {
 const LIBS = ['three', 'matter', 'phaser'];
 
 function serveStatic(res, pathname) {
-  // Creations run in a sandboxed frame with no origin of their own, so libraries need CORS. Such a
-  // frame fetches them afresh for every creation it shows, whatever the caching headers say, so
-  // nothing here pretends otherwise: what setup.sh last installed is what the next creation gets.
+  // Creations run in a sandboxed frame with no origin of their own, so libraries need CORS. The
+  // browser is told to ask for them again every time: setup.sh replaces them in place (the module
+  // around Matter.js is the app's own, and changes), and what it last installed is what the next
+  // creation must get.
   const libName = /^\/lib\/([a-z]+)\//.exec(pathname)?.[1];
   const lib = LIBS.includes(libName);
   const base = lib ? path.join(ROOT, 'vendor', libName) : PUBLIC;

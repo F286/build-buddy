@@ -59,7 +59,7 @@ const held = bodies => bodies.filter(b => b.speed === 0 && b.angularSpeed === 0)
 
 // ---- the scenes: each returns what it measured; `ok(on, off)` says whether that is right
 const scenes = [];
-const scene = (name, run, ok, options) => scenes.push({ name, run, ok, options });
+const scene = (name, run, ok) => scenes.push({ name, run, ok });
 const same = (tolerance = 1) => (on, off) => Math.abs(on - off) <= tolerance;
 
 // What's built stays built (plain Matter.js lets the castles fall, which is why this exists).
@@ -73,7 +73,7 @@ for (const [name, make, settles = 5] of [['a castle of 40 px bricks', () => cast
     return R(far(bodies, start));
   }, on => on <= 2);
 }
-scene('a castle with a ball added beside it every half second, and one taken away every second: furthest a brick moves in a minute (px)', engine => {
+scene('a castle with a ball added beside it every half second (and a body made and never added), and one taken away every second: furthest a brick moves in a minute (px)', engine => {
   ground(engine);
   const bricks = castle(40); Composite.add(engine.world, bricks);
   step(engine, 300);
@@ -334,7 +334,7 @@ for (const heavier of [1.05, 1.1]) scene(`a seesaw whose right block is ${R((hea
 scene('a tall plank standing on a corner, 1 degree past its balance: its lean after 5 s (hundredths of a radian)', engine => {
   ground(engine);
   const lean = Math.atan(30 / 200) + Math.PI / 180, half = Math.hypot(15, 100);
-  const plank = B.rectangle(600 + half * Math.sin(lean - Math.atan(30 / 200)) + 15 * 0, G - half * Math.cos(lean - Math.atan(30 / 200)), 30, 200, { friction: 0.8, angle: lean });
+  const plank = B.rectangle(600 + half * Math.sin(lean - Math.atan(30 / 200)), G - half * Math.cos(lean - Math.atan(30 / 200)), 30, 200, { friction: 0.8, angle: lean });
   Composite.add(engine.world, plank);
   step(engine, 300);
   return R(Math.abs(plank.angle) * 100);
@@ -452,7 +452,7 @@ scene('a crane: a block on a short rope, pressed against a settled column for 2 
   const rope = Constraint.create({ pointA: { x: 650, y: G - 310 }, bodyB: block, length: 10, stiffness: 0.4, damping: 0.1 });
   Composite.add(engine.world, [block, rope]);
   step(engine, 300);
-  rope.pointA.x = 677; rope.pointA.y = G - 130;
+  rope.pointA.x = 652; rope.pointA.y = G - 130;
   step(engine, 240);
   Composite.remove(engine.world, rope);
   const y = block.position.y;
@@ -526,6 +526,63 @@ scene('a heap (60 balls rained on a castle) that has come to rest: furthest anyt
   return R(far(all, start));
 }, on => on <= 3);
 
+scene('gravity tilted sideways (x 0.5) under a box settled on ice: how far it slides in 2 s (px)', engine => {
+  ground(engine);
+  Composite.allBodies(engine.world)[0].friction = 0;
+  const b = B.rectangle(300, G - 25, 50, 50, { friction: 0, frictionAir: 0 }); Composite.add(engine.world, b);
+  step(engine, 180);
+  engine.gravity.x = 0.5;
+  step(engine, 120);
+  return R(b.position.x - 300);
+}, same(3));
+scene('a lift (a static body the page moves up 1 px a step with Body.setPosition) under a settled box: how far the box is lifted in 2 s (px)', engine => {
+  ground(engine);
+  const lift = B.rectangle(400, 500, 200, 20, { isStatic: true }), box = B.rectangle(400, 465, 50, 50);
+  Composite.add(engine.world, [lift, box]);
+  step(engine, 180);
+  const y = box.position.y;
+  step(engine, 120, i => Body.setPosition(lift, { x: 400, y: 499 - i }));
+  return R(y - box.position.y);
+}, same(2));
+scene('settling switched off while a ball slides a settled plank along ice (it never leaves the ground), then on again: where the plank is a second later (x)', engine => {
+  ground(engine);
+  Composite.allBodies(engine.world)[0].friction = 0;
+  const plank = B.rectangle(400, G - 10, 200, 20, { friction: 0, frictionAir: 0 }); Composite.add(engine.world, plank);
+  step(engine, 180);
+  const was = engine.settling;
+  engine.settling = false;
+  const ball = B.circle(200, G - 10, 10, { density: 0.01, friction: 0, frictionAir: 0 }); Composite.add(engine.world, ball);
+  Body.setVelocity(ball, { x: 3, y: 0 });
+  step(engine, 120);
+  Composite.remove(engine.world, ball);
+  engine.settling = was;
+  step(engine, 60);
+  return R(plank.position.x);
+}, same(3));
+scene('a column of 8 with a block 20 times as dense on top (the blocks under it shake on the spot): blocks held after 10 s', engine => {
+  ground(engine);
+  const col = column(8); col.push(B.rectangle(700, G - 20 - 8 * 40, 40, 40, { friction: 0.8, density: 0.02 }));
+  Composite.add(engine.world, col);
+  step(engine, 600);
+  return held(col);
+}, on => on === 9);
+scene('a block dragged with Matter\'s MouseConstraint, pressed against a wall in mid-air for 3 s and let go: how far it falls in a second (px)', engine => {
+  ground(engine);
+  const block = B.rectangle(600, G - 25, 50, 50, { friction: 0.8 });
+  Composite.add(engine.world, [B.rectangle(800, 400, 40, 600, { isStatic: true }), block]);
+  const mouse = Matter.Mouse.create(document.body);
+  Composite.add(engine.world, Matter.MouseConstraint.create(engine, { mouse }));
+  step(engine, 120);
+  mouse.button = 0; // (pressed, on the block)
+  mouse.position.x = 600; mouse.position.y = G - 25;
+  step(engine, 90, () => { mouse.position.x += 160 / 90; mouse.position.y -= (G - 325) / 90; });
+  step(engine, 180);
+  const y = block.position.y;
+  mouse.button = -1;
+  step(engine, 60);
+  return R(block.position.y - y);
+}, same(5));
+
 // The module's other mendings.
 scene('Engine.create() gives 10 position and 8 velocity passes, and a page can ask for others', () => {
   const a = Engine.create(), b = Engine.create({ positionIterations: 6, velocityIterations: 4 });
@@ -543,10 +600,10 @@ scene('Runner.run(engine) and Engine.run(engine) return a runner (stopped at onc
 
 // ---- run them
 let bad = 0, n = 0;
-for (const { name, run, ok, options } of scenes) {
+for (const { name, run, ok } of scenes) {
   const result = {};
   for (const mode of ['on', 'off']) {
-    try { result[mode] = run(Engine.create({ ...(mode === 'off' && { settling: false }), ...options })); } catch (e) { result[mode] = `ERROR ${e.message}`; }
+    try { result[mode] = run(Engine.create(mode === 'off' ? { settling: false } : undefined)); } catch (e) { result[mode] = `ERROR ${e.message}`; }
   }
   const good = typeof result.on !== 'string' || !result.on.startsWith('ERROR') ? Boolean(ok(result.on, result.off)) : false;
   n++;
