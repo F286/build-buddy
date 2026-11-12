@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { JobReader, changesIn, fixed, applyReply, codeOf, tagOf } from './crew.mjs';
+import { JobReader, changesIn, fixed, applyReply, codeOf, tagOf, keepFields, looseEnds } from './crew.mjs';
 
 // A reply read in small chunks, as it arrives.
 function read(text, chunk = 5) {
@@ -107,4 +107,66 @@ test("a helper's reply is its part's code", () => {
   assert.equal(codeOf('const a = 1;\n'), 'const a = 1;');
   assert.equal(codeOf('```js\nconst a = 1;\nconst b = 2;'), 'const a = 1;\nconst b = 2;'); // (a block it never closed)
   assert.equal(codeOf(''), '');
+});
+
+// ---- What's loose between a page and its parts (handed to the lead with the parts)
+
+const WIRED = (main = '') => `<!doctype html>
+<script type="module">
+const hear = {}, on = (name, fn) => (hear[name] ||= []).push(fn), tell = (name, what) => (hear[name] || []).forEach(fn => fn(what));
+const keep = KB.keep({ score: 0, pos: { x: 1, y: 2 }, items: [], name: 'a:b', best });
+// @part truck [🚚 the truck]: makeTruck(scene) → { update(dt, t), hit(x, y) } - a big truck; tells 'crush'
+// @part crowd [🙌 the crowd]: drawCrowd(ctx, t), cheer() - hears 'crush'
+const truck = makeTruck(scene);
+function frame(t) { truck.update(0.016, t); drawCrowd(ctx, t); ${main} }
+</script>`;
+const FITS = {
+  'page.html': WIRED(),
+  'parts/truck.js': "function makeTruck(scene) { tell('crush', {}); keep.score += 1; return { update() {}, hit() {} }; }",
+  'parts/crowd.js': "function drawCrowd(ctx, t) {}\nfunction cheer() {}\non('crush', () => cheer());",
+};
+
+test('keepFields: the top-level names of KB.keep, whatever their values hold', () => {
+  assert.deepEqual([...keepFields(WIRED())], ['score', 'pos', 'items', 'name', 'best']);
+  assert.deepEqual([...keepFields('const keep = KB.keep({ a: on ? 1 : 2, b: [{ c: 1 }], d: f(1, 2) });')], ['a', 'b', 'd']);
+  assert.equal(keepFields('<script>let a = 1</script>'), null);
+  assert.equal(keepFields('const keep = KB.keep(defaults);'), null);
+});
+
+test('looseEnds: parts that fit have none', () => {
+  assert.deepEqual(looseEnds(FITS), []);
+  // A method called on (Phaser's sprite.on), another object's keep, a nested field: not loose ends.
+  assert.deepEqual(looseEnds({ ...FITS, 'parts/crowd.js': `${FITS['parts/crowd.js']}\nsprite.on('pointerdown', cheer);\nconst p = keep.pos.x + world.keep.other;` }), []);
+});
+
+test("looseEnds: something heard that nothing tells", () => {
+  const ends = looseEnds({ ...FITS, 'parts/crowd.js': "function drawCrowd(ctx, t) {}\nfunction cheer() {}\non('crushed', () => cheer());" });
+  assert.equal(ends.length, 1);
+  assert.match(ends[0], /^parts\/crowd\.js hears 'crushed' with on\(\.\.\.\), which nothing tells \(told: 'crush'\)$/);
+  // Told under a name worked out as it runs: it could be any of them, so nothing is said.
+  assert.deepEqual(looseEnds({ ...FITS, 'parts/truck.js': "function makeTruck() { const kind = 'crush'; tell(kind, {}); return {}; }", 'parts/crowd.js': "function drawCrowd() {}\non('crushed', () => {});" }), []);
+  // A page without the shared on and tell: its parts' own `on` calls are something else.
+  assert.deepEqual(looseEnds({ 'page.html': WIRED().replace(/const hear.*\n/, ''), 'parts/truck.js': 'function makeTruck() { return {}; }', 'parts/crowd.js': "function drawCrowd() {}\non('y', () => {});" }), []);
+});
+
+test('looseEnds: a keep field with no default', () => {
+  const ends = looseEnds({ ...FITS, 'parts/truck.js': FITS['parts/truck.js'].replace('keep.score', 'keep.crushed') });
+  assert.deepEqual(ends, ["parts/truck.js uses keep.crushed, which page.html's KB.keep({ ... }) has no default for"]);
+});
+
+test('looseEnds: a function its job names, that the page calls and nothing defines', () => {
+  const ends = looseEnds({ ...FITS, 'parts/truck.js': FITS['parts/truck.js'].replace('function makeTruck', 'function truck_makeTruck') });
+  assert.deepEqual(ends, ['page.html calls makeTruck(...), which parts/truck.js was to define, and nothing defines it']);
+  // Defined some other way - on window, as an arrow, handed out of an object: fine. And cheer(),
+  // which its job names and the page never calls: fine too.
+  for (const def of ['window.makeTruck = function (scene) { return {}; };', 'const makeTruck = scene => ({});', 'const { makeTruck, other } = lib();', 'let a = 1, makeTruck = s => s;'])
+    assert.deepEqual(looseEnds({ ...FITS, 'parts/truck.js': `${def}\ntell('crush', 1); keep.score++;` }), [], def);
+  assert.deepEqual(looseEnds({ ...FITS, 'parts/crowd.js': "function drawCrowd(ctx, t) {}\non('crush', () => {});" }), []);
+});
+
+test('a change planned in the open: the PLAN line is no job, the PART lines after it are', () => {
+  const r = read("PLAN: the rival truck goes to a helper (PART rival), the ramp is written again; I add keep.rampX and the wiring.\nPART rival [🚙 the rival truck]: makeRival(scene) → { update(dt, t) } - a green truck that races\nPART ramp [⛰️ the big ramp] (again): it can be dragged left and right\n\nFIX page.html\n<<<<<<< FIND\nconst a = 1;\n=======\nconst a = 2;\n>>>>>>> REPLACE\nDONE: Race it!");
+  assert.deepEqual(r.names, ['rival', 'ramp']);
+  assert.deepEqual(r.jobs.map(j => j.again), [false, true]);
+  assert.equal(r.pages, 0);
 });

@@ -104,7 +104,7 @@ Plan it for a ${config().kidAge}-year-old's first ten seconds, and say so in the
 Stop after the block. When your helpers are done you're handed every part as they wrote it, and you make it one creation that works - with FIX blocks - and end with DONE.
 
 ## A change to what's there
-A small change: make it yourself, with FIX blocks, and end with DONE. Several separate things, or something big: hand the big pieces out first - their helpers write while you make your own changes. A job is one line, written before anything else in your reply, so its helper starts at once:
+Start writing straight away here too - your reply's first lines are where you plan it, so don't think it through before you write. A small change: make it yourself, with FIX blocks, and end with DONE. Several separate things, or something big: hand the big pieces out first - their helpers write while you make your own changes. Begin with \`PLAN: <in one line: which pieces go to helpers, and what you change yourself>\`, then the jobs, one line each, before anything else - each helper starts the moment its line is written:
   \`PART <name> ${TAG}: ${JOB}\`
   for a new part - say in it anything new you're adding to the shared code that it goes by, and add its \`// @part <name>\` line and its calls to page.html yourself (FIX blocks), in this same reply; or
   \`PART <name> ${TAG} (again): <what changes, and what stays as it is>\`
@@ -132,7 +132,7 @@ You are a helper on a small team building a web page for a ${config().kidAge}-ye
 
 - Reply with only the code of your part - the whole file, and nothing else: no explanation and no \`\`\` fences${quick ? ". Write it once, as well as you can: the lead checks every part afterwards" : ''}.
 - Define exactly what your job says (the same names and parameters, returning the same things): MAIN depends on it. Use the shared code's names as they are.
-- Only define things at the top level: nothing runs until MAIN calls your part. No imports and no <script> tags (the shared code has every import). Extra top-level names you add start with your part's name and an underscore, so they can't clash. Whatever your piece needs before its first frame happens in the function MAIN calls first.
+- Only define things at the top level: nothing runs until MAIN calls your part. No imports and no <script> tags (the shared code has every import). Extra top-level names you add start with your part's name and an underscore (\`truck_speed\`), so they can't clash - never your part's name alone, which MAIN may use for what you return. Whatever your piece needs before its first frame happens in the function MAIN calls first.
 - Time is in seconds: use dt and t exactly as passed (never divide them by 1000). Read the arrow keys and the pointer from the shared input object, unless your job says otherwise.
 - The world's rules belong to the lead's plan: read and change the shared numbers your job names, never a copy of your own, and add no rules your job doesn't ask for.
 - No words on the page - pictures instead. Draw everything in the look, so it's all one picture - shapes, not emoji.
@@ -345,11 +345,43 @@ function historyNote(history) {
   return lines.length ? `<conversation_so_far>\n${lines.join('\n')}\n</conversation_so_far>` : '';
 }
 
-// The names in a page's KB.keep({ ... }) (what the kid's progress is kept in).
-function keepNames(html) {
-  const body = /KB\.keep\(\s*\{([\s\S]*?)\}\s*\)/.exec(html || '')?.[1] || '';
-  return new Set([...body.matchAll(/(?:^|[,{\s])([A-Za-z_$][\w$]*)\s*:/g)].map(m => m[1]));
+// The fields of a page's `KB.keep({ ... })` (what the kid's progress is kept in): its top-level names,
+// with braces matched so a field that is itself an object or a list doesn't end it early. Null when
+// the page has none.
+function keepFields(html) {
+  const text = String(html || '');
+  const at = text.search(/KB\.keep\(\s*\{/);
+  if (at < 0) return null;
+  const names = new Set();
+  const named = key => {
+    if (key.trim().startsWith('...')) names.open = true; // (more fields than can be read here)
+    else if (/^[A-Za-z_$][\w$]*$/.test(key.trim())) names.add(key.trim());
+  };
+  let [depth, quote, key, value] = [0, '', '', false]; // (value: past a field's colon, until its comma)
+  for (let i = text.indexOf('{', at); i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = '';
+    } else if (ch === '"' || ch === "'" || ch === '`') quote = ch;
+    else if (ch === '{' || ch === '[' || ch === '(') depth++;
+    else if (ch === '}' || ch === ']' || ch === ')') {
+      if (--depth > 0) continue;
+      if (!value) named(key); // (just `score`, as the last one)
+      return names;
+    } else if (depth === 1) {
+      if (ch === ':' && !value) {
+        named(key);
+        [key, value] = ['', true];
+      } else if (ch === ',') {
+        if (!value) named(key); // (just `score`)
+        [key, value] = ['', false];
+      } else if (!value) key += ch;
+    }
+  }
+  return names;
 }
+const keepNames = html => keepFields(html) || new Set();
 
 // A change to the same creation (it kept most of the kid's progress fields), even if the lead gave
 // it a new name: the kid carries on where they were.
@@ -382,6 +414,55 @@ async function problemsIn(built) {
 
 const PART_LINE = /^[ \t]*\/\/ ?@part[ \t]+([\w-]+)[ \t]*(?:\[([^\]\n]*)\])?[ \t]*:[ \t]*(\S.*)$/; // in the page: a part, its tag and its job
 const HAND_OUT = /^[ \t>*_`-]*PART[ \t]+`?([\w-]+)`?[ \t]*(?:\[([^\]\n]*)\])?[ \t]*(\((?:again|rewrite)\))?[ \t]*:[ \t]*(\S.*?)`?[ \t]*$/; // in a reply
+
+// The loose ends between a page and its parts that no syntax check finds and that are plain to see in
+// the files - so the lead is told, rather than having to notice: something heard that nothing tells,
+// a keep field with no default, a function its job names that nothing defines.
+// files: { 'page.html': text, 'parts/<name>.js': text }.
+function looseEnds(files) {
+  const page = files['page.html'] || '';
+  // (Whole-line comments aside: a job line names what its part defines, and isn't a call.)
+  const code = text => text.split('\n').filter(l => !/^[ \t]*\/\//.test(l)).join('\n');
+  const each = Object.entries(files)
+    .map(([rel, text]) => [rel.replace(/\\/g, '/'), code(text)])
+    .filter(([rel]) => rel === 'page.html' || rel.startsWith('parts/'))
+    .sort(([a], [b]) => (a === 'page.html' ? -1 : b === 'page.html' ? 1 : a.localeCompare(b)));
+  const all = each.map(([, text]) => text).join('\n');
+  const out = [];
+  // What's heard and never told (with the shared code's `on` and `tell`).
+  if (/\bconst hear\b/.test(page)) {
+    const named = (word, text) => [...text.matchAll(new RegExp(`(?<![.\\w$])${word}\\(\\s*(['"\`])([^'"\`\\n]+)\\1`, 'g'))].map(m => m[2]);
+    const told = new Set(named('tell', all));
+    // (Something told under a name worked out as it runs could be any of them: nothing to say then.)
+    const anyName = /(?<![.\w$])tell\(\s*[^'"`\s)]/.test(all);
+    for (const [rel, text] of anyName ? [] : each) {
+      const deaf = [...new Set(named('on', text))].filter(n => !told.has(n));
+      if (deaf.length) out.push(`${rel} hears ${deaf.map(n => `'${n}'`).join(' and ')} with on(...), which nothing tells${told.size ? ` (told: ${[...told].map(n => `'${n}'`).join(', ')})` : ''}`);
+    }
+  }
+  // A keep field that isn't among KB.keep's defaults (it starts undefined, and isn't carried over).
+  const kept = keepFields(page);
+  for (const [rel, text] of kept?.size && !kept.open ? each : []) {
+    const missing = [...new Set([...text.matchAll(/(?<![.\w$])keep\.([A-Za-z_$][\w$]*)/g)].map(m => m[1]))].filter(n => !kept.has(n));
+    if (missing.length) out.push(`${rel} uses ${missing.map(n => `keep.${n}`).join(' and ')}, which page.html's KB.keep({ ... }) has no default for`);
+  }
+  // What a job says its part defines, that the page calls and nothing defines.
+  for (const line of page.split('\n')) {
+    const m = PART_LINE.exec(line);
+    if (!m) continue;
+    let defs = m[3].split(/\s[-–—]\s/)[0];
+    while (/\{[^{}]*\}/.test(defs)) defs = defs.replace(/\{[^{}]*\}/g, ' '); // (what it returns isn't a top-level name)
+    for (const [, name] of defs.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\(/g)) {
+      const n = name.replace(/\$/g, '\\$');
+      const called = new RegExp(`(?<![.\\w$])${n}\\(`).test(each[0]?.[1] || '');
+      // (Defined: declared, assigned - on window too - or named anywhere it isn't being called, as in
+      // `const { makeA, makeB } = ...`. Generous on purpose: a wrong alarm costs the kid's time.)
+      const defined = new RegExp(`\\b(?:function\\*?|const|let|var|class)\\s+${n}\\b|(?:^|[,;{\\s]|\\b(?:window|globalThis|self)\\.)${n}\\s*=[^=]|(?<![.\\w$])${n}(?![\\w$])(?!\\s*\\()`, 'm').test(all);
+      if (called && !defined) out.push(`page.html calls ${name}(...), which parts/${m[1]}.js was to define, and nothing defines it`);
+    }
+  }
+  return out;
+}
 
 // A job's tag, apart: its picture and its words ("🚚 the monster truck").
 function tagOf(tag) {
@@ -655,14 +736,14 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
   let before = null; // its reply is a whole new page: the files as they were (the folder starts again)
   // (What its helpers are making, said to the kid once three of them are at it - or all, if fewer.)
   let told = !narrate;
-  const tell = (all = false) => {
+  const announce = (all = false) => {
     const making = crew.jobs.map(j => j.words).filter(Boolean).slice(0, 3);
     if (told || !making.length || (!all && making.length < 3) || crew.done === crew.jobs.length) return;
     told = true;
     narrate(`I'm making ${making.length > 1 ? `${making.slice(0, -1).join(', ')} and ${making.at(-1)}` : making[0]}!`);
   };
   const reader = new JobReader(
-    job => (crew.start(job, pageNow), tell()),
+    job => (crew.start(job, pageNow), announce()),
     () => {
       before = snapshot(s.dir);
       clear(s.dir);
@@ -686,16 +767,18 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
       else if (PART_LINE.test(l)) crew.start({ name, ...tagOf(PART_LINE.exec(l)[2]), job: PART_LINE.exec(l)[3].trim(), again: false, partial: false, page: assemble(s.dir)?.html || page }, pageNow);
     }
     if (!crew.jobs.length) return { text: first.text, jobs: [], fresh: Boolean(before) };
-    tell(true);
+    announce(true);
     await crew.settled();
     const failed = crew.jobs.filter(j => j.state === 'failed');
     const built = assemble(s.dir);
     const problems = failed.length ? [] : await problemsIn(built);
+    const loose = failed.length ? [] : looseEnds(snapshot(s.dir));
     const back = [
       `Your helper${crew.jobs.length > 1 ? 's are' : ' is'} done - ${crew.jobs.length > 1 ? 'every part' : 'the part'}, as written and saved:`,
       ...crew.jobs.filter(j => j.state === 'done').map(j => `=== parts/${j.name}.js\n${j.code}`),
       failed.length && `${failed.map(j => `parts/${j.name}.js`).join(' and ')} didn't get written (${failed.length > 1 ? 'those helpers' : 'that helper'} failed): write ${failed.length > 1 ? 'them' : 'it'} yourself now - FILE parts/<name>.js, then the code in a \`\`\` block.`,
       problems.length && `Put together, the page doesn't run yet (page lines count the page with every part in place):\n${around(problems, built?.html).join('\n')}`,
+      loose.length && `Build Buddy read the files and found ${loose.length > 1 ? 'these loose ends' : 'this loose end'} between the parts - to fix:\n${loose.map(l => `- ${l}`).join('\n')}`,
       fit,
     ].filter(Boolean).join('\n\n');
     if (opts.fitThinking != null) await s.think(opts.fitThinking);
@@ -708,7 +791,7 @@ async function leadTurn(s, prompt, { about, fit, quick = true, pageNow = '', onP
   }
 }
 
-const FIT_NEW = `Now make it one creation that works. Go through your ASKED line, thing by thing: is each one there, on the first screen, big enough to see - and does what they wanted to happen really happen when this code runs, with its numbers as they are (the jump is high and long enough to clear the row), from the key or the tap, through the parts - everything one part tells, heard by each part that should react - to the screen? Then the kid's first ten seconds: is the star whole on the screen from the start; does an arrow key move it the way it points, and a quick tap do something; and does the main thing happen however a 5-year-old goes at it, not only when they get it just right? Fix what's missing or wouldn't happen, any name or call that doesn't match, anything that would crash when it runs (a name nothing defines, a radius or size that can go below zero) or doesn't fit the plan or the look - with FIX blocks, in the part or in page.html. Change only what needs it - the kid is waiting - then end with DONE.`;
+const FIT_NEW = `Now make it one creation that works. Go through your ASKED line, thing by thing: is each one there, on the first screen, big enough to see - and does what they wanted to happen really happen when this code runs, with its numbers as they are (a jump high and long enough to clear what it must, a thing that can be reached), from the key or the tap, through the parts - everything one part tells, heard by each part that should react - to the screen? Then the kid's first ten seconds: is the star whole on the screen from the start; does an arrow key move it the way it points, and a quick tap do something; and does the main thing happen however a 5-year-old goes at it, not only when they get it just right? Fix what's missing or wouldn't happen, any name or call that doesn't match, anything that would crash when it runs (a name nothing defines, a radius or size that can go below zero) or doesn't fit the plan or the look - with FIX blocks, in the part or in page.html. Change only what needs it - the kid is waiting - then end with DONE.`;
 const FIT_CHANGE = `Now make it fit: is everything the kid just asked for there - where they'll see it without looking for it - and working, with what was there before, from the key or the tap, through the parts, to the screen? Fix any name or call that doesn't match and anything missing or that would crash when it runs (a name nothing defines, a radius or size that can go below zero), with FIX blocks. Then end with DONE.`;
 const FIT_PASS = `Now make what they wrote fit: fix any name or call that doesn't match and anything missing or that would crash, with FIX blocks. Then end with the WHY line.`;
 
@@ -1006,4 +1089,4 @@ export async function repair({ version, errors, keep, accept = false }) {
 }
 
 // (For server/crew.test.mjs.)
-export { JobReader, changesIn, fixed, applyReply, codeOf, tagOf };
+export { JobReader, changesIn, fixed, applyReply, codeOf, tagOf, keepFields, looseEnds };
