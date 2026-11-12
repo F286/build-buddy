@@ -253,15 +253,15 @@ const readingTime = text => 1200 + text.length * 55;
 
 let shim = '';
 let expectLoad = false;
-// Creations may load only the libraries this app ships (Phaser, Three.js); everything else is
-// blocked.
+// Creations may load only the libraries this app ships (Matter.js, Three.js); everything else is
+// blocked. (Phaser was one of them: creations made with it still find it where it's still installed.)
 const LIB = `${location.origin}/lib/`;
 const IMPORT_MAP = JSON.stringify({
   imports: {
-    phaser: `${LIB}phaser/phaser.esm.min.js`,
     'matter-js': `${LIB}matter/matter.esm.js`,
     three: `${LIB}three/build/three.module.js`,
     'three/addons/': `${LIB}three/addons/`,
+    phaser: `${LIB}phaser/phaser.esm.min.js`,
   },
 });
 const CSP = [

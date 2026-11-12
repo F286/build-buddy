@@ -305,7 +305,9 @@ const routes = {
 };
 
 // Libraries creations may import, served from vendor/ (see the import map in public/app.js).
-const LIBS = ['three', 'phaser', 'matter'];
+// (Phaser isn't installed or offered to the AI any more; where it's still there from before, it's
+// served, so creations made with it keep working.)
+const LIBS = ['three', 'matter', 'phaser'];
 
 function serveStatic(res, pathname) {
   // Creations run in a sandboxed frame with no origin of their own, so libraries need CORS; they
@@ -506,6 +508,7 @@ server.listen(port, '127.0.0.1', () => {
           : 'classic';
   console.log(`  building: ${building}`);
   console.log(`  brains: ${brainsAsSet().map(b => (installed(b) ? b : `${b} (not installed)`)).join(' → ')}   ears: ${config().stt}${s.stt === false ? ' (NOT installed - run ./setup.sh)' : ''}   voice: ${config().tts}${s.tts === false ? ' (NOT installed - run ./setup.sh)' : ''}`);
+  if (!ai.libVersion('matter')) console.log('  2D physics (Matter.js) is NOT installed - run ./setup.sh. Until then, things that tumble, stack and roll are faked.');
   console.log('  grown-ups: press Ctrl+Shift+P in the app for settings and Quit.');
   unmuteMicrophone();
   if (!args.has('--no-browser')) launchBrowser(!args.has('--window'));

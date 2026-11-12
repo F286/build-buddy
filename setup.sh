@@ -148,24 +148,10 @@ else
   rm -rf "$tmp"
 fi
 
-# ---------------------------------------------------------------------------- Phaser
-say "2D game engine: Phaser"
-PHASER_VERSION=4.2.1
-if [ -s vendor/phaser/phaser.esm.min.js ]; then
-  echo "already installed"
-else
-  tmp=$(mktemp -d)
-  curl -fsSL "https://registry.npmjs.org/phaser/-/phaser-$PHASER_VERSION.tgz" | tar xz -C "$tmp"
-  mkdir -p vendor/phaser
-  cp "$tmp/package/dist/phaser.esm.min.js" "$tmp/package/LICENSE.md" vendor/phaser/
-  echo "$PHASER_VERSION" > vendor/phaser/VERSION
-  rm -rf "$tmp"
-fi
-
 # ---------------------------------------------------------------------------- Matter.js
 say "2D physics: Matter.js"
 MATTER_VERSION=0.20.0
-if [ -s vendor/matter/matter.esm.js ] && [ "$(cat vendor/matter/VERSION 2>/dev/null)" = "$MATTER_VERSION" ]; then
+if [ -s vendor/matter/matter.esm.js ] && [ "$(cat vendor/matter/VERSION 2>/dev/null)" = "$MATTER_VERSION" ] && grep -q "into the world" vendor/matter/matter.esm.js; then
   echo "already installed"
 else
   tmp=$(mktemp -d)
@@ -188,6 +174,16 @@ const Matter = module.exports;
 // runs nothing and says nothing - so here both spellings work.
 const run = Matter.Runner.run;
 Matter.Runner.run = Matter.Engine.run = (runner, engine) => (engine ? run(runner, engine) : run(Matter.Runner.create(), runner));
+// More solver passes than its own 6 and 4, unless a page asks otherwise: with those, things built of
+// many pieces (a castle wall between two towers) creep apart and fall down before anything hits them.
+const create = Matter.Engine.create;
+Matter.Engine.create = options => create({ positionIterations: 10, velocityIterations: 8, ...options });
+// A body added to the engine instead of its world - Composite.add(engine, body) - throws from deep
+// inside, in the middle of a frame, and the page's loop stops for good. Here it goes into the world.
+for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'allComposites']) {
+  const was = Matter.Composite[name];
+  Matter.Composite[name] = Matter.World[name] = (composite, ...rest) => was(composite && composite.world && !composite.bodies ? composite.world : composite, ...rest);
+}
 export default Matter;
 export const { Axes, Bodies, Body, Bounds, Collision, Common, Composite, Composites, Constraint, Detector, Engine, Events, Mouse, MouseConstraint, Pair, Pairs, Plugin, Query, Render, Resolver, Runner, SAT, Sleeping, Svg, Vector, Vertices, World } = Matter;
 MODULE

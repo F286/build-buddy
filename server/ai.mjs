@@ -20,7 +20,7 @@ const WORK = path.join(DATA, 'tmp');
 fs.mkdirSync(WORK, { recursive: true });
 
 // Libraries that ship with the app (vendor/) and that creations may import; see public/app.js.
-function libVersion(name) {
+export function libVersion(name) {
   try {
     return fs.readFileSync(path.join(ROOT, 'vendor', name, 'VERSION'), 'utf8').trim();
   } catch {
@@ -66,42 +66,33 @@ export function discoveryRule() {
   return `One or two things in it may be meant to be found by trying ("what happens if...?"), maybe a peek at a hidden inside: keep them unhinted - no glow, arrow or sparkle pointing at them, and no more than two. Something hidden on purpose to be found is not a glitch.`;
 }
 
+// The imports the app provides to a creation, as a checker is told them: "'matter-js' and 'three'".
+// (Phaser was the 2D engine before; where it's still installed, creations made with it keep working.)
+export function providedImports() {
+  const names = [libVersion('matter') && "'matter-js'", libVersion('three') && "'three'", libVersion('phaser') && "'phaser'"].filter(Boolean);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0] || '';
+}
+
 // How to build a page. Shared with the overwatch (watch.mjs), so its fixes follow the same rules.
+// What moves in 2D is drawn on a plain canvas, with Matter.js for real physics: measured against a
+// 2D game engine (Phaser), the AI's canvas pages were as good, and never crashed on a call the
+// engine doesn't have (the README has the numbers).
 export function buildingRules() {
   const c = config();
-  const phaser = libVersion('phaser');
   const matter = libVersion('matter');
   const three = libVersion('three');
   const libs = [];
-  // twoD: what a creation that moves in 2D is built with (being compared: see the README).
-  const twoD = c.twoD || 'phaser';
-  const PHASER = `already available offline: \`<script type="module">import Phaser from 'phaser';\`. Fill the window with \`scale: { mode: Phaser.Scale.RESIZE }\`, and use Arcade physics, tweens, particles and camera effects. This is Phaser 4: there is no Phaser.Geom.Point - use Phaser.Math.Vector2. There are no image files: make sprites from Graphics turned into textures (\`generateTexture\`), drawn in the page's look, or from big emoji (\`this.add.text(x, y, '🐸', { fontSize: '96px', padding: { y: 16 } })\` - without the padding the top of the emoji is cut off). Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`;
-  const CANVAS = `draw on one <canvas> that fills the window, with its 2D context, in one animation loop: shapes in the page's look, moved by your own numbers`;
-  if (phaser && twoD === 'phaser') {
-    libs.push(`- For anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, physics, games) use Phaser ${phaser}, ${PHASER}`);
-  } else if (phaser && twoD === 'phaser-always') {
-    libs.push(`- Anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, physics, games) is built with Phaser ${phaser} - always, never on a plain 2D canvas. It is ${PHASER}`);
-  } else if ((twoD === 'matter' || twoD === 'matter2') && matter) {
-    libs.push(`- For anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, games), ${CANVAS} (a jump, a bounce off the floor, things falling from the sky are a few lines of arithmetic). Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
-    libs.push(`- When things must really tumble, stack, roll, swing or knock each other over, let Matter.js ${matter} work out where they are, already available offline: \`<script type="module">import Matter from 'matter-js';\` then \`const { Engine, Bodies, Body, Composite, Constraint, Query, Events } = Matter;\`. It only moves bodies: draw every one yourself on the canvas, in the page's look, each frame, from \`body.position\` and \`body.angle\` (or \`body.vertices\`). One engine for the page, stepped in the animation loop in fixed steps - \`acc = Math.min(acc + dt * 1000, 50); while (acc >= 1000 / 60) { Engine.update(engine, 1000 / 60); acc -= 1000 / 60; }\` - never with the frame's whole time. Sizes are pixels. A static floor and walls (\`{ isStatic: true }\`, 200 px thick, just outside the window, put back in place when it resizes) keep everything in; bodies smaller than about 20 px, or thrown very fast, slip through. To throw or launch one: \`Body.setVelocity(body, { x, y })\`, in pixels per step (about 5 to 25). What hits what: \`Events.on(engine, 'collisionStart', e => { for (const { bodyA, bodyB } of e.pairs) ... })\`; what's under a finger: \`Query.point(Composite.allBodies(engine.world), { x, y })[0]\`.`);
-    if (twoD === 'matter2') libs.push(`- Matter.js behaves when you build for it. What's stacked to stand until it's hit (a tower, a wall, a castle): boxes with square corners (no \`chamfer\` - round them when you draw), each resting exactly on the one below, at most about 10 high in one column (taller: a wall of overlapping bricks) - rounded or lopsided stacks fall over by themselves. What rolls or slides down a slope (marbles, balls): \`friction: 0, frictionAir: 0.002\`, on slopes of 15 degrees or more - with the usual friction a ball sticks on a gentle ramp. Dominoes: \`friction: 0.1\`, about half their height apart. A body is static from the start or never (don't switch \`isStatic\` later), and sleeping stays off. For the kid to grab and throw what isn't static: \`Composite.add(engine.world, MouseConstraint.create(engine, { mouse: Mouse.create(canvas) }))\` (with the canvas as many pixels wide and high as it's shown).`);
-  } else if (twoD === 'matter3' && matter) {
-    // The third wording: the engine for free-for-alls, arithmetic for whatever follows a course.
-    libs.push(`- For anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, games), ${CANVAS}. A jump, a bounce off the floor, things falling from the sky - and whatever follows a course you set (marbles down a run, dominoes going over one after another, a car on its track) - are a few lines of arithmetic, and then they go exactly where they should. Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
-    libs.push(`- When many things must really pile up, tumble and knock each other about (a tower or a wall to smash, a ball pit, a heap of things thrown, something swinging on a rope), let Matter.js ${matter} work out where they are, already available offline: \`<script type="module">import Matter from 'matter-js';\` then \`const { Engine, Bodies, Body, Composite, Constraint, Query, Events, Mouse, MouseConstraint } = Matter;\`. It only moves bodies: draw every one yourself on the canvas, in the page's look, each frame, from \`body.position\` and \`body.angle\` (or \`body.vertices\`). One engine for the page, stepped in the animation loop in fixed steps - \`acc = Math.min(acc + dt * 1000, 50); while (acc >= 1000 / 60) { Engine.update(engine, 1000 / 60); acc -= 1000 / 60; }\` - never with the frame's whole time. Sizes are pixels. A static floor and walls (\`{ isStatic: true }\`, 200 px thick, just outside the window, put back in place when it resizes) keep everything in; bodies smaller than about 20 px, or thrown very fast, slip through. To throw or launch one: \`Body.setVelocity(body, { x, y })\`, in pixels per step (about 5 to 25). What hits what: \`Events.on(engine, 'collisionStart', e => { for (const { bodyA, bodyB } of e.pairs) ... })\`; what's under a finger: \`Query.point(Composite.allBodies(engine.world), { x, y })[0]\`; for the kid to grab and throw whatever isn't static: \`Composite.add(engine.world, MouseConstraint.create(engine, { mouse: Mouse.create(canvas) }))\` (the canvas as many pixels wide and high as it's shown).`);
-    libs.push(`- Matter.js behaves when you build for it. What's stacked to stand until it's hit: boxes with square corners (no \`chamfer\` - round them when you draw), each resting exactly on the one below, at most about 10 high in one column (taller: a wall of overlapping bricks) - rounded or lopsided stacks fall over by themselves. What must roll or slide: \`friction: 0, frictionAir: 0.002\`, on slopes of 15 degrees or more - with the usual friction a ball sticks on a gentle ramp. What must reach something can: check the rope's length, the throw's strength and the gaps things pass through (twice their size) with your own numbers. A body is static from the start or never (don't switch \`isStatic\` later), and sleeping stays off.`);
-  } else {
-    libs.push(`- For anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, games), ${CANVAS} - gravity, a jump, a bounce off the floor and things bumping into each other are a few lines of arithmetic. Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
+  if (matter) {
+    libs.push(`- When many things must really pile up, tumble and knock each other about, and nobody minds where each one ends up (a tower or a wall to smash, a ball pit, a heap of things thrown, something swinging on a rope), let Matter.js ${matter} work out where they are, already available offline: \`<script type="module">import Matter from 'matter-js';\` then \`const { Engine, Bodies, Body, Composite, Constraint, Events } = Matter;\`. It only moves bodies: draw every one yourself on the canvas, in the page's look, each frame, from \`body.position\` and \`body.angle\` (or \`body.vertices\`). One engine for the page, stepped in the animation loop in fixed steps - \`acc = Math.min(acc + dt * 1000, 50); while (acc >= 1000 / 60) { Engine.update(engine, 1000 / 60); acc -= 1000 / 60; }\` - never with the frame's whole time. Sizes are pixels. A static floor and walls (\`{ isStatic: true }\`, 200 px thick, just outside the window, put back in place when it resizes) keep everything in; bodies smaller than about 20 px, or thrown very fast, slip through. To throw or launch one: \`Body.setVelocity(body, { x, y })\`, in pixels per step (about 5 to 25). What hits what: \`Events.on(engine, 'collisionStart', e => { for (const { bodyA, bodyB } of e.pairs) ... })\`; what's under a finger: the nearest body that isn't static within about 40 px of it (\`Composite.allBodies(engine.world)\`, by distance to \`body.position\`), so a near miss still grabs. A grabbed body goes where the finger goes (\`Body.setPosition\`, and \`Body.setVelocity(body, { x: 0, y: 0 })\`, each frame) and is thrown, on letting go, with \`Body.setVelocity\` from how fast the finger was moving, in pixels per step - Matter's own MouseConstraint drags but can't throw.`);
+    libs.push(`- Matter.js behaves when you build for it. What's stacked to stand until it's hit: boxes with square corners (no \`chamfer\` - round them when you draw), \`friction: 0.8\`, each resting exactly on the one below, at most about 10 high - rounded or lopsided stacks fall over by themselves. What must roll or slide: \`friction: 0, frictionAir: 0.002\`, on slopes of 15 degrees or more - with the usual friction a ball sticks on a gentle ramp. What's thrown: \`frictionAir: 0\`, or it falls short of where your numbers send it. What must reach something can: check the rope's length, the throw's strength and the gaps things pass through (twice their size) with your own numbers. A body is static from the start or never (don't switch \`isStatic\` later), and sleeping stays off.`);
   }
   if (three) {
     libs.push(`- For anything 3D use Three.js (r${three.split('.')[1]}, already available offline): \`<script type="module">import * as THREE from 'three'; import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\` (any 'three/addons/...' path works). Never hand-draw 3D on a 2D canvas.`);
   }
-  if (libs.length) libs.push("- Those are the only libraries. Don't add your own import map.");
-  const usesPhaser = phaser && (twoD === 'phaser' || twoD === 'phaser-always');
-  const smooth = [
-    usesPhaser && '- Phaser: create things in create(), not every frame; reuse particle emitters; destroy things that leave the screen.',
-    matter && /^matter/.test(twoD) && '- Matter.js: make bodies once, not every frame; take away the ones that leave the window (`Composite.remove(engine.world, body)`); keep it under about 150 bodies.',
-  ].filter(Boolean);
+  if (libs.length) libs.push(`- Those are the only libraries. Don't add your own import map.${libVersion('phaser') ? " (A page made earlier with Phaser - `import Phaser from 'phaser'` - still runs here: change it as it is, and build nothing new with it.)" : ''}`);
+  // (What must arrive somewhere is moved there by arithmetic, engine or no engine: blind judges
+  // scored a scripted row of dominoes 9 and an engine's, whose chain stalled, 3.)
+  libs.unshift(`- For anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, games), draw on one <canvas> that fills the window, with its 2D context, in one animation loop: shapes in the page's look, moved by your own numbers. A jump, a bounce off the floor, things falling from the sky${matter ? '' : ' and bumping into each other'} are a few lines of arithmetic. So is whatever must follow a course to its end (marbles down a run into a bucket, dominoes going over one after another, a car on its track): move it along that course with your own numbers, so it always arrives - bodies left to find their own way get stuck or miss. Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
   return `# Building rules
 - One self-contained HTML page. No external files, images, fonts or network requests - they are blocked. Draw with SVG, CSS or <canvas> (emoji for small extras). Make sounds and music with the Web Audio API. Don't use speechSynthesis - you do the talking.
 ${libs.join('\n')}
@@ -127,10 +118,10 @@ ${libs.join('\n')}
 - Give characters personality: faces with eyes that blink or follow, a wiggle when idle, a funny sound when touched.
 
 # Keep it smooth (60 frames per second on a laptop)
-- One animation loop (requestAnimationFrame${usesPhaser ? ", or Phaser's update" : ''}); move things by elapsed time, not by frame count.
+- One animation loop (requestAnimationFrame); move things by elapsed time, not by frame count.
 - 2D canvas: no shadowBlur or filters, no getImageData in the loop; draw backgrounds that don't change once onto an offscreen canvas; keep particles under about 200.
 - HTML and SVG: no CSS or SVG filters (drop-shadow, blur, feDropShadow) or box-shadow - they slow down every frame; for a soft shadow, draw a darker, see-through copy of the shape a little below it. Animate with transform and opacity.
-${smooth.map(line => `${line}\n`).join('')}- 3D: renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); simple low-poly shapes; make geometries and materials once and reuse them; InstancedMesh for many copies (trees, coins, stars); particles as small meshes or sprites (never a PointsMaterial without a round texture: it draws squares); one light that casts a small shadow at most (or no shadows); fog to hide what's far away; never create objects inside the animation loop.
+${matter ? '- Matter.js: make bodies once, not every frame; take away the ones that leave the window (`Composite.remove(engine.world, body)`); keep it under about 150 bodies.\n' : ''}- 3D: renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); simple low-poly shapes; make geometries and materials once and reuse them; InstancedMesh for many copies (trees, coins, stars); particles as small meshes or sprites (never a PointsMaterial without a round texture: it draws squares); one light that casts a small shadow at most (or no shadows); fog to hide what's far away; never create objects inside the animation loop.
 - If they say it's slow or choppy, simplify what's drawn rather than adding more.`;
 }
 

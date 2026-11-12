@@ -161,7 +161,7 @@ cd build-buddy
 ./setup.sh
 ```
 
-`setup.sh` puts everything in `./vendor`, about 1.2 GB, and installs nothing system-wide. Running it again is safe. It sets up:
+`setup.sh` puts everything in `./vendor`, about 1.2 GB, and installs nothing system-wide. Running it again is safe, and worth doing after you update Build Buddy: it only fetches what's new. It sets up:
 
 | | What it is | Size |
 |---|---|---|
@@ -169,7 +169,7 @@ cd build-buddy
 | Parakeet TDT 0.6B v2 | A second speech recognizer, listening alongside whisper | ~660 MB |
 | Kokoro (via sherpa-onnx) | Natural-sounding voice (Sparky's voice) | ~460 MB |
 | Piper | Faster, more robotic backup voice | ~110 MB |
-| Phaser | 2D game engine creations can use | ~1.4 MB |
+| Matter.js | 2D physics creations can use | ~0.1 MB |
 | Three.js | 3D engine creations can use | ~17 MB |
 
 ## Run it
@@ -616,10 +616,13 @@ Buddy changes.
 
 - **Each creation is one web page** (HTML, CSS and JavaScript). That's the format AI models write
   most fluently, and it covers what kids ask for: drawings, animations, games, music, toys and
-  stories. Two game engines ship with the app: [Phaser](https://phaser.io) for 2D games (physics,
-  particles, tweens, so things bounce and sparkle instead of sitting still) and
-  [Three.js](https://threejs.org) for 3D. Both run on the GPU. Without a 3D engine, the AI hand-draws
-  "3D" on a 2D canvas: a test kart game ran at 7 fps that way, and at 120 fps with Three.js.
+  stories. What moves in 2D is drawn on a plain canvas, which is what the AI writes most surely.
+  Two libraries ship with the app: [Matter.js](https://brm.io/matter-js/) for 2D physics, for when
+  many things must really pile up, tumble and knock each other about, and
+  [Three.js](https://threejs.org) for 3D. (There is no 2D game engine: one was measured, and it made
+  creations worse - see [What 2D creations are built with](#what-2d-creations-are-built-with).)
+  Without a 3D engine, the AI hand-draws "3D" on a 2D canvas: a test kart game ran at 7 fps that
+  way, and at 120 fps with Three.js.
 - **Changes don't restart the game.** Each creation keeps the kid's progress (score, level, where
   the player is and which way it faces, things collected, placed or unlocked) in a small
   `KB.keep({...})` object, and puts it back when it starts. When a new version arrives, those
@@ -692,8 +695,8 @@ Buddy changes.
   `"keepOpen": true` the window also reopens if it's closed, so only Ctrl+Shift+P → Quit stops it. Space and Enter always belong to the app, even while a game has focus.
   Every version is saved, so a restart picks up where they left off.
 - **Creations are sandboxed.** They can't reach the internet, open windows, navigate away, store
-  anything, or touch the rest of the app. The only things they can load are the bundled Phaser and
-  Three.js.
+  anything, or touch the rest of the app. The only things they can load are the bundled Matter.js
+  and Three.js.
 - **What leaves your computer:** the text of each request and the current creation's code, sent to
   Gemini (Google, through Antigravity), Claude or ChatGPT - whichever brain is building. Gemini's agy
   is only asked for text and can't run commands or touch your files, but it could search the web. The
@@ -715,7 +718,7 @@ Buddy changes.
 | **No voice** | Check the system volume, and the *Talking* line in the Ctrl+Shift+P panel. If Kokoro isn't installed, Sparky falls back to Piper. |
 | **Gemini isn't used, or says it isn't signed in** | Run `agy` once in a terminal and sign in; `data/log.txt` shows `FAIL agy` with the reason, and the next brain builds meanwhile. Build Buddy runs agy in an agy home of its own (`data/agy-home`, see `agy.keepHistory`); its own log is in `data/agy-home/.gemini/antigravity-cli/log`. |
 | **"My brain got a little tangled"** | The AI request failed. Check `data/log.txt`. Common causes are being offline, a usage limit, or needing to sign in to `agy` / `claude` / `codex` again (run it once in a terminal). |
-| **A game feels slow** | Ctrl+Shift+P shows its frame rate. Asking Sparky to *"make it simpler"* or *"make it faster"* helps. For 2D games Sparky should be using Phaser, and for 3D, Three.js. |
+| **A game feels slow** | Ctrl+Shift+P shows its frame rate. Asking Sparky to *"make it simpler"* or *"make it faster"* helps. For 3D, Sparky should be using Three.js. |
 | **"Port 4321 is busy"** | Build Buddy is already running, or set a different `port` in `config.json`. |
 
 **Platforms:** developed on Linux (Arch Linux ARM on Apple Silicon, Hyprland, Chromium). macOS
@@ -743,7 +746,8 @@ install-launcher.sh  adds Build Buddy to your Linux app launcher
 ```
 
 No dependencies to `npm install`. The server uses only Node's standard library. `npm test` runs the
-tests of the code that reads the lead's replies as they're written (`server/crew.test.mjs`).
+tests of the code that reads the lead's replies as they're written (`server/crew.test.mjs`) and of
+the checks of a built page that need no browser (`server/team.test.mjs`).
 
 ## Credits
 
@@ -753,7 +757,7 @@ Build Buddy stands on these projects (downloaded by `setup.sh`, not included in 
 - [Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) by NVIDIA, second speech recognizer (CC BY 4.0), run with sherpa-onnx
 - [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), natural voice (Apache 2.0), run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache 2.0)
 - [Piper](https://github.com/rhasspy/piper), backup voice (MIT); each voice model has its own license
-- [Phaser](https://phaser.io), 2D game engine (MIT)
+- [Matter.js](https://brm.io/matter-js/), 2D physics (MIT)
 - [Three.js](https://threejs.org), 3D engine (MIT)
 - [Fredoka](https://fonts.google.com/specimen/Fredoka), the rounded font (SIL Open Font License, included in `public/fonts`)
 
