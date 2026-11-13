@@ -207,15 +207,19 @@ for (const name of ['add', 'remove', 'clear', 'allBodies', 'allConstraints', 'al
 // lighter it is (or, turning on the spot, at 14 degrees a second, however big it is), and a
 // weight that would move it little by little may not move it at all - a block set down softly
 // on the end of a plank balanced on another doesn't tip it, a ball set at rest in the dip between
-// two others on ice may not part them. Engine.create({ settling: false }) is plain Matter, and so
-// is an engine with Matter's own sleeping switched on. test/matter.html has the tests.)
+// two others on ice may not part them. And a soft hit (one that sets it going at less than 60 px
+// a second) in the very step in which a body begins to be held, or a step either side, can be
+// lost or halved: keeping such a body free was tried in two ways, and each time something built
+// came apart for it (a row of balls that came to rest together was parted; a wall that a brick
+// lands on every second came down nearly twice as often). Engine.create({ settling: false }) is
+// plain Matter, and so is an engine with Matter's own sleeping switched on. test/matter.html has
+// the tests.)
 const REST = 60; // sixtieths of a second a body must be at rest before it is held: a second
 const SLOW = 0.2, SLOW_TURN = 0.004; // at rest: slower than this many px and radians a step all that time,
 const FAR = 5, FAR_TURN = 0.03; // and no further than this from where that began (or it is going somewhere, slowly);
 const SPOT = 0.5, SPOT_TURN = 0.01; // or shaking on the spot: no further than this from where it was
 const PUSH = 0.5, PUSH_NO_GRAVITY = 0.05, PUSH_TURN = 0.005; // pulled by what it is tied to: faster than this share of one step of free fall (px a step where nothing falls), or radians a step
 const HIT = 1, HIT_TURN = 0.02; // just hit: px and radians a step
-const SOON = 3; // sixtieths of a second in which something on the move has left its spot (SPOT / SLOW, and one more)
 const states = new WeakMap(); // body -> { x, y, angle, slow, fromX, fromY, fromAngle, spot, held, rested, step, at, tied, pace, turn, came }
 const handled = new WeakSet(); // bodies the page itself has just moved, pushed or changed
 const pulls = new WeakMap(); // engine -> its gravity as last seen
@@ -304,12 +308,7 @@ function settle(engine) {
           s.fromAngle = body.angle;
         }
         s.slow += sixtieths;
-      } else {
-        // (At rest, and set going just as its second in one place was up, too late to leave its
-        // spot before a hold would begin: that second begins again, or the hit would be lost.)
-        if (s.slow * 2 >= REST && s.spot + SOON + sixtieths >= REST) s.spot = 0;
-        s.slow = 0;
-      }
+      } else s.slow = 0;
       if (Math.abs(body.position.x - s.x) > SPOT || Math.abs(body.position.y - s.y) > SPOT || Math.abs(body.angle - s.angle) > SPOT_TURN) {
         s.spot = 0;
         s.x = body.position.x;
