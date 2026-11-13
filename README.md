@@ -807,27 +807,26 @@ out, and that what is knocked down can tumble for real.
 
 **What's built stays built.** Left alone, Matter.js keeps nudging things at rest by a fraction of a
 pixel a step. A castle wall laid like a real one creeps apart and falls down by itself, brick by
-brick: the first drops out within 3 seconds with Matter's own solver settings and after 26 with
-more passes, and no number of passes cures it. One of three castles the AI built crumbled within
-a minute and a half of being left alone. Matter's own cure, sleeping, leaves a body deaf to a
-push, and hanging in the air when what it stood on goes away. So the module does it instead: what
-has rested on something for a second is held exactly where it is until something really moves it.
-Its price: what gets less than 5 px in a second stops there (a marble on a slope of half a degree
-never gets going), and a push that doesn't set a held thing going at 12 px a second at once can
-be lost: something of its own weight has to come at 24, and a weight that would move it little by
-little may not move it at all (a block set down softly on one end of a balanced plank doesn't tip
-it). And it holds only what is left alone: whatever lands on a building and rolls or tumbles lets
-it go for a second, so a castle that is snowed on crumbles as it does in plain Matter.js.
-`test/matter.html` checks the module in 70 scenes, 67 of them the holding, most of those against
-plain Matter.js. The first test's table was judged before it
-existed, so twelve Matter.js creations of that test (the tower, the ball pit and the catapult,
-two builds of each, new and changed) were then played on both builds of the module by judges who
-weren't told which was which: nine played the same, three scored better with it (two for what it
-does: that castle stood, and knocked-down blocks stayed where they landed), none worse. The eight
-Matter.js creations of the never-seen requests played the same on both. (One thing was mended
-after that judging: a held thing hit by something that the hit itself stops, a ball by a ball of
-its own weight, stayed where it was. It is let go now.) The AI isn't told about it: told that
-what rests is held, it wrote its own holding and left blocks hanging in the air.
+brick: the first drops out within 3 seconds with Matter's own solver settings and after 26 with more
+passes, and no number of passes cures it. One of three castles the AI built crumbled within a minute
+and a half of being left alone. Matter's own cure, sleeping, leaves a body deaf to a push, and
+hanging in the air when what it stood on goes away. So the module does it instead: what has rested
+on something for a second is held exactly where it is until something really moves it. Its price:
+what gets less than 5 px in a second stops there (a marble on a slope of half a degree never gets
+going), and a push that doesn't set a held thing going at 12 px a second at once can be lost:
+something of its own weight has to come at 24, and a weight that would move it little by little may
+not move it at all (a block set down softly on one end of a balanced plank doesn't tip it). And it
+holds only what is left alone: whatever lands on a building and rolls or tumbles lets it go for a
+second, so a castle that is snowed on crumbles as it does in plain Matter.js. `test/matter.html`
+checks the module in 70 scenes, 67 of them the holding, most of those against plain Matter.js. The
+first test's table was judged before it existed, so twelve Matter.js creations of that test (the
+tower, the ball pit and the catapult, two builds of each, new and changed) were then played on both
+builds of the module by judges who weren't told which was which: nine played the same, three scored
+better with it (two for what it does: that castle stood, and knocked-down blocks stayed where they
+landed), none worse. The eight Matter.js creations of the never-seen requests played the same on
+both. (One thing was mended after that judging: a held thing hit by something that the hit itself
+stops, a ball by a ball of its own weight, stayed where it was. It is let go now.) The AI isn't told
+about it: told that what rests is held, it wrote its own holding and left blocks hanging in the air.
 
 **Other libraries looked at:** about thirty. No other 2D engine looked easier for a model than a
 plain canvas. Planck (a Box2D port) is the physics library to try if Matter.js's quirks keep
