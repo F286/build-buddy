@@ -253,15 +253,14 @@ const readingTime = text => 1200 + text.length * 55;
 
 let shim = '';
 let expectLoad = false;
-// Creations may load only the libraries this app ships (Matter.js, Three.js); everything else is
-// blocked. (Phaser was one of them: creations made with it still find it where it's still installed.)
+// Creations may load only the libraries this app ships (Phaser, Three.js); everything else is
+// blocked.
 const LIB = `${location.origin}/lib/`;
 const IMPORT_MAP = JSON.stringify({
   imports: {
-    'matter-js': `${LIB}matter/matter.esm.js`,
+    phaser: `${LIB}phaser/phaser.esm.min.js`,
     three: `${LIB}three/build/three.module.js`,
     'three/addons/': `${LIB}three/addons/`,
-    phaser: `${LIB}phaser/phaser.esm.min.js`,
   },
 });
 const CSP = [
@@ -360,7 +359,7 @@ addEventListener('message', e => {
   const d = e.data;
   if (e.source !== frame.contentWindow || !d?.kidbuild) return;
   if (d.type === 'key') handleKey(d);
-  if (d.type === 'error') pageError(d.message, d.load);
+  if (d.type === 'error') pageError(d.message);
   if (d.type === 'keep' && d.keep && !state.sketch) state.kept = { projectId: state.project?.id, keep: d.keep };
   if (d.id && answers.has(d.id)) {
     answers.get(d.id)(d);
@@ -374,13 +373,12 @@ addEventListener('message', e => {
 
 // When a page crashes, quietly ask the AI to fix it (at most twice in a row).
 let fixTimer = null;
-function pageError(message, load) {
+function pageError(message) {
   if (/ResizeObserver|^Script error/i.test(message)) return;
   if (state.sketch) return; // a first look, about to be replaced: nothing to fix
   // Crashed right after being handed the kid's progress? Maybe the old values don't suit the
-  // new version: start this version fresh instead (no fix needed yet). (Not when it couldn't
-  // even load - `load`: starting fresh can't cure that, and would throw the progress away.)
-  if (!load && state.restoredAt && Date.now() - state.restoredAt < 5000) {
+  // new version: start this version fresh instead (no fix needed yet).
+  if (state.restoredAt && Date.now() - state.restoredAt < 5000) {
     console.warn('crashed with restored progress, starting fresh:', message);
     showPage(state.html);
     return;
@@ -1629,7 +1627,6 @@ function showParentStatus() {
   $('#parentStatus').textContent =
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
-    (c.physics === false ? '2D physics (Matter.js) NOT installed (run setup.sh): until then, things that pile up and tumble are faked. ' : '') +
     (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
     brainsSaid(c) +
     `Showing: ${state.project?.title || 'blank page'}` +

@@ -20,7 +20,7 @@ const WORK = path.join(DATA, 'tmp');
 fs.mkdirSync(WORK, { recursive: true });
 
 // Libraries that ship with the app (vendor/) and that creations may import; see public/app.js.
-export function libVersion(name) {
+function libVersion(name) {
   try {
     return fs.readFileSync(path.join(ROOT, 'vendor', name, 'VERSION'), 'utf8').trim();
   } catch {
@@ -66,37 +66,19 @@ export function discoveryRule() {
   return `One or two things in it may be meant to be found by trying ("what happens if...?"), maybe a peek at a hidden inside: keep them unhinted - no glow, arrow or sparkle pointing at them, and no more than two. Something hidden on purpose to be found is not a glitch.`;
 }
 
-// The imports the app provides to a creation, as a checker is told them: "'matter-js' and 'three'".
-// (Phaser was the 2D engine before; where it's still installed, creations made with it keep working.)
-export function providedImports() {
-  const names = [libVersion('matter') && "'matter-js'", libVersion('three') && "'three'", libVersion('phaser') && "'phaser'"].filter(Boolean);
-  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0] || '';
-}
-
 // How to build a page. Shared with the overwatch (watch.mjs), so its fixes follow the same rules.
-// What moves in 2D is drawn on a plain canvas, with Matter.js for free-for-alls. Measured by blind
-// judges on ten requests: what was built with a 2D game engine (Phaser) scored most of a point
-// lower and crashed on calls the engine doesn't have, and what tumbles scored higher with
-// Matter.js than with arithmetic. (The README has the numbers, also for 28 requests an earlier
-// wording of these rules had never seen, where the old rules and those came out level overall.)
 export function buildingRules() {
   const c = config();
-  const matter = libVersion('matter');
+  const phaser = libVersion('phaser');
   const three = libVersion('three');
   const libs = [];
-  if (matter) {
-    libs.push(`- When many things must really pile up, tumble and knock each other about, and nobody minds where each one ends up (a tower, a wall or anything else stacked to be knocked down, a ball pit, a heap of things thrown, things hung on ropes), let Matter.js ${matter} work out where they are, already available offline: \`<script type="module">import Matter from 'matter-js';\` then \`const { Engine, Bodies, Body, Composite, Constraint, Query, Events } = Matter;\` - once, in the page's shared code, where its one engine is made too (parts use them, and never repeat that line). It only moves bodies: draw every one yourself on the canvas, in the page's look, each frame, from \`body.position\` and \`body.angle\` (or \`body.vertices\`). The engine is stepped in one place, the animation loop, in fixed steps - \`acc = Math.min(acc + dt * 1000, 50); while (acc >= 1000 / 60) { Engine.update(engine, 1000 / 60); acc -= 1000 / 60; }\` (acc starts at 0; dt is the frame's time in seconds) - never with the frame's whole time. A static floor and walls (\`{ isStatic: true }\`, 200 px thick, just outside the window, put back in place when it resizes) keep everything in (a wall, post or shelf the kid can see is a body exactly as thick as it's drawn, or things rest on air beside it); bodies under about 20 px, or moving further in a step than a wall is thick, slip through it. To throw or launch one: \`Body.setVelocity(body, { x, y })\`, in pixels per step (about 5 to 25). What hits what: \`Events.on(engine, 'collisionStart', e => { for (const { bodyA, bodyB } of e.pairs) ... })\`; what's under a finger: the body that isn't static with the finger on it - \`Query.point(Composite.allBodies(engine.world), { x, y }).find(b => !b.isStatic)\` - or failing that the nearest such body within about 40 px of its edge, so a near miss still grabs. A grabbed body goes where the finger goes (\`Body.setPosition\`, and \`Body.setVelocity(body, { x: 0, y: 0 })\`, each frame) and is thrown, on letting go, with \`Body.setVelocity\` from how fast the finger was moving, in pixels per step.`);
-    libs.push(`- With Matter.js, what's stacked to stand until it's hit: boxes with square corners (no \`chamfer\` - round them when you draw), \`friction: 0.8\`, each resting exactly on the one below - rounded or lopsided stacks fall over by themselves. \`friction\` and \`restitution\` (bounce, 0 to 1) count only on what moves: a static body's are ignored. What must roll or slide down a slope: \`friction: 0, frictionAir: 0.002\`, the slope 15 degrees or more - with the usual friction a ball sticks on a gentle ramp (without friction it slides and doesn't turn: turn a ball yourself as you draw it). What's thrown: \`frictionAir: 0\`, or it falls short of where your numbers send it. What swings on a rope: \`frictionAir: 0.002\`, so it comes to rest in under a minute - with 0 it swings on and on. What must reach something can: check the rope's length, the throw's strength and the gaps things pass through (twice their size) with your own numbers. A body is static from the start or never (don't switch \`isStatic\` later), and sleeping stays off.`);
+  if (phaser) {
+    libs.push(`- For anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, physics, games) use Phaser ${phaser}, already available offline: \`<script type="module">import Phaser from 'phaser';\`. Fill the window with \`scale: { mode: Phaser.Scale.RESIZE }\`, and use Arcade physics, tweens, particles and camera effects. This is Phaser 4: there is no Phaser.Geom.Point - use Phaser.Math.Vector2. There are no image files: make sprites from Graphics turned into textures (\`generateTexture\`), drawn in the page's look, or from big emoji (\`this.add.text(x, y, '🐸', { fontSize: '96px', padding: { y: 16 } })\` - without the padding the top of the emoji is cut off). Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
   }
   if (three) {
     libs.push(`- For anything 3D use Three.js (r${three.split('.')[1]}, already available offline): \`<script type="module">import * as THREE from 'three'; import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\` (any 'three/addons/...' path works). Never hand-draw 3D on a 2D canvas.`);
   }
-  // (Phaser was the 2D engine before. Where it's still installed, a creation made with it stays on it.)
-  const phaser = libVersion('phaser');
-  if (libs.length || phaser) libs.push(`- ${libs.length ? 'Those are the only libraries. ' : ''}Don't add your own import map.${phaser ? ` (A page that already imports 'phaser' still runs here, on Phaser ${phaser}: keep it on Phaser, and make its changes and additions with Phaser - it is version ${phaser.split('.')[0]}, with no Phaser.Geom.Point: use Phaser.Math.Vector2. Only new creations are built without it.)` : ''}`);
-  // (What must arrive somewhere is moved there by arithmetic, engine or no engine: blind judges
-  // scored a scripted row of dominoes 8.8 and an engine's, whose chain stalled, 3.5.)
-  libs.unshift(`- For anything that moves in 2D (characters, vehicles, creatures, falling and bouncing things, games), draw on one <canvas> that fills the window, with its 2D context, in one animation loop: shapes in the page's look, moved by your own numbers. A jump, a bounce off the floor, things falling from the sky${matter ? '' : ' and bumping into each other'} are a few lines of arithmetic. So is whatever must follow a course to its end (dominoes and other chain reactions, a marble run, a train on its rails): move it along that course with your own numbers, so it always arrives - bodies left to find their own way get stuck or miss. Plain HTML, SVG and CSS are still best for drawings, simple toys and stories.`);
+  if (libs.length) libs.push("- Those are the only libraries. Don't add your own import map.");
   return `# Building rules
 - One self-contained HTML page. No external files, images, fonts or network requests - they are blocked. Draw with SVG, CSS or <canvas> (emoji for small extras). Make sounds and music with the Web Audio API. Don't use speechSynthesis - you do the talking.
 ${libs.join('\n')}
@@ -122,10 +104,11 @@ ${libs.join('\n')}
 - Give characters personality: faces with eyes that blink or follow, a wiggle when idle, a funny sound when touched.
 
 # Keep it smooth (60 frames per second on a laptop)
-- One animation loop (requestAnimationFrame); move things by elapsed time, not by frame count.
+- One animation loop (requestAnimationFrame, or Phaser's update); move things by elapsed time, not by frame count.
 - 2D canvas: no shadowBlur or filters, no getImageData in the loop; draw backgrounds that don't change once onto an offscreen canvas; keep particles under about 200.
 - HTML and SVG: no CSS or SVG filters (drop-shadow, blur, feDropShadow) or box-shadow - they slow down every frame; for a soft shadow, draw a darker, see-through copy of the shape a little below it. Animate with transform and opacity.
-${matter ? '- Matter.js: make bodies once, not every frame; take away the ones that leave the window (`Composite.remove(engine.world, body)`); keep it under about 150 bodies.\n' : ''}- 3D: renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); simple low-poly shapes; make geometries and materials once and reuse them; InstancedMesh for many copies (trees, coins, stars); particles as small meshes or sprites (never a PointsMaterial without a round texture: it draws squares); one light that casts a small shadow at most (or no shadows); fog to hide what's far away; never create objects inside the animation loop.
+- Phaser: create things in create(), not every frame; reuse particle emitters; destroy things that leave the screen.
+- 3D: renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); simple low-poly shapes; make geometries and materials once and reuse them; InstancedMesh for many copies (trees, coins, stars); particles as small meshes or sprites (never a PointsMaterial without a round texture: it draws squares); one light that casts a small shadow at most (or no shadows); fog to hide what's far away; never create objects inside the animation loop.
 - If they say it's slow or choppy, simplify what's drawn rather than adding more.`;
 }
 
