@@ -109,6 +109,18 @@ export const DEFAULTS = {
     peek: true,
     agentLead: { model: '', firstModel: '', effort: '', thinking: { build: 1500, fit: 700, look: 10000 } },
     agentHelper: { model: 'sonnet' },
+    // agentPolisher: who grows and polishes the creation while the kid plays, the agent way with
+    // subagents. By default the lead does, as more turns of its own conversation. enabled: true
+    // makes it a second agent - the polisher: a program of its own that remembers the creation
+    // too, working on the same files, with a model, an effort and a speed of its own (model and
+    // effort: '' is the lead's; fast: left out, the main agent's switch for the polishing,
+    // claude.fast's play; thinking: how long it may think, in tokens - left out, the lead's look).
+    // Nobody waits for it, so it can be a slower, more careful model ("fable"), and the lead's
+    // conversation holds only what the kid waited for. Each is told what the other did: the
+    // polisher everything the lead was and did (what the kid said, what Sparky answered, the jobs
+    // it handed out, its own words, the files it changed), the lead which files the polisher
+    // changed and why (server/agents.mjs).
+    agentPolisher: { enabled: false, model: '', effort: '' },
   },
   // Solo mode (Claude only, see server/solo.mjs): one Claude builds the whole creation and keeps it
   // in mind - no team. Its first reply is the heart of it, on screen quickly; then, while the kid

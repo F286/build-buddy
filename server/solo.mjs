@@ -349,7 +349,8 @@ export class Session {
 
   // Ask it something; resolves with its reply. Turns are answered one after another.
   // kind: 'build' (what the kid asked for) or 'polish' (which a build interrupts).
-  ask(prompt, { onText = () => {}, onEvent = null, timeoutSec = config().timeoutSec, stallSec = 40, priority = false, kind = 'build' } = {}) {
+  // onSent(): the turn has gone to the program (from then on, it knows what the prompt told it).
+  ask(prompt, { onText = () => {}, onEvent = null, onSent = null, timeoutSec = config().timeoutSec, stallSec = 40, priority = false, kind = 'build' } = {}) {
     this.touch();
     return new Promise((resolve, reject) => {
       const what = usage.now();
@@ -362,6 +363,7 @@ export class Session {
         what: { ...what, phase },
         out: { main: 0, helpers: 0, last: {} },
         onEvent,
+        onSent,
         timeoutSec,
         stallSec,
         text: '',
@@ -403,6 +405,7 @@ export class Session {
         return this.next();
       }
       t.sentAt = Date.now();
+      t.onSent?.();
       this.child.stdin.write(`${JSON.stringify({ type: 'user', message: { role: 'user', content: note ? `${t.prompt}\n\n${note}` : t.prompt } })}\n`);
     };
     // Its phase's speed, when that isn't the speed the session is at (settled before the turn is sent).
