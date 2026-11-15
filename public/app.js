@@ -1633,13 +1633,19 @@ const fastPicked = who => Object.fromEntries(FAST_PHASES.map(phase => [phase.toL
 function showFastHint() {
   const way = $('#parentForm').building.value;
   const [main, helpers] = [fastPicked('Main'), fastPicked('Helpers')];
-  const hint = !Object.values(helpers).some(Boolean)
-    ? ''
-    : way === 'solo' || way === ''
-      ? 'This way of building has no builders: one AI writes it all, at the main agent’s speed.'
-      : way === 'agents' && Object.keys(helpers).some(phase => helpers[phase] && !main[phase])
-        ? 'In this way of building the builders run inside the main agent, so they are fast only where it is too. With direct helpers (How Claude builds) they can be fast on their own.'
-        : '';
+  const hint = [
+    !Object.values(helpers).some(Boolean)
+      ? ''
+      : way === 'solo' || way === ''
+        ? 'This way of building has no builders: one AI writes it all, at the main agent’s speed.'
+        : way === 'agents' && Object.keys(helpers).some(phase => helpers[phase] && !main[phase])
+          ? 'In this way of building the builders run inside the main agent, so they are fast only where it is too. With direct helpers (How Claude builds) they can be fast on their own.'
+          : '',
+    // (Solo mode's first model - solo.firstModel in config.json - is Sonnet unless it's changed.)
+    way === 'solo' && main.new && /sonnet|haiku/i.test(state.config?.soloFirstModel || '') ? 'In this way of building, something new is written with Sonnet first, which fast mode doesn’t run on: that switch does nothing here.' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   $('#fastHint').textContent = hint;
   $('#fastHint').hidden = !hint;
 }

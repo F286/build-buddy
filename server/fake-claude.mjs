@@ -31,11 +31,20 @@ function spend(name, tokens, price) {
   cost += price;
 }
 
+// For the tests that need something to go wrong: $FAKE_CLAUDE_REFUSE speed switches are refused,
+// with $FAKE_CLAUDE_HANG a turn stops halfway and never ends, and with $FAKE_CLAUDE_BARE the answer
+// is nothing but a result, with no line end after it.
+let refuse = Number(process.env.FAKE_CLAUDE_REFUSE || 0);
+
 function turn(content) {
   turns++;
   const text = typeof content === 'string' ? content : JSON.stringify(content);
   note({ turn: turns, fast, model, text: text.slice(0, 4000) });
   const speed = fast && runsFast(model) ? 'fast' : 'standard';
+  if (process.env.FAKE_CLAUDE_BARE) {
+    spend(fullName(model), { in: 10, out: 100, cr: 1000, cw: 200 }, 0.01);
+    return process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'a bare answer', total_cost_usd: cost, usage: { input_tokens: 10, output_tokens: 100, speed }, modelUsage: totals }));
+  }
   const reply = `SAY: Okay!\nTITLE: 🚚 Test Truck\n\`\`\`html\n<!doctype html>\n<html><body><canvas id="c"></canvas><script>\nconst turn = ${turns};\n</script></body></html>\n\`\`\`\nDONE: Here it is!`;
   const stream = (event, parent) => out({ type: 'stream_event', event, ...(parent && { parent_tool_use_id: parent }) });
   stream({ type: 'message_start', message: { usage: { input_tokens: 10, cache_read_input_tokens: 1000, cache_creation_input_tokens: 200, speed } } });
@@ -52,12 +61,14 @@ function turn(content) {
   }
   spend(fullName(model), { in: 10, out: 100, cr: 1000, cw: 200 }, speed === 'fast' ? 0.025 : 0.01);
   stream({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 100 } });
+  if (process.env.FAKE_CLAUDE_HANG) return;
   stream({ type: 'message_stop' });
   out({ type: 'result', subtype: 'success', is_error: false, result: reply, total_cost_usd: cost, usage: { input_tokens: 10, output_tokens: 100, speed }, modelUsage: totals });
 }
 
 function control(id, request) {
   note({ control: request.subtype, ...(request.settings && { settings: request.settings }), ...(request.model && { model: request.model }) });
+  if (request.subtype === 'apply_flag_settings' && refuse-- > 0) return out({ type: 'control_response', response: { subtype: 'error', request_id: id, error: 'not now' } });
   if (request.subtype === 'apply_flag_settings' && 'fastMode' in (request.settings || {})) fast = request.settings.fastMode === true;
   if (request.subtype === 'set_model') model = request.model;
   out({ type: 'control_response', response: { subtype: 'success', request_id: id } });

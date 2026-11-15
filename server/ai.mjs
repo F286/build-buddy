@@ -219,8 +219,8 @@ const backends = {
     // Fast mode: the same model, answering much sooner. On a subscription it's billed as extra
     // usage; without extra usage credits Claude says why and answers at normal speed instead.
     // (Set phase by phase - what the kid is doing meanwhile, which the work under way knows.)
-    const what = usage.now();
-    const wantFast = fast ?? fastIn(c.fast, what.phase || 'change');
+    const what = { phase: usage.PHASE_UNKNOWN, ...usage.now() };
+    const wantFast = fast ?? fastIn(c.fast, what.phase);
     const started = Date.now();
     if (wantFast) args.push('--settings', JSON.stringify({ fastMode: true }));
 
@@ -950,7 +950,7 @@ async function classic({ page, history, text, alt, fix }, emit, state, skip = nu
 export async function build(asked, emit) {
   if (busy) throw new Error('busy');
   const p = store.currentProject();
-  const ask = usage.asked({ phase: store.html(p) ? 'change' : 'new', text: asked.text || '(fixing a crash)', project: p.id });
+  const ask = usage.asked({ phase: usage.waitingFor(store.html(p)), text: asked.text || '(fixing a crash)', project: p.id });
   const started = Date.now();
   let backend = '';
   let ok = false;

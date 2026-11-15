@@ -31,9 +31,20 @@ export const within = (what, fn) => scope.run(what, fn);
 // ---------------------------------------------------------------------------------------------
 // Writing it down
 
+// (Kept to what the panel shows: once a run, a file that has grown big loses what's older than
+// three months.)
+const KEEP_MS = 92 * 24 * 3600 * 1000;
+let trimmed = false;
+function trim() {
+  if (trimmed) return;
+  trimmed = true;
+  if (fs.statSync(file(), { throwIfNoEntry: false })?.size > 4e6) fs.writeFileSync(file(), rows().filter(r => r.t > Date.now() - KEEP_MS).map(r => `${JSON.stringify(r)}\n`).join(''));
+}
+
 function write(row) {
   try {
     fs.mkdirSync(DATA, { recursive: true });
+    trim();
     fs.appendFileSync(file(), `${JSON.stringify({ t: Date.now(), ...row })}\n`);
   } catch {} // (never in the way of building)
 }
@@ -52,23 +63,38 @@ function rows() {
   });
 }
 
-// The kid's last request (after a restart: the last one written down).
-let last;
-export function lastAsk() {
-  if (last === undefined) last = rows().findLast(r => r.kind === 'ask') || null;
-  return last;
+// The phase of what the kid is about to wait for: something new on a blank screen, or else a change.
+export const waitingFor = page => (page ? 'change' : 'new');
+
+// The last thing the kid asked for on a creation (after a restart: the last one written down) -
+// what's done for that creation afterwards (a repair before it's shown, the polishing, the
+// overwatch) belongs to it. Null when nothing was asked for on it since this was kept.
+const lastAsks = new Map(); // creation's id → its last request
+export function lastAsk(project) {
+  if (!lastAsks.has(project)) lastAsks.set(project, rows().findLast(r => r.kind === 'ask' && r.project === project) || null);
+  return lastAsks.get(project);
 }
 
 // The kid asked for something (or a crash is being fixed for them): what follows belongs to it.
 export function asked({ phase, text, project }) {
-  last = { kind: 'ask', id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, phase, project, text: String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140) };
-  write(last);
-  return last;
+  const ask = { kind: 'ask', id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, phase, project, text: String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140) };
+  lastAsks.set(project, ask);
+  write(ask);
+  return ask;
 }
 
 // ... and it's on screen (or it failed), after this long.
 export function shown(ask, { ms, ok, title = '', backend = '' }) {
-  write({ kind: 'shown', ask: ask.id, ms, ok, title, backend });
+  ask.shown = { ms, ok, title, backend };
+  write({ kind: 'shown', ask: ask.id, ...ask.shown });
+}
+
+// ... or not quite yet: it crashed when the app tried it, and was repaired first - the kid waited
+// that much longer. (The last line written for a request is the one that counts.)
+export function waitedLonger(ask, ms) {
+  if (!ask?.shown) return;
+  ask.shown = { ...ask.shown, ms: ask.shown.ms + ms };
+  write({ kind: 'shown', ask: ask.id, ...ask.shown });
 }
 
 // The tokens of a program's result, all its models together: { in, out, cr, cw } - fresh input,
@@ -86,12 +112,14 @@ const add = (a, b) => ({ in: a.in + b.in, out: a.out + b.out, cr: a.cr + b.cr, c
 // fixer, checker, polisher and tester, which run at its speed), 'builders' (the helpers), 'voice' or
 // 'watch' (the overwatch). cost: Claude Code's estimate in dollars - null when the program was
 // stopped before it reported one (its tokens are still counted). what: what it was for (now(), read
-// when it was asked).
+// when it was asked) - outside any request, which shouldn't happen, it counts as a change, the
+// phase whose speed it ran at (PHASE_UNKNOWN).
+export const PHASE_UNKNOWN = 'change';
 export function used({ who, role = '', model = '', fast = false, tokens = {}, cost = null, ms = 0, approx = false }, what = now()) {
   const t = { in: 0, out: 0, cr: 0, cw: 0, ...tokens };
   if (!t.in && !t.out && !t.cr && !t.cw && !cost) return;
-  const phase = PHASES.includes(what.phase) ? what.phase : 'play';
-  write({ kind: 'use', ask: what.ask ?? lastAsk()?.id ?? null, phase, who: what.who || who, role, model, fast: Boolean(fast), ...t, cost: cost == null ? null : Math.round(cost * 1e6) / 1e6, ms: Math.round(ms), ...(approx && { approx: true }) });
+  const phase = PHASES.includes(what.phase) ? what.phase : PHASE_UNKNOWN;
+  write({ kind: 'use', ask: what.ask ?? null, phase, who: what.who || who, role, model, fast: Boolean(fast), ...t, cost: cost == null ? null : Math.round(cost * 1e6) / 1e6, ms: Math.round(ms), ...(approx && { approx: true }) });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -118,16 +146,26 @@ const column = who => (who === 'main' || who === 'builders' ? who : 'other');
 // are, the day's total, each phase by who did it, and each thing the kid asked for with what its
 // wait cost and what the polishing after it cost.
 export function summary(day, all = rows()) {
-  const uses = all.filter(r => r.kind === 'use');
-  const days = [...new Set(all.filter(r => r.kind !== 'shown').map(r => dayOf(r.t)))].sort().reverse();
+  // (One pass: each day's requests and what was used that day.)
+  const byDay = new Map();
+  const shown = new Map(); // (a request's last line counts)
+  for (const r of all) {
+    if (r.kind === 'shown') {
+      shown.set(r.ask, r);
+      continue;
+    }
+    const d = dayOf(r.t);
+    if (!byDay.has(d)) byDay.set(d, { asks: [], uses: [] });
+    if (r.kind === 'ask') byDay.get(d).asks.push(r);
+    else if (r.kind === 'use') byDay.get(d).uses.push(r);
+  }
+  const days = [...byDay.keys()].sort().reverse().slice(0, 60);
   const theDay = days.includes(day) ? day : days[0] || null;
-  const perDay = days.slice(0, 60).map(d => {
-    const c = uses.filter(r => dayOf(r.t) === d).reduce(into, cell());
-    return { day: d, cost: c.cost, fast: c.fast, asks: all.filter(r => r.kind === 'ask' && dayOf(r.t) === d).length };
+  const perDay = days.map(d => {
+    const c = byDay.get(d).uses.reduce(into, cell());
+    return { day: d, cost: c.cost, fast: c.fast, asks: byDay.get(d).asks.length };
   });
-  const mine = uses.filter(r => dayOf(r.t) === theDay);
-  const asks = all.filter(r => r.kind === 'ask' && dayOf(r.t) === theDay);
-  const shown = new Map(all.filter(r => r.kind === 'shown').map(r => [r.ask, r]));
+  const { asks, uses: mine } = byDay.get(theDay) || { asks: [], uses: [] };
 
   const phases = Object.fromEntries(
     PHASES.map(p => {

@@ -278,11 +278,11 @@ export const fastPhases = setting => Object.fromEntries(PHASES.map(p => [p, fast
 // written. Otherwise claude.fastHelpers decides - and since Claude Code leaves fast mode off on
 // Sonnet and Haiku, a fast helper set to one of those writes with Opus instead (which in fast mode
 // writes sooner than Sonnet does at its usual speed).
-const NO_FAST_MODE = /sonnet|haiku/i;
+export const runsFastMode = model => !/sonnet|haiku/i.test(String(model || ''));
 export function helperSpeed(own, model = '', phase = 'change') {
   if (own?.fast != null) return { fast: fastIn(own.fast, phase), model };
   if (!fastIn(current.claude.fastHelpers, phase)) return { fast: false, model };
-  return { fast: true, model: NO_FAST_MODE.test(model) ? 'opus' : model };
+  return { fast: true, model: runsFastMode(model) ? model : 'opus' };
 }
 
 // config.json holds only the user's own overrides; merge the patch into it.

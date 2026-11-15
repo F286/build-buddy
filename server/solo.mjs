@@ -17,7 +17,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { config, fastIn, fastEver } from './config.mjs';
+import { config, fastIn, fastEver, runsFastMode } from './config.mjs';
 import * as usage from './usage.mjs';
 import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
@@ -222,6 +222,7 @@ export class Session {
   close(err) {
     this.closed = true;
     clearTimeout(this.idle);
+    this.unreported(this.current); // (a turn it was still answering: what it used so far)
     for (const t of [this.current, ...this.queue].filter(Boolean)) t.finish(err);
     this.current = null;
     this.queue = [];
@@ -250,7 +251,8 @@ export class Session {
     if (ev.type === 'system' && ev.subtype === 'notification' && /fast/i.test(ev.key || '')) this.fastNote = ev.text || ev.key;
     const t = this.current;
     if (ev.type === 'result') {
-      if (t?.fast) noteSpeed(ev.usage?.speed || 'unknown', ev.usage?.speed === 'fast' ? '' : this.fastNote || '');
+      // (Only where fast mode could have run: on Sonnet or Haiku, normal speed says nothing about it.)
+      if (t?.fast && runsFastMode(this.model)) noteSpeed(ev.usage?.speed || 'unknown', ev.usage?.speed === 'fast' ? '' : this.fastNote || '');
       this.used(ev, t);
     }
     if (!t) return;
@@ -269,6 +271,7 @@ export class Session {
     for (const [name, m] of Object.entries(ev.modelUsage || {})) models[name] = { ...usage.modelTokens(m), cost: m.costUSD || 0 };
     this.spent = { cost: ev.total_cost_usd ?? before.cost, models };
     if (!t) return;
+    t.counted = true;
     const helpers = family(this.helperModel?.(t.phase));
     const shared = helpers && helpers === family(this.model || Object.keys(models)[0]);
     const share = shared && t.out.main + t.out.helpers > 0 ? t.out.helpers / (t.out.main + t.out.helpers) : 0;
@@ -295,12 +298,28 @@ export class Session {
     };
     row('main', fast);
     // (Subagents take the lead's speed, where their model can run fast mode.)
-    row('builders', fast && !/sonnet|haiku/.test(helpers));
+    row('builders', fast && runsFastMode(helpers));
+  }
+
+  // A turn that ended with no result (it timed out, stalled, or the session was ended under it):
+  // Claude Code never reported what it used, so the tokens seen go down without a price - like a
+  // program of the team's that was stopped (team.mjs).
+  unreported(t) {
+    if (!t?.sentAt || t.counted) return;
+    t.counted = true;
+    const pending = who => Object.entries(t.out.last).reduce((sum, [parent, n]) => sum + (Boolean(parent) === (who === 'helpers') ? n : 0), 0);
+    usage.used({ who: 'main', role: this.label, model: this.model || '', fast: t.fast, tokens: { ...t.read, out: t.out.main + pending('main') }, cost: null, ms: Date.now() - t.sentAt }, t.what);
+    usage.used({ who: 'builders', role: this.label, model: this.helperModel?.(t.phase) || '', fast: t.fast && runsFastMode(this.helperModel?.(t.phase)), tokens: { out: t.out.helpers + pending('helpers') }, cost: null }, t.what);
   }
 
   answer(t, ev) {
     t.quietSince = Date.now();
-    // How much of the turn's writing was the lead's and how much its helpers' (see used()).
+    // How much of the turn's writing was the lead's and how much its helpers' (see used()), and
+    // what its first message read.
+    if (ev.type === 'stream_event' && ev.event?.type === 'message_start' && !ev.parent_tool_use_id) {
+      const u = ev.event.message?.usage;
+      t.read ??= { in: u?.input_tokens || 0, cr: u?.cache_read_input_tokens || 0, cw: u?.cache_creation_input_tokens || 0 };
+    }
     if (ev.type === 'stream_event' && ev.event?.type === 'message_delta') t.out.last[ev.parent_tool_use_id || ''] = ev.event.usage?.output_tokens || 0;
     if (ev.type === 'stream_event' && ev.event?.type === 'message_stop') {
       t.out[ev.parent_tool_use_id ? 'helpers' : 'main'] += t.out.last[ev.parent_tool_use_id || ''] || 0;
@@ -335,7 +354,7 @@ export class Session {
     return new Promise((resolve, reject) => {
       const what = usage.now();
       // (Outside any request - it shouldn't happen - a pass counts as play, anything else as a change.)
-      const phase = what.phase || (kind === 'polish' ? 'play' : 'change');
+      const phase = what.phase || (kind === 'polish' ? 'play' : usage.PHASE_UNKNOWN);
       const t = {
         prompt,
         kind,
@@ -388,8 +407,17 @@ export class Session {
     };
     // Its phase's speed, when that isn't the speed the session is at (settled before the turn is sent).
     if (t.fast === this.fastNow) return send();
-    this.fastNow = t.fast;
-    this.control({ subtype: 'apply_flag_settings', settings: { fastMode: t.fast } }).then(send);
+    this.speed(t.fast).then(send);
+  }
+
+  // Fast mode on or off, from its next turn on. Only a switch it confirmed counts: one it refused
+  // or didn't answer leaves the session as it was - that turn runs at the speed it had (and the
+  // log says so: at the wrong speed it costs more, or takes longer, than was asked for) - and the
+  // switch is tried again before the next turn.
+  async speed(fast) {
+    const r = await this.control({ subtype: 'apply_flag_settings', settings: { fastMode: fast } });
+    if (r?.subtype === 'success') this.fastNow = fast;
+    else log(`claude ${this.label}: fast mode couldn't be switched ${fast ? 'on' : 'off'} (${String(r?.error || 'no answer').replace(/\s+/g, ' ').slice(0, 160)}): this turn runs ${this.fastNow ? 'fast' : 'at normal speed'}`);
   }
 
   // A turn that's stuck: the session can't be trusted any more.

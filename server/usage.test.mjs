@@ -141,6 +141,81 @@ test('a helper of its own: started at its phase’s speed, and what it reports w
   [near(rows[0].cost, 0.025), near(rows[1].cost, 0.01)];
 });
 
+test('a speed switch the program refuses doesn’t count: the turn runs as it was, and the switch is tried again', async () => {
+  fresh();
+  process.env.FAKE_CLAUDE_REFUSE = '1';
+  const s = new Session('p3', { args: [...SESSION, '--settings', '{"fastMode":true}'], label: 'agents', model: 'opus', fastFor: phase => phase !== 'play' });
+  delete process.env.FAKE_CLAUDE_REFUSE;
+  try {
+    await usage.during({ phase: 'play', ask: 'd1' }, () => s.ask('one', { kind: 'polish' }));
+    assert.equal(s.fastNow, true); // (refused: it's still fast, and knows it)
+    await usage.during({ phase: 'play', ask: 'd1' }, () => s.ask('two', { kind: 'polish' }));
+    assert.equal(s.fastNow, false);
+    await until(() => used().length === 2);
+  } finally {
+    s.end();
+  }
+  assert.deepEqual(
+    sent().filter(l => !l.started).map(l => (l.control ? `${l.control} ${JSON.stringify(l.settings)}` : `turn ${l.text} fast=${l.fast}`)),
+    ['apply_flag_settings {"fastMode":false}', 'turn one fast=true', 'apply_flag_settings {"fastMode":false}', 'turn two fast=false'],
+  );
+  // What's written down is the speed each turn really had.
+  assert.deepEqual(used().map(r => r.fast), [true, false]);
+});
+
+test('a turn that never ends: the tokens seen so far are written down, without a price', async () => {
+  fresh();
+  process.env.FAKE_CLAUDE_HANG = '1';
+  const s = new Session('p4', { args: [...SESSION, '--tools', 'Agent,Read', '--system-prompt', 'Your helpers are subagents (model "sonnet").'], label: 'agents', model: 'opus', fastFor: () => false, helperModel: () => 'sonnet' });
+  delete process.env.FAKE_CLAUDE_HANG;
+  const answer = usage.during({ phase: 'play', ask: 'e1' }, () => s.ask('grow it', { kind: 'polish' })).catch(err => err);
+  await until(() => sent().some(l => l.turn));
+  await sleep(100);
+  s.end(); // (as when it stalls or times out)
+  assert.match((await answer).message, /stopped/);
+  assert.deepEqual(used().map(r => [r.who, r.phase, r.ask, r.cost, r.out, r.cr, r.model]), [['main', 'play', 'e1', null, 100, 1000, 'opus'], ['builders', 'play', 'e1', null, 300, 0, 'sonnet']]);
+});
+
+test('a program whose whole answer is a result with no line end: it’s used, and counted once', async () => {
+  fresh();
+  const c = config();
+  const before = { claude: c.claude, team: c.team };
+  c.claude = { ...c.claude, model: 'opus', fast: false, fastHelpers: false };
+  c.team = { ...c.team, warm: false, fixer: {} };
+  process.env.FAKE_CLAUDE_BARE = '1';
+  try {
+    const reply = await usage.during({ phase: 'change', ask: 'f1' }, () => askRole('fixer', { system: 'fix it', prompt: 'the page', timeoutSec: 20 }));
+    assert.equal(reply.text, 'a bare answer');
+    await until(() => used().length === 1);
+  } finally {
+    delete process.env.FAKE_CLAUDE_BARE;
+    Object.assign(c, before);
+  }
+  assert.deepEqual(used().map(r => [r.who, r.role, r.phase, r.out]), [['main', 'fixer', 'change', 100]]);
+});
+
+test('what’s done for a creation afterwards belongs to the last thing asked for on it', () => {
+  fresh();
+  const truck = usage.asked({ phase: 'new', text: 'a truck', project: 'truck' });
+  const fish = usage.asked({ phase: 'new', text: 'a fish tank', project: 'fish' });
+  assert.deepEqual([usage.lastAsk('truck').id, usage.lastAsk('fish').id, usage.lastAsk('never asked')], [truck.id, fish.id, null]);
+  // A repair before it's shown: the kid waited that much longer.
+  usage.shown(truck, { ms: 40000, ok: true, title: 'Truck' });
+  usage.waitedLonger(truck, 12000);
+  usage.waitedLonger(null, 5000);
+  // The polishing of the truck, after the fish tank was asked for; and the overwatch on a creation
+  // nothing was asked for on.
+  usage.during({ phase: 'play', ask: usage.lastAsk('truck').id }, () => usage.used({ who: 'main', tokens: { out: 10 }, cost: 0.3 }));
+  usage.during({ phase: 'play', who: 'watch', ask: usage.lastAsk('never asked')?.id ?? null }, () => usage.used({ who: 'main', tokens: { out: 10 }, cost: 0.05 }));
+  // Outside any request, it counts as a change - the phase whose speed it ran at.
+  usage.used({ who: 'main', tokens: { out: 10 }, cost: 0.01 });
+  const u = usage.summary();
+  assert.deepEqual(u.asks.map(a => [a.text, a.waitMs, a.play.cost]), [['a truck', 52000, 0.3], ['a fish tank', null, 0]]);
+  near(u.loose.cost, 0.06);
+  near(u.phases.change.main.cost, 0.01);
+  near(u.phases.play.other.cost, 0.05);
+});
+
 test('the day’s breakdown: each phase by who did it, and each thing asked for', () => {
   const day = (d, h, m = 0) => new Date(2026, 10, d, h, m).getTime();
   const use = (t, ask, phase, who, cost, more = {}) => ({ t, kind: 'use', ask, phase, who, fast: false, in: 10, out: 100, cr: 1000, cw: 0, cost, ...more });

@@ -71,6 +71,8 @@ function publicConfig() {
     // for when the kid waits for something new, waits for a change, and plays: { new, change, play }.
     claudeFast: fastPhases(c.claude.fast),
     claudeFastHelpers: fastPhases(c.claude.fastHelpers),
+    // (Solo mode writes something new with this model first: on Sonnet or Haiku, fast mode can't run.)
+    soloFirstModel: c.solo?.firstModel || c.solo?.model || c.claude.model || '',
     team: Boolean(c.team.enabled),
     solo: Boolean(c.solo?.enabled),
     agents: Boolean(c.team.agents),
@@ -203,16 +205,22 @@ const routes = {
   // (What they're about to ask for is something new on a blank screen, or else a change: the
   // programs are started at that phase's speed.)
   'POST /api/warm': () =>
-    usage.during({ phase: store.html(store.currentProject()) ? 'change' : 'new' }, () =>
+    usage.during({ phase: usage.waitingFor(store.html(store.currentProject())) }, () =>
       timeIsUp() && !graceOpen() ? { warm: 0 } : solo.enabled() ? solo.warm() : ai.agentWay() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm(),
     ),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
-  // (The kid is still waiting for what they asked for: it's part of that request, at its speed.)
+  // (The kid is still waiting for what they asked for: it's part of that request, at its speed -
+  // and of how long they waited.)
   'POST /api/repair': async req => {
     const b = await readJson(req);
-    const ask = usage.lastAsk();
-    return usage.during({ phase: ask?.phase || 'change', ask: ask?.id }, () => (builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.repair(b)) : team.repair(b)));
+    const ask = usage.lastAsk(store.currentProject().id);
+    const started = Date.now();
+    try {
+      return await usage.during({ phase: ask?.phase || usage.PHASE_UNKNOWN, ask: ask?.id ?? null }, () => (builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.repair(b)) : team.repair(b)));
+    } finally {
+      usage.waitedLonger(ask, Date.now() - started);
+    }
   },
 
   // The app's answer to a 'peek' event of a build under way: how the page looks and runs, out of
@@ -220,16 +228,17 @@ const routes = {
   'POST /api/peeked': async req => agents.peeked(await readJson(req)),
 
   // A team-built creation just appeared: take a careful look and fix what would spoil it.
-  // (The kid plays meanwhile: nobody waits for it.)
+  // (The kid plays meanwhile: nobody waits for it. It belongs to the last thing asked for on that
+  // creation - which may not be the last thing asked for, if they went back to an older one.)
   'POST /api/check': async req => {
     const b = await readJson(req);
-    return usage.during({ phase: 'play', ask: usage.lastAsk()?.id }, () => (builtSolo(b.version) ? solo.check(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.check(b)) : team.check(b)));
+    return usage.during({ phase: 'play', ask: usage.lastAsk(b.projectId ?? store.currentProject().id)?.id ?? null }, () => (builtSolo(b.version) ? solo.check(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.check(b)) : team.check(b)));
   },
 
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
   'POST /api/watch': async req => {
     const b = await readJson(req);
-    return usage.during({ phase: 'play', who: 'watch', ask: usage.lastAsk()?.id }, () => watch.review(b));
+    return usage.during({ phase: 'play', who: 'watch', ask: usage.lastAsk(b.projectId ?? store.currentProject().id)?.id ?? null }, () => watch.review(b));
   },
 
   // What Claude's work cost, a day at a time (the latest day, or ?day=2026-11-15), for the panel.
