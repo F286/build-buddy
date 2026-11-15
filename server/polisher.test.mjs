@@ -94,7 +94,7 @@ test('the lead builds, the polisher polishes in a session of its own, and each i
   const started = sent().filter(l => l.started && /Write/.test(l.tools));
   assert.deepEqual(started.map(l => [l.model, l.fast, Boolean(l.polisher)]), [['opus', true, false], ['fable', false, true]]);
   const told = turnsOf('fable')[0].text;
-  for (const said of ['Kid: a monster truck', 'Read rules.md, page.html and every part first', '<since_your_last_turn>', 'The kid said: "a monster truck"', 'built it as something new', `- the truck: Read rules.md and page.html, then write parts/truck.js`, 'DONE: Here is your truck!', 'Files: page.html new (6 lines); parts/truck.js new (3 lines)', 'Now grow it into its full, excellent version', 'the LEAD line comes after WHY']) assert.ok(told.includes(said), said);
+  for (const said of ['Kid: a monster truck', 'Read rules.md, page.html and every part first', '<since_your_last_turn>', 'The kid said: "a monster truck"', 'built it as something new', 'When it appeared, Sparky said: "Here is your truck!"', `- the truck: Read rules.md and page.html, then write parts/truck.js`, 'DONE: Here is your truck!', 'Files: page.html new (6 lines); parts/truck.js new (3 lines)', 'Now grow it into its full, excellent version', 'the LEAD line comes after WHY']) assert.ok(told.includes(said), said);
   assert.match(part(), /truck_polish1/);
   assert.equal(store.currentProject().versions.at(-1).backend, 'claude agents polish');
   // (The lead's conversation had one turn: the pass wasn't one of its own.)
@@ -147,6 +147,71 @@ test('the kid asks for something during a pass: the polisher stops, its half-don
   assert.equal(again.fixed, true);
   const told = turnsOf('fable').at(-1).text;
   for (const said of ['The kid said: "add a ladder"', 'Your last changes were taken out (the kid asked for something first)']) assert.ok(told.includes(said), said);
+});
+
+test('a polisher that doesn’t stop for the kid is ended: the lead never works in the files while it does', async () => {
+  agents.stop();
+  store.newProject();
+  await kidSays('a crane');
+  const polishers = () => sent().filter(l => l.started && l.polisher).length;
+  const before = polishers();
+  process.env.FAKE_CLAUDE_HANG = '1';
+  process.env.FAKE_CLAUDE_DEAF = '1'; // (its turn changes the file, then goes on whatever it's told)
+  let hanging;
+  try {
+    hanging = pass();
+    await until(() => polishers() === before + 1 && /truck_polish/.test(part()));
+  } finally {
+    delete process.env.FAKE_CLAUDE_HANG;
+    delete process.env.FAKE_CLAUDE_DEAF;
+  }
+  const t0 = Date.now();
+  await kidSays('add a hook');
+  assert.ok(Date.now() - t0 >= 4500, 'it was given a moment to stop first');
+  assert.deepEqual(await hanging, { skipped: 'failed' });
+  // The lead built on the files as they were before the pass: nothing half-done in them.
+  assert.ok(!/truck_polish/.test(part()) && /truck_change/.test(part()));
+  assert.ok(!turnsOf('opus').at(-1).text.includes('taken out')); // (they were never the lead's changes)
+  // A new polisher takes its place, and is told what became of the pass.
+  assert.equal((await pass()).fixed, true);
+  assert.equal(polishers(), before + 2);
+  assert.ok(turnsOf('fable').at(-1).text.includes('Your last changes were taken out (that turn failed)'));
+});
+
+test('a pass that crashed when it was tried is taken out of the files, whether or not the polisher is still there', async () => {
+  agents.stop();
+  store.newProject();
+  await kidSays('a digger');
+  const made = await pass();
+  assert.match(part(), /truck_polish/);
+  agents.stop(); // (the settings were saved meanwhile: its session is gone)
+  const p = store.currentProject();
+  store.dropVersion(p, made.version);
+  agents.takenBack({ projectId: p.id, version: made.version, error: 'ReferenceError: bounce is not defined' });
+  assert.ok(!/truck_polish/.test(part()));
+  // (Its next turn says why; the lead isn't told of changes it never saw.)
+  await kidSays('make it yellow');
+  assert.ok(!turnsOf('opus').at(-1).text.includes('the polisher changed your files'));
+  assert.equal((await pass()).fixed, true);
+  assert.ok(turnsOf('fable').at(-1).text.includes('Your last changes were taken back: with them in, it crashed when it was tried (ReferenceError: bounce is not defined)'));
+});
+
+test('the page changed outside the files: each is told it was put back whole, and the polisher’s report still reaches the lead', async () => {
+  agents.stop();
+  store.newProject();
+  await kidSays('a bus');
+  // (The overwatch fixed the page: it's no longer what the files hold.)
+  let p = store.currentProject();
+  store.addVersion(p, store.html(p).replace('</body>', '<!-- fixed --></body>'), { request: '(overwatch)', backend: 'claude agents', continues: true });
+  // The polisher is handed the page whole, with no parts, and polishes that.
+  assert.equal((await pass()).fixed, true);
+  const told = turnsOf('fable').at(-1).text;
+  assert.ok(told.includes('page.html now holds the whole page as it is, with no parts'));
+  assert.equal(part(), '');
+  // The lead, at its next turn: the parts it knew are gone - and what the polisher changed since.
+  await kidSays('make it red');
+  const lead = turnsOf('opus').at(-1).text;
+  for (const said of ['was put back into them whole', 'the polisher changed your files', 'page.html changed', 'What you should know: page.html has a new flag']) assert.ok(lead.includes(said), said);
 });
 
 test('switched off, the lead polishes in its own conversation again - and is told what the polisher had changed', async () => {

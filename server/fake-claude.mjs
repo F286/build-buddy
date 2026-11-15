@@ -35,9 +35,11 @@ const JOB = 'Read rules.md and page.html, then write parts/truck.js defining exa
 function work(text, stream) {
   fs.mkdirSync('parts', { recursive: true });
   if (polisher) {
-    if (!fs.existsSync('parts/truck.js')) return 'OK';
-    fs.appendFileSync('parts/truck.js', `const truck_polish${turns} = true;\n`);
-    return `NOTES: solid 8 - nothing happens when it's poked\nWHY: made the truck bounce when poked (pass ${turns})\nLEAD: parts/truck.js has a new flag, truck_polish${turns}`;
+    // (Its part, or - when the page was put back whole, with no parts - the page itself.)
+    if (!fs.existsSync('parts/truck.js') && !fs.existsSync('page.html')) return 'OK';
+    if (fs.existsSync('parts/truck.js')) fs.appendFileSync('parts/truck.js', `const truck_polish${turns} = true;\n`);
+    else fs.appendFileSync('page.html', `<!-- polished ${turns} -->\n`);
+    return `NOTES: solid 8 - nothing happens when it's poked\nWHY: made the truck bounce when poked (pass ${turns})\nLEAD: ${fs.existsSync('parts/truck.js') ? 'parts/truck.js' : 'page.html'} has a new flag, truck_polish${turns}`;
   }
   if (!fs.existsSync('page.html')) {
     // (Something new: the page, and a helper for its one part.)
@@ -47,7 +49,9 @@ function work(text, stream) {
     out({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_helper' }] } });
     return 'TITLE: 🚚 Test Truck\nDONE: Here is your truck!';
   }
-  fs.appendFileSync('parts/truck.js', `const truck_change${turns} = true;\n`);
+  // (A change: in its part - or in the page itself, when that was put back whole, with no parts.)
+  if (fs.existsSync('parts/truck.js')) fs.appendFileSync('parts/truck.js', `const truck_change${turns} = true;\n`);
+  else fs.appendFileSync('page.html', `<!-- change ${turns} -->\n`);
   return 'DONE: Done!';
 }
 
@@ -65,8 +69,9 @@ function spend(name, tokens, price) {
 }
 
 // For the tests that need something to go wrong: $FAKE_CLAUDE_REFUSE speed switches are refused,
-// with $FAKE_CLAUDE_HANG a turn stops halfway and never ends, and with $FAKE_CLAUDE_BARE the answer
-// is nothing but a result, with no line end after it.
+// with $FAKE_CLAUDE_HANG a turn stops halfway and never ends until it's interrupted (with
+// $FAKE_CLAUDE_DEAF too, not even then), and with $FAKE_CLAUDE_BARE the answer is nothing but a
+// result, with no line end after it.
 let refuse = Number(process.env.FAKE_CLAUDE_REFUSE || 0);
 let hung = false;
 
@@ -103,8 +108,9 @@ function turn(content) {
 function control(id, request) {
   note({ control: request.subtype, ...(request.settings && { settings: request.settings }), ...(request.model && { model: request.model }) });
   if (request.subtype === 'apply_flag_settings' && refuse-- > 0) return out({ type: 'control_response', response: { subtype: 'error', request_id: id, error: 'not now' } });
-  // (A turn that's stopped ends with a result, like a real one.)
-  if (request.subtype === 'interrupt' && hung) {
+  // (A turn that's stopped ends with a result, like a real one - unless, with $FAKE_CLAUDE_DEAF,
+  // it's one that doesn't stop.)
+  if (request.subtype === 'interrupt' && hung && !process.env.FAKE_CLAUDE_DEAF) {
     hung = false;
     out({ type: 'result', subtype: 'error_during_execution', is_error: false, result: '', total_cost_usd: cost, usage: { input_tokens: 10, output_tokens: 100 }, modelUsage: totals });
   }
