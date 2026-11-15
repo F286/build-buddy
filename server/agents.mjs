@@ -258,22 +258,37 @@ export function assemble(dir) {
   return { html, missing };
 }
 
-// The page and its parts as they are now (to put back if a pass doesn't work out).
-function snapshot(dir) {
+// The page and its parts as they are now (to put back if a pass doesn't work out) - with when each
+// was last written, kept out of sight.
+const WRITTEN = Symbol('when each file was last written');
+export function snapshot(dir) {
   const files = {};
+  const written = {};
   const read = rel => {
     try {
       files[rel] = fs.readFileSync(path.join(dir, rel), 'utf8');
+      written[rel] = fs.statSync(path.join(dir, rel)).mtimeMs;
     } catch {}
   };
   read('page.html');
   for (const f of fs.existsSync(path.join(dir, 'parts')) ? fs.readdirSync(path.join(dir, 'parts')) : []) read(path.join('parts', f));
-  return files;
+  return Object.defineProperty(files, WRITTEN, { value: written });
 }
 
-function restore(dir, files) {
-  clear(dir);
-  for (const [rel, text] of Object.entries(files)) fs.writeFileSync(path.join(dir, rel), text);
+// ... and put back: only what differs is written (and what wasn't there, removed), each with the
+// date it had. A file that's back to what it was then looks untouched to whoever read it last -
+// the lead, when it was the polisher's pass that was stopped - so it can change it without reading
+// it again.
+export function restore(dir, files) {
+  const now = snapshot(dir);
+  for (const rel of Object.keys(now)) if (!(rel in files)) fs.rmSync(path.join(dir, rel), { force: true });
+  fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
+  for (const [rel, text] of Object.entries(files)) {
+    if (now[rel] === text) continue;
+    fs.writeFileSync(path.join(dir, rel), text);
+    const when = files[WRITTEN]?.[rel];
+    if (when) fs.utimesSync(path.join(dir, rel), new Date(), new Date(when));
+  }
 }
 
 // An empty folder for the page and its parts (rules.md is written each turn).
@@ -293,7 +308,7 @@ function clear(dir) {
 //              whole, and may have worked on it since: the files are as they are now, but the
 //              parts it knew are gone
 const wholes = new Map(); // folder → how many times its page was put back whole
-function syncState(s, page) {
+export function syncState(s, page) {
   const dir = s.dir;
   const now = assemble(dir)?.html;
   const count = wholes.get(dir) || 0;
@@ -304,7 +319,9 @@ function syncState(s, page) {
     s.files = '';
     return '';
   }
-  if (now === page && s.files === page) return ''; // as it left them
+  // (As it left them - unless they were put back whole for its teammate meanwhile: the page may be
+  // the one it knew, but its parts are gone.)
+  if (now === page && s.files === page && seen === count) return '';
   s.files = page;
   if (now === page) return seen === count ? 'inside' : 'whole';
   clear(dir);
@@ -317,12 +334,11 @@ const INSIDE = 'Your folder holds the creation as it is: page.html and its parts
 const OUTSIDE = 'The page changed since you last worked on it (or you are new to it): page.html now holds the whole page as it is, with no parts - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part.';
 const WHOLE = 'The page changed outside your files since you last worked on it, and was put back into them whole: page.html holds all of it, and the parts you knew are gone (parts/ holds only what was added since) - Read it before you change it. When you hand out work, a helper can take over a piece of it as a new part.';
 
-// ... and what it's told about them: how they stand, then what its teammate did to them (`told`) -
-// which no longer counts once the page changed outside them.
-function sync(s, page, told = '') {
-  const state = syncState(s, page);
-  return state === 'outside' ? OUTSIDE : state === 'whole' ? [WHOLE, told].filter(Boolean).join('\n\n') : state === 'inside' ? told || INSIDE : '';
-}
+// ... and what it's told about them: how they stand, and what its teammate did since its last turn
+// (`told`: the polisher's report for the lead, the lead's story for the polisher - whoever calls
+// leaves out of it what no longer counts once the page changed outside the files).
+const stateSaid = (state, told = '') => (state === 'outside' ? [OUTSIDE, told] : state === 'whole' ? [WHOLE, told] : state === 'inside' ? [told || INSIDE] : [told]).filter(Boolean).join('\n\n');
+const sync = (s, page, told = '') => stateSaid(syncState(s, page), told);
 
 // ---------------------------------------------------------------------------------------------
 // The lead and the polisher tell each other what they did (team.agentPolisher): the polisher is
@@ -360,26 +376,9 @@ function changedLines(changes, files = 6, each = 10) {
     .join('\n');
 }
 
-// The jobs a lead hands out in a turn - each helper's job, in the lead's own words: what every
-// part is for.
-function jobsHeard() {
-  const jobs = new Map();
-  return {
-    onEvent(ev) {
-      if (ev.parent_tool_use_id || ev.type !== 'assistant') return;
-      for (const c of ev.message?.content || []) {
-        if (c.type !== 'tool_use' || !/^(Agent|Task)$/.test(c.name) || jobs.has(c.id)) continue;
-        jobs.set(c.id, { what: String(c.input?.description || 'a part').slice(0, 80), job: String(c.input?.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 600) });
-      }
-    },
-    get jobs() {
-      return [...jobs.values()];
-    },
-  };
-}
-
 // Something the lead did, kept for the polisher (the last STORY_KEPT of them): { kind, kid, alt,
-// fix, said, lead, jobs, changes, secs }.
+// fix, said, done, lead, jobs, changes, secs } - jobs being what it handed to its helpers, in its
+// own words (helperTracker): what every part is for.
 const STORY_KEPT = 30;
 function tellPolisher(w, entry) {
   if (!entry || !polisher().on) return;
@@ -391,25 +390,36 @@ function tellPolisher(w, entry) {
 const clip = (text, max) => (String(text).length > max ? `${String(text).slice(0, max)} ...` : String(text));
 // (A long reply keeps its start and its end: the title is at one, what's said when it appears at the other.)
 const clipMiddle = (text, head, tail) => (String(text).length > head + tail ? `${String(text).slice(0, head)}\n...\n${String(text).slice(-tail)}` : String(text));
-export function storySaid(story, told = 0) {
+// Everything it hasn't heard is told, in order: the last STORY_IN_FULL turns in full, the ones
+// before them in short (what the kid said, what the lead did, which files) - and it's told when
+// there were turns too old to be kept. files: false leaves the files out (they no longer hold
+// what the lead made of them: the page was put back whole).
+const STORY_IN_FULL = 8;
+export function storySaid(story, told = 0, { files = true } = {}) {
   const c = config();
-  const fresh = story.filter(e => e.n > told).slice(-8);
+  const fresh = story.filter(e => e.n > told);
   if (!fresh.length) return { text: '', upTo: told };
-  const one = (e, i) =>
+  const one = (e, i, full) =>
     [
       `${i + 1}. ${e.kind === 'fix' ? `The page crashed when it was tried (${clip(String(e.fix || '').split('\n')[0], 200)}): the lead fixed it.` : `The kid said: "${e.kid}"`}`,
-      e.kind !== 'fix' && e.alt && `(The other listener heard: "${e.alt}".)`,
-      e.said && `${c.buddyName} answered out loud: "${e.said}"`,
+      full && e.kind !== 'fix' && e.alt && `(The other listener heard: "${e.alt}".)`,
+      full && e.said && `${c.buddyName} answered out loud: "${e.said}"`,
       e.kind === 'talk' ? 'The lead only answered - it changed nothing.' : e.kind === 'new' ? `The lead built it as something new${e.secs ? ` (${e.secs} s)` : ''}.` : e.kind === 'change' ? `The lead changed what was there${e.secs ? ` (${e.secs} s)` : ''}.` : '',
-      e.done && `When it appeared, ${c.buddyName} said: "${e.done}"`,
-      e.jobs?.length && `The jobs it handed to its helpers:\n${e.jobs.map(j => `  - ${j.what}: ${j.job}`).join('\n')}`,
-      e.lead && `The lead's own words:\n${clipMiddle(e.lead.trim(), 900, 400)}`,
-      e.changes?.length && `Files: ${changesSaid(e.changes)}`,
-      e.changes?.length && changedLines(e.changes),
+      full && e.done && `When it appeared, ${c.buddyName} said: "${e.done}"`,
+      full && e.jobs?.length && `The jobs it handed to its helpers:\n${e.jobs.map(j => `  - ${j.what}: ${j.job}`).join('\n')}`,
+      full && e.lead && `The lead's own words:\n${clipMiddle(e.lead.trim(), 900, 400)}`,
+      files && e.changes?.length && `Files: ${changesSaid(e.changes)}`,
+      full && files && e.changes?.length && changedLines(e.changes),
     ]
       .filter(Boolean)
       .join('\n');
-  return { text: `<since_your_last_turn>\n${fresh.map(one).join('\n\n')}\n</since_your_last_turn>`, upTo: fresh.at(-1).n };
+  const inShort = fresh.length - STORY_IN_FULL;
+  const lines = [
+    fresh[0].n > told + 1 && '(Turns before these are no longer kept: the conversation and the files hold what came of them.)',
+    inShort > 0 && '(The earlier ones in short, the latest in full.)',
+    ...fresh.map((e, i) => one(e, i, i >= inShort)),
+  ].filter(Boolean);
+  return { text: `<since_your_last_turn>\n${lines.join('\n\n')}\n</since_your_last_turn>`, upTo: fresh.at(-1).n };
 }
 
 // What the polisher did since the lead's last turn, as the lead is told it ('' when nothing).
@@ -492,16 +502,17 @@ function endPolisher() {
 let pass = null; // { by, over }
 
 // What's still to do for a creation (kept apart from the session, so a new one carries on).
-// With a polisher: story is what the lead did, for the polisher to be told; reports is what the
-// polisher changed since the lead's last turn, for the lead; polishNote is what the polisher is
-// told about its own changes being taken out (note: the lead's).
+// notes: what each of them is told at its next turn about its own changes (taken out, taken back),
+// by its session's name - the lead's ("agents") and the polisher's. With a polisher: story is what
+// the lead did, for the polisher to be told; reports is what the polisher changed since the lead's
+// last turn, for the lead.
 let work = { projectId: null };
 function workFor(projectId) {
   if (work.projectId !== projectId) {
     // (The polisher looks after one creation: when the kid moves to another it stops, and a pass
     // of its under way puts the files of the one it was on back.)
     if (polishSession && polishSession.projectId !== projectId) endPolisher();
-    work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, note: '', polishNote: '', story: [], storyN: 0, reports: [], checking: false, repairing: false, asked: '', rules: null };
+    work = { projectId, grow: false, passes: 0, tries: 0, lastPass: null, notes: { agents: '', polisher: '' }, story: [], storyN: 0, reports: [], checking: false, repairing: false, asked: '', rules: null };
   }
   return work;
 }
@@ -520,6 +531,8 @@ async function settled(w) {
     const stopped = await Promise.race([under.over.then(() => true), sleep(POLISHER_STOP_MS).then(() => false)]);
     if (!stopped) {
       log('agents: the polisher was slow to stop for the kid, so it was ended');
+      // (Its program is gone before the files are put back: nothing of its writes to them after.)
+      await under.by.kill();
       under.by.end();
       if (polishSession === under.by) polishSession = null;
       await Promise.race([under.over, sleep(POLISHER_STOP_MS)]); // (ended, its pass is over at once)
@@ -532,7 +545,7 @@ async function settled(w) {
 // didn't fix it): it's told, and it reads the files again before changing them.
 function undone(s, w, why) {
   s.files = null;
-  w[s.label === 'polisher' ? 'polishNote' : 'note'] = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
+  w.notes[s.label] = `Your last changes were taken out (${why}): the files are back to how they were before them - Read what you need.`;
 }
 
 // What the kid says comes first: a pass at work stops, and any waiting are dropped - the lead's
@@ -597,8 +610,13 @@ function helperTracker(onChange) {
   const helpers = new Map(); // id → done
   const seen = new Map(); // id → when it was last heard from
   const what = new Map(); // id → its job, in a few words
+  const told = new Map(); // id → its job, as the lead wrote it
   return {
     helpers,
+    // Each helper's job, in the lead's own words (for the polisher: what every part is for).
+    get jobs() {
+      return [...what].map(([id, words]) => ({ what: words, job: told.get(id) }));
+    },
     onEvent(ev) {
       if (ev.parent_tool_use_id) {
         if (seen.has(ev.parent_tool_use_id)) seen.set(ev.parent_tool_use_id, Date.now());
@@ -610,6 +628,7 @@ function helperTracker(onChange) {
           helpers.set(c.id, false);
           seen.set(c.id, Date.now());
           what.set(c.id, String(c.input?.description || 'a part').slice(0, 80));
+          told.set(c.id, String(c.input?.prompt || '').replace(/\s+/g, ' ').trim().slice(0, 600));
           onChange();
         }
       } else if (ev.type === 'user') {
@@ -696,17 +715,18 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
   };
   if (!fix) speakFirst({ history, text, alt, title }, sayNow).catch(err => log(`agents voice failed: ${err.message.replace(/\s+/g, ' ').slice(0, 160)}`));
 
-  // (What the polisher changed since its last turn: it's told, and still knows the rest.)
-  const report = reportSaid(w.reports);
+  // How its files stand, and what the polisher changed since its last turn (which no longer counts
+  // if the page changed outside the files since). Told that, it still knows the rest - unless its
+  // parts are gone.
   const knew = s.files === page;
-  const synced = sync(s, page, report);
-  const known = s.turns > 0 && Boolean(page) && (knew || (Boolean(report) && synced === report));
-  const note = [synced, w.note].filter(Boolean).join(' ');
-  [w.note, w.reports] = ['', []];
-  // (For the polisher to be told: the jobs it hands out, and what it changes in the files.)
+  const files = syncState(s, page);
+  const report = files === 'outside' ? '' : reportSaid(w.reports);
+  const known = s.turns > 0 && Boolean(page) && (knew ? files !== 'whole' : Boolean(report) && files === 'inside');
+  const note = [stateSaid(files, report), w.notes[s.label]].filter(Boolean).join(' ');
+  [w.notes[s.label], w.reports] = ['', []];
+  // (For the polisher to be told: what it changes in the files.)
   const telling = polisher().on;
   const filesBefore = telling ? snapshot(s.dir) : null;
-  const jobs = jobsHeard();
   const creationLook = page ? p.versions.filter(x => x.look).at(-1)?.look || look : look;
   // What the creation was asked for (kept across turns; the first request after a restart).
   const first = page ? w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '' : text;
@@ -738,7 +758,6 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     },
     onEvent: ev => {
       team.onEvent(ev);
-      jobs.onEvent(ev);
       // (The helpers' writing keeps the building blocks coming too.)
       if (ev.parent_tool_use_id && ev.type === 'stream_event' && ev.event?.delta?.type === 'text_delta') {
         chars += ev.event.delta.text.length;
@@ -804,7 +823,7 @@ export async function build({ page, history, text, alt, fix, title = '', look = 
     // (Its grow pass's helpers go by the new creation's request and look.)
     if (page) fs.writeFileSync(rules, helperRules((w.rules = { asked: text, look })));
   } else [w.passes, w.tries] = [0, 0];
-  if (telling) tellPolisher(w, { kind: fix ? 'fix' : fresh ? 'new' : 'change', kid: text, alt, fix, said: state.said || r.say, done: r.done, lead: reply.text, jobs: jobs.jobs, changes: fileChanges(filesBefore, snapshot(s.dir)), secs: Math.round((Date.now() - t0) / 1000) });
+  if (telling) tellPolisher(w, { kind: fix ? 'fix' : fresh ? 'new' : 'change', kid: text, alt, fix, said: state.said || r.say, done: r.done, lead: reply.text, jobs: team.jobs, changes: fileChanges(filesBefore, snapshot(s.dir)), secs: Math.round((Date.now() - t0) / 1000) });
   log(`ok   claude agents ${secs()} ${team.helpers.size} helpers, ${built.html.length} chars, turn ${s.turns}`);
   const edited = Boolean(page) && sameCreation(page, built.html);
   return { say: state.said || r.say, done: r.done, title: r.title, emoji: r.emoji, html: built.html, edited, look, backend: 'claude agents' };
@@ -856,25 +875,18 @@ export async function check({ projectId, version, report, screenshot }) {
   let before = null;
   let rules = null;
   try {
-    // What it's told first. The lead: how its files stand since its own last turn (and what a
-    // polisher that's been switched off since had changed). The polisher: everything the lead did
-    // since the polisher's last turn - a new one, the conversation too, and to read it all.
-    let note;
-    let story = null;
-    if (polish) {
-      const state = syncState(s, page);
-      story = storySaid(w.story, s.told);
-      note = [
-        s.turns === 0 && [historyNote(p.history, 60), 'This is the creation you look after from now on. Your folder holds it as it is: page.html and its parts in parts/, and rules.md with what the kid asked for and the rules every helper follows. Read rules.md, page.html and every part first (all the Reads in one message).'].filter(Boolean).join('\n\n'),
-        story.text,
-        state === 'outside' ? OUTSIDE : state === 'whole' ? WHOLE : state === 'inside' && s.turns > 0 && !story.text ? INSIDE : '',
-        w.polishNote,
-      ].filter(Boolean).join('\n\n');
-    } else {
-      note = [sync(s, page, reportSaid(w.reports)), w.note].filter(Boolean).join(' ');
-      w.reports = [];
-      if (note) note = `${historyNote(p.history)}\n\n${note}`;
-    }
+    // What it's told first: how its files stand, and what its teammate did since its own last
+    // turn. The lead: what a polisher that's been switched off since had changed. The polisher:
+    // everything the lead did (without the files, once the page was put back whole) - a new one,
+    // the conversation too, and to read it all.
+    const files = syncState(s, page);
+    const story = polish ? storySaid(w.story, s.told, { files: files !== 'outside' }) : null;
+    const told = [stateSaid(files, polish ? story.text : files === 'outside' ? '' : reportSaid(w.reports)), w.notes[s.label]].filter(Boolean);
+    const note = polish
+      ? [s.turns === 0 && [historyNote(p.history, 60), 'This is the creation you look after from now on. Your folder holds it as it is: page.html and its parts in parts/, and rules.md with what the kid asked for and the rules every helper follows. Read rules.md, page.html and every part first (all the Reads in one message).'].filter(Boolean).join('\n\n'), ...told].filter(Boolean).join('\n\n')
+      : told.length
+        ? `${historyNote(p.history)}\n\n${told.join(' ')}`
+        : '';
     before = snapshot(s.dir);
     // (Its helpers write fuller parts while the kid plays; the quick rules come back after.)
     rules = w.rules || { asked: w.asked || p.versions.filter(x => !x.continues).at(-1)?.request || '', look: p.versions.filter(x => x.look).at(-1)?.look || '' };
@@ -890,10 +902,16 @@ export async function check({ projectId, version, report, screenshot }) {
     if (!polish) await s.use(lead().model);
     await s.think(polish ? polisher().thinking : lead().thinking.look);
     if (stale()) return { skipped: 'stale' };
-    w[polish ? 'polishNote' : 'note'] = '';
     w.tries++;
-    // (Once the turn has gone to it, the polisher knows the story so far.)
-    const reply = await s.ask(prompt, { timeoutSec: 600, stallSec: 150, kind: 'polish', onSent: () => story && (s.told = story.upTo) });
+    // (Once the turn has gone to it, it knows what it was told: its note, and - the polisher - the
+    // story so far, or - the lead - what the polisher had changed. Not before: a pass that's
+    // dropped on the way keeps them for the next turn.)
+    const heard = () => {
+      w.notes[s.label] = '';
+      if (polish) s.told = story.upTo;
+      else w.reports = [];
+    };
+    const reply = await s.ask(prompt, { timeoutSec: 600, stallSec: 150, kind: 'polish', onSent: heard });
     const why = field(reply.text, 'WHY') || 'made it better';
     const done = () => {
       w.passes++;
@@ -930,7 +948,7 @@ export async function check({ projectId, version, report, screenshot }) {
     }
     p = store.addVersion(store.currentProject(), built.html, { request: `(agents polish) ${why}`, backend: 'claude agents polish', continues: true });
     s.files = built.html;
-    w.lastPass = { version: p.current, grow, before, polisher: polish };
+    w.lastPass = { version: p.current, grow, before, by: s.label };
     // (The lead is told at its next turn: which files, why, and what the polisher says it should know.)
     if (polish) w.reports.push({ version: p.current, why, lead: field(reply.text, 'LEAD'), files: changesSaid(fileChanges(before, snapshot(s.dir))) });
     done();
@@ -967,10 +985,10 @@ export function takenBack({ projectId, version, error }) {
   if (w.lastPass.before) {
     const dir = folderOf(projectId);
     restore(dir, w.lastPass.before);
-    const by = w.lastPass.polisher ? polishSession : session;
+    const by = w.lastPass.by === 'polisher' ? polishSession : session;
     if (by?.projectId === projectId) by.files = assemble(dir)?.html ?? null;
   }
-  w[w.lastPass.polisher ? 'polishNote' : 'note'] = `Your last changes were taken back: with them in, it crashed when it was tried (${String(error || '').slice(0, 200)}).`;
+  w.notes[w.lastPass.by] = `Your last changes were taken back: with them in, it crashed when it was tried (${String(error || '').slice(0, 200)}).`;
   w.reports = w.reports.filter(r => r.version !== version); // (the lead never hears of them)
   if (w.lastPass.grow) w.grow = true;
   w.passes = Math.max(0, w.passes - 1);

@@ -8,7 +8,8 @@ import fs from 'node:fs';
 
 const args = process.argv.slice(2);
 const opt = name => (args.includes(name) ? args[args.indexOf(name) + 1] : '');
-const note = what => process.env.FAKE_CLAUDE_LOG && fs.appendFileSync(process.env.FAKE_CLAUDE_LOG, `${JSON.stringify(what)}\n`);
+// (pid: which program a line is from - several run at once, and their lines come as they come.)
+const note = what => process.env.FAKE_CLAUDE_LOG && fs.appendFileSync(process.env.FAKE_CLAUDE_LOG, `${JSON.stringify({ ...what, pid: process.pid })}\n`);
 const out = ev => process.stdout.write(`${JSON.stringify(ev)}\n`);
 const fullName = m => ({ opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-2' })[m] || m || 'claude-opus-5-5';
 const runsFast = m => !/sonnet|haiku/.test(m);

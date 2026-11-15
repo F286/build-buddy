@@ -82,6 +82,67 @@ test('the story the polisher is told: only what it hasn’t heard, with everythi
   assert.deepEqual(agents.storySaid(story, 3), { text: '', upTo: 3 });
 });
 
+test('a long story is told whole: the latest turns in full, the earlier ones in short - and what was too old to keep is said', () => {
+  const story = Array.from({ length: 11 }, (_, i) => ({ n: i + 5, kind: 'change', kid: `request ${i + 5}`, said: `answer ${i + 5}`, lead: `DONE: did ${i + 5}`, changes: [{ file: `parts/p${i + 5}.js`, kind: 'new', now: 3 }] }));
+  const all = agents.storySaid(story, 0);
+  assert.equal(all.upTo, 15);
+  for (let n = 5; n <= 15; n++) assert.ok(all.text.includes(`The kid said: "request ${n}"`) && all.text.includes(`parts/p${n}.js new`), `turn ${n}`);
+  // (Three of the eleven in short: no answers, no words of the lead's. Turns 1 to 4 were never kept.)
+  assert.ok(!all.text.includes('answer 7') && !all.text.includes('did 7') && all.text.includes('answer 8') && all.text.includes('did 8'));
+  assert.ok(all.text.includes('Turns before these are no longer kept') && all.text.includes('The earlier ones in short'));
+  const some = agents.storySaid(story, 9);
+  assert.ok(!some.text.includes('no longer kept') && !some.text.includes('in short') && some.text.includes('answer 10'));
+  // With the page put back whole, the files the lead changed say nothing any more.
+  assert.ok(!agents.storySaid(story, 13, { files: false }).text.includes('parts/p14.js'));
+});
+
+test('files put back: only what differs is written, each with the date it had', () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'buildbuddy-files-'));
+  fs.mkdirSync(path.join(folder, 'parts'));
+  const file = rel => path.join(folder, rel);
+  fs.writeFileSync(file('page.html'), 'page');
+  fs.writeFileSync(file('parts/truck.js'), 'truck');
+  const long = new Date(Date.now() - 60000);
+  for (const rel of ['page.html', 'parts/truck.js']) fs.utimesSync(file(rel), long, long);
+  const before = agents.snapshot(folder);
+  assert.deepEqual(Object.keys(before), ['page.html', 'parts/truck.js']); // (the dates are kept out of sight)
+  // A pass changes the part and adds another; then it's stopped.
+  fs.writeFileSync(file('parts/truck.js'), 'truck, polished');
+  fs.writeFileSync(file('parts/fire.js'), 'fire');
+  agents.restore(folder, before);
+  assert.deepEqual(agents.snapshot(folder), { 'page.html': 'page', 'parts/truck.js': 'truck' });
+  // To whoever read them before the pass, both look untouched: the same words, the same date.
+  for (const rel of ['page.html', 'parts/truck.js']) assert.ok(Math.abs(fs.statSync(file(rel)).mtimeMs - long.getTime()) < 2, rel);
+});
+
+test('how the files stand, for each of two agents that share them', () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'buildbuddy-sync-'));
+  fs.mkdirSync(path.join(folder, 'parts'));
+  const write = part => {
+    fs.writeFileSync(path.join(folder, 'page.html'), '<script>\n// @part truck\n</script>');
+    fs.writeFileSync(path.join(folder, 'parts', 'truck.js'), part);
+  };
+  const page = () => agents.assemble(folder).html; // (the page, as the files hold it now)
+  const [lead, polisher] = [{ dir: folder, files: null }, { dir: folder, files: null }];
+  write('one');
+  const one = page();
+  // New to the folder, then as it left it; the other's work reads as a change inside it.
+  assert.deepEqual([agents.syncState(lead, one), agents.syncState(lead, one), agents.syncState(polisher, one)], ['inside', '', 'inside']);
+  write('two'); // (the polisher's pass)
+  const two = page();
+  polisher.files = two;
+  assert.deepEqual([agents.syncState(lead, two), agents.syncState(polisher, two)], ['inside', '']);
+  // The lead's files get ahead of the page (a repair that wasn't taken): the polisher is handed the
+  // page whole - and the lead, for whom the page is still the one it knew, is told its parts are gone.
+  write('three');
+  assert.equal(agents.syncState(polisher, two), 'outside');
+  assert.ok(!fs.existsSync(path.join(folder, 'parts', 'truck.js')));
+  assert.deepEqual([agents.syncState(lead, two), agents.syncState(lead, two), agents.syncState(polisher, two)], ['whole', '', '']);
+  // One agent alone is never told that: the page changing outside its files is just that.
+  const alone = { dir: folder, files: two };
+  assert.deepEqual([agents.syncState(alone, two), agents.syncState(alone, 'another page'), agents.syncState(alone, 'another page')], ['', 'outside', '']);
+});
+
 test('the lead builds, the polisher polishes in a session of its own, and each is told what the other did', async () => {
   store.newProject();
   await kidSays('a monster truck');

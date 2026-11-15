@@ -219,6 +219,20 @@ export class Session {
     this.close(new Error('stopped'));
   }
 
+  // End it at once and for good - it isn't doing what it's told. Kept once its program is gone:
+  // from then on, nothing of its can still be writing files. (A few seconds at most.)
+  kill() {
+    this.gone ??= new Promise(resolve => {
+      if (this.child.exitCode !== null || this.child.signalCode !== null) return resolve();
+      this.child.once('close', resolve);
+      setTimeout(resolve, 3000);
+    });
+    try {
+      this.child.kill('SIGKILL');
+    } catch {}
+    return this.gone;
+  }
+
   close(err) {
     this.closed = true;
     clearTimeout(this.idle);
