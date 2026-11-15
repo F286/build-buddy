@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'buildbuddy-usage-'));
 process.env.KIDBUILD_DATA = dir;
 process.env.FAKE_CLAUDE_LOG = path.join(dir, 'fake.log');
-const { config, fastIn, fastEver, fastPhases, helperSpeed } = await import('./config.mjs');
+const { config, DEFAULTS, fastIn, fastEver, fastPhases, helperSpeed } = await import('./config.mjs');
 const usage = await import('./usage.mjs');
 const { Session } = await import('./solo.mjs');
 const { askRole, roleConfig, stopPrograms } = await import('./team.mjs');
@@ -42,6 +42,11 @@ test('a fast setting: one switch for everything, or one for each phase', () => {
   assert.deepEqual(fastPhases({ new: true, play: false }), { new: true, change: false, play: false });
   assert.equal(fastIn({ change: true }, 'change'), true);
   assert.deepEqual([fastEver(false), fastEver({ new: false, change: false, play: false }), fastEver({ play: true })], [false, false, true]);
+});
+
+test('by default: the main agent is fast for something new, and nothing else is', () => {
+  assert.deepEqual(fastPhases(DEFAULTS.claude.fast), { new: true, change: false, play: false });
+  assert.deepEqual(fastPhases(DEFAULTS.claude.fastHelpers), { new: false, change: false, play: false });
 });
 
 test('each role runs at its phase’s speed, by the work it was asked within', () => {

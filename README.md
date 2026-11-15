@@ -249,7 +249,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `buddyName` | `"Sparky"` | The robot's name. |
 | `backends` | `["claude", "agy", "codex"]` | Which AI to use, in order (`claude`, `agy`, `codex`, `command`). The first one installed leads: Claude by default, or Gemini (`agy`) if `claude` isn't installed. If it fails (offline, usage limit), the next takes over. Also in the panel as *AI brain*. |
 | `claude.model` / `claude.effort` | `"opus"` / `"low"` | Model and effort for Claude Code: `"opus"`, `"fable"`, `"sonnet"` or any model name Claude Code takes. Opus makes richer, more varied creations; `"sonnet"` is a little faster for big new ones. `"fable"` (Claude Fable, the most capable) leads fuller creations but the kid waits longer and it uses more of your plan: in one test of the agent way, the same garden took 103 s with Fable leading against 61 s with Opus. Also in the panel as *Claude model*. |
-| `claude.fast` | `false` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for the **main agent**: the lead of a team, or the one AI that builds alone (the classic way, solo mode) - the same model, answering much sooner. Most of what the kid waits for is the lead's own writing (the page, the jobs it hands out, its check), so this is the switch that saves the most. `true` or `false` for everything, or one switch for each phase - what the kid is doing meanwhile: `{ "new": true, "change": true, "play": false }` is fast while they wait for something new and for a change, and normal speed for the polishing that goes on while they play, which nobody waits for. The lead is one program that remembers the creation, so Build Buddy sets its speed before each turn rather than starting another. On a Claude subscription fast mode is paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. In the panel as the *Main agent* column of *Claude fast mode*; what it cost is under [*What it cost*](#what-it-cost). |
+| `claude.fast` | `{ "new": true, "change": false, "play": false }` | Claude's [fast mode](https://code.claude.com/docs/en/fast-mode) for the **main agent**: the lead of a team, or the one AI that builds alone (the classic way, solo mode) - the same model, answering much sooner. Most of what the kid waits for is the lead's own writing (the page, the jobs it hands out, its check), so this is the switch that saves the most. `true` or `false` for everything, or one switch for each phase - what the kid is doing meanwhile: `{ "new": true, "change": true, "play": false }` is fast while they wait for something new and for a change, and normal speed for the polishing that goes on while they play, which nobody waits for. The lead is one program that remembers the creation, so Build Buddy sets its speed before each turn rather than starting another. On a Claude subscription fast mode is paid from extra usage credits; with none left it quietly runs at normal speed, and the Ctrl+Shift+P panel says why. By default it's on for something new only - the longest wait, at the moment fast mode is cheapest ([why](#what-it-cost)); `false` turns it off. In the panel as the *Main agent* column of *Claude fast mode*; what it cost is under [*What it cost*](#what-it-cost). |
 | `claude.fastHelpers` | `false` | Fast mode for the **builders** - the helpers that write a team's parts - on a switch of its own. Fast mode runs on Opus and Fable only (on Sonnet and Haiku, Claude Code leaves it off), so fast helpers write with Opus in place of Sonnet, which takes more extra usage credits per part. With [direct helpers](#with-direct-helpers-new) and in team mode's usual way, the helpers are programs of their own and can be fast whatever the main agent is. Claude Code's subagents (the agent way's default) run inside the lead and take its speed, so they're fast only in a phase where `claude.fast` is on too - with the lead at normal speed they stay on Sonnet. Set for everything or phase by phase, like `claude.fast`: `{ "new": false, "change": true, "play": false }` keeps Sonnet for something new and has Opus in fast mode write the parts of a change. In the panel as the *Builders* column of *Claude fast mode*. |
 | `team.enabled` | `true` | [Team mode](#team-mode): a lead and a team of Claude helpers build each creation together. `false` is the classic way: one AI writes it all. Also in the panel as *How Claude builds*, and for one run with `./start.sh --classic` or `--team` (which puts Claude first for that run). Used when Claude leads (the first installed brain in `backends`). |
 | `team.helpers` | `6` | The most helpers working on one creation at a time (1 to 8). |
@@ -305,6 +305,21 @@ counts against your plan's limits. With an API key, all of it is the bill. A pro
 before it answers (a second helper that lost the race) reports no price: its tokens are counted
 and the panel says how many there were. Everything is kept in `data/usage.jsonl`, one line for
 each request and each program's turn. Gemini and ChatGPT report no prices, so they aren't in it.
+
+**The default** is fast mode for the main agent while the kid waits for something new, and normal
+speed for everything else. Going by the timings above and Claude Code's prices (Opus in fast mode
+costs 1.6 times its usual price, and on a subscription all of a fast turn comes from extra usage
+credits) - estimates, not yet measured with real builds:
+
+| Fast mode for | Saves the kid | Costs about | By default |
+|---|---|---|---|
+| the main agent, something new | 20 to 25 s of about 70 | 30 to 50¢ a creation: the lead has just started, so there's next to nothing to read again, and it writes a few thousand tokens | on |
+| the main agent, a change | 3 s of a small change, 15 to 20 s of a big one | 45 to 70¢ a change: fast and normal speed keep separate caches, so everything the polishing added since is read again at fast prices | off |
+| the builders | about 5 s | 50 to 60¢ a creation: Sonnet can't run fast mode, so Opus writes the parts - two thirds of a creation's tokens | off |
+| the polishing | nothing: they're playing | the most: it's the biggest share of the tokens | off |
+
+*What it cost* shows what each of these really comes to for your kids: turn a switch on for a
+session and compare.
 
 ### Gemini through Antigravity
 
@@ -620,12 +635,12 @@ Three things got first versions there, each found by reading what the judges mar
 It uses about as much of a Claude plan as the subagents do: a town, its small change and its big
 change came to about 15% more, going by the cost Claude Code itself reports for each program.
 
-Three things tried along the way were left out. Haiku as the helpers was quicker and its parts
+Two things tried along the way were left out. Haiku as the helpers was quicker and its parts
 were plainly weaker. Showing the creation before the lead's check would save about ten seconds
-and show the kid the truck that never crushes the cars. And Claude's fast mode would cut the
-lead's writing - the largest share of the wait that's left - but it's paid from extra usage
-credits, so it stays a choice (*Claude fast mode* in the panel: the main agent and the helpers,
-each for something new, for changes and for the polishing).
+and show the kid the truck that never crushes the cars. Claude's fast mode cuts the lead's
+writing - the largest share of the wait that's left: it's on for something new by default, and a
+choice for the rest, since it's paid from extra usage credits (*Claude fast mode* in the panel:
+the main agent and the helpers, each for something new, for changes and for the polishing).
 
 **API keys instead of subscriptions:** the `claude` and `codex` CLIs accept API keys too
 (`ANTHROPIC_API_KEY`, or `printenv OPENAI_API_KEY | codex login --with-api-key`). Nothing in Build

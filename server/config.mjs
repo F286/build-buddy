@@ -36,7 +36,21 @@ export const DEFAULTS = {
   // waits for a change, and plays while it's polished: { new: true, change: true, play: false }
   // (fastIn, below). On a Claude subscription fast mode is paid from extra usage credits; with none
   // left it runs at normal speed. What each of them cost is kept in data/usage.jsonl (usage.mjs).
-  claude: { bin: '', model: 'opus', effort: 'low', fast: false, fastHelpers: false },
+  //
+  // By default only the main agent is fast, and only for something new. That's the longest wait
+  // (about 70 s the agent way, most of it the lead's own writing: fast mode takes about a third
+  // off), and the cheapest moment to be fast: the lead has just started, so there's next to nothing
+  // to read again, and it writes a few thousand tokens. The rest isn't worth it by default:
+  //   - a change: the lead is one long conversation, and fast and normal speed each keep a cache of
+  //     their own - so a fast change reads at fast prices everything the polishing since added
+  //     (tens of thousands of tokens), to take 3 s off a small change (17 s off a big one);
+  //   - the helpers: they're Sonnet, which fast mode doesn't run on, so they'd move to Opus and
+  //     write two thirds of a creation's tokens at the highest price, for about 5 s;
+  //   - the polishing: the biggest share of the tokens, and nobody waits for it.
+  // (Estimates from the timings in the README and Claude Code's prices - Opus in fast mode is 1.6
+  // times its usual price, all of it from extra usage credits on a subscription. *What it cost* in
+  // the grown-ups' panel shows what each of these really came to.)
+  claude: { bin: '', model: 'opus', effort: 'low', fast: { new: true, change: false, play: false }, fastHelpers: false },
   // Team mode (Claude only, see server/team.mjs): instead of one AI writing the whole page, a
   // lead plans it and up to `helpers` helpers write its pieces at the same time. In blind tests
   // its creations beat the classic way's (11 of 12) and arrived much sooner (about 27 s instead of
