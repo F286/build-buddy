@@ -287,7 +287,9 @@ export function restore(dir, files) {
     if (now[rel] === text) continue;
     fs.writeFileSync(path.join(dir, rel), text);
     const when = files[WRITTEN]?.[rel];
-    if (when) fs.utimesSync(path.join(dir, rel), new Date(), new Date(when));
+    try {
+      if (when) fs.utimesSync(path.join(dir, rel), new Date(), new Date(when));
+    } catch {} // (a disk that won't take a date: the file is back all the same)
   }
 }
 
