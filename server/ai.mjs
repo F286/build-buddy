@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { config, DATA, ROOT } from './config.mjs';
+import { config, DATA, ROOT, fastIn } from './config.mjs';
+import * as usage from './usage.mjs';
 import { findBin, run, installed, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import * as team from './team.mjs';
@@ -217,7 +218,10 @@ const backends = {
     if (effort || c.effort) args.push('--effort', effort || c.effort);
     // Fast mode: the same model, answering much sooner. On a subscription it's billed as extra
     // usage; without extra usage credits Claude says why and answers at normal speed instead.
-    const wantFast = fast ?? c.fast;
+    // (Set phase by phase - what the kid is doing meanwhile, which the work under way knows.)
+    const what = { phase: usage.PHASE_UNKNOWN, ...usage.now() };
+    const wantFast = fast ?? fastIn(c.fast, what.phase);
+    const started = Date.now();
     if (wantFast) args.push('--settings', JSON.stringify({ fastMode: true }));
 
     let buf = '';
@@ -258,6 +262,8 @@ const backends = {
     });
     handle(buf);
     if (!result) throw new Error('Claude returned no result');
+    // (What it used: the one AI that builds alone is the main agent; the overwatch says who it is.)
+    usage.used({ who: 'main', role: 'classic', model: Object.keys(result.modelUsage || {}).join(' + ') || model || c.model, fast: result.usage?.speed === 'fast', tokens: usage.tokensOf(result), cost: result.total_cost_usd ?? null, ms: Date.now() - started }, what);
     if (result.is_error) throw new Error(result.result || result.subtype || 'Claude error');
     if (wantFast) onSpeed(result.usage?.speed || 'unknown', result.usage?.speed === 'fast' ? '' : fastNote);
     return result.result || streamed;
@@ -938,7 +944,25 @@ async function classic({ page, history, text, alt, fix }, emit, state, skip = nu
   return { ...r, html: newHtml, edited, backend: reply.backend };
 }
 
-export async function build({ text, alt, fix, last = false, peeks = false }, emit) {
+// What the kid asked for is built - as a request of its phase (something new on a blank screen, or
+// a change to what's there), which everything started along the way belongs to: its speed is set
+// by that phase, and what it costs is kept with the request (usage.mjs).
+export async function build(asked, emit) {
+  if (busy) throw new Error('busy');
+  const p = store.currentProject();
+  const ask = usage.asked({ phase: usage.waitingFor(store.html(p)), text: asked.text || '(fixing a crash)', project: p.id });
+  const started = Date.now();
+  let backend = '';
+  let ok = false;
+  try {
+    await usage.during({ phase: ask.phase, ask: ask.id }, () => buildIt(asked, ev => (ev.type === 'done' && (backend = ev.backend || ''), emit(ev))));
+    ok = true;
+  } finally {
+    usage.shown(ask, { ms: Date.now() - started, ok, title: store.currentProject().title || '', backend });
+  }
+}
+
+async function buildIt({ text, alt, fix, last = false, peeks = false }, emit) {
   if (busy) throw new Error('busy');
   busy = true;
   const state = { said: '' };

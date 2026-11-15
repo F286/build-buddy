@@ -16,7 +16,7 @@
 // the overwatch), it's handed the page as it is.
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.mjs';
+import { config, helperSpeed, fastIn, fastEver } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
 import { Session } from './solo.mjs';
@@ -43,16 +43,32 @@ function helperAlias(want) {
   return ALIASES.find(a => v.includes(a)) || 'sonnet';
 }
 
-function lead() {
+export function lead() {
   const c = config();
   const r = c.team?.agentLead || {};
   const model = r.model || c.claude.model || '';
+  // Fast mode, phase by phase (what the kid is doing meanwhile: config.mjs): the lead's own setting,
+  // or the main agent's.
+  const fast = r.fast ?? c.claude.fast;
+  // Its helpers are Claude Code subagents, which have no speed of their own: they run in the lead's
+  // session and take its fast mode, wherever their model can run it (Opus or Fable). So they can
+  // only be fast (claude.fastHelpers) in a phase where the lead is - then they write with the model
+  // helperSpeed gives them, Opus in place of Sonnet. With the lead at normal speed they stay as they
+  // are: Opus at its usual speed would write slower than Sonnet. (Direct helpers - crew.mjs - are
+  // programs of their own, so their speed is set apart from the lead's.)
+  const helper = helperAlias(c.team?.agentHelper?.model);
+  const helperModelIn = phase => {
+    const speed = helperSpeed(c.team?.agentHelper, helper, phase);
+    return fastIn(fast, phase) && speed.fast ? helperAlias(speed.model) : helper;
+  };
   return {
     model,
     effort: r.effort || c.claude.effort || '',
-    fast: r.fast ?? Boolean(c.claude.fast),
+    fast,
+    fastIn: phase => fastIn(fast, phase),
     args: Array.isArray(r.args) ? r.args.map(String) : [],
-    helperModel: helperAlias(c.team?.agentHelper?.model),
+    helperModel: helper, // (the one its instructions name)
+    helperModelIn, // (and the one a phase's turns are told to use instead, when it's another)
     // firstModel: who leads the turn that makes something new while the kid waits (the main model
     // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
     // model set: without one there'd be nothing to switch back to.
@@ -230,9 +246,17 @@ function sessionArgs() {
   const args = ['-p', '--safe-mode', '--tools', 'Agent,Read,Write,Edit', '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', '--strict-mcp-config', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt', leadSystem()];
   if (r.model) args.push('--model', r.model);
   if (r.effort) args.push('--effort', r.effort);
-  if (r.fast) args.push('--settings', JSON.stringify({ fastMode: true }));
+  // (Started in fast mode if any phase is to be fast: each turn then runs at its own phase's speed.)
+  if (fastEver(r.fast)) args.push('--settings', JSON.stringify({ fastMode: true }));
   args.push(...r.args);
   return args;
+}
+
+// A phase whose helpers are to be fast: its turns say which model to start them with.
+function helperNote(phase) {
+  const r = lead();
+  const model = r.helperModelIn(phase);
+  return model === r.helperModel ? '' : `(For this turn, start your helpers with model "${model}" in place of "${r.helperModel}".)`;
 }
 
 function sessionFor(projectId, { renew = false } = {}) {
@@ -243,7 +267,7 @@ function sessionFor(projectId, { renew = false } = {}) {
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
   // (Helpers always work in the foreground: the lead's turn ends only once they're done.)
-  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
+  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' }, fastFor: phase => lead().fastIn(phase), turnNote: helperNote, helperModel: phase => lead().helperModelIn(phase) });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
   return session;

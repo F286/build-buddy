@@ -16,7 +16,7 @@
 // the overwatch), it's handed the page as it is.
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.mjs';
+import { config, fastIn, fastEver } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, applyLineEdits, field, log, isBusy, WORK_DIR, AgySession, askAgy, agyHelper, agyVoice, keepAgyWarm } from './ai.mjs';
 import { Session } from './solo.mjs';
@@ -61,7 +61,7 @@ function lead() {
   return {
     model,
     effort: r.effort || c.claude.effort || '',
-    fast: r.fast ?? Boolean(c.claude.fast),
+    fast: r.fast ?? c.claude.fast, // (fast mode, phase by phase: config.mjs)
     args: Array.isArray(r.args) ? r.args.map(String) : [],
     helperModel: helperAlias(c.team?.agentHelper?.model),
     // firstModel: who leads the turn that makes something new while the kid waits (the main model
@@ -382,7 +382,8 @@ function sessionArgs() {
   const args = ['-p', '--safe-mode', '--tools', 'Agent,Read,Write,Edit', '--permission-mode', 'acceptEdits', '--permission-prompts', 'none', '--strict-mcp-config', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt', leadSystem()];
   if (r.model) args.push('--model', r.model);
   if (r.effort) args.push('--effort', r.effort);
-  if (r.fast) args.push('--settings', JSON.stringify({ fastMode: true }));
+  // (Started in fast mode if any phase is to be fast: each turn then runs at its own phase's speed.)
+  if (fastEver(r.fast)) args.push('--settings', JSON.stringify({ fastMode: true }));
   args.push(...r.args);
   return args;
 }
@@ -403,7 +404,7 @@ function sessionFor(projectId, { renew = false } = {}) {
   // (Helpers always work in the foreground: the lead's turn ends only once they're done.)
   session = onAgy()
     ? ready || new AgySession(projectId, { system: leadSystem(), model: lead().model, label: 'agents' })
-    : new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' } });
+    : new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' }, fastFor: phase => fastIn(lead().fast, phase) });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
   session.shown = null; // the page as it last saw it, every line (its own edits in): no need to show it again

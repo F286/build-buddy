@@ -27,9 +27,30 @@ export const DEFAULTS = {
   backends: ['claude', 'agy', 'codex'],
   // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
   // richer pages in about the same time (25 s vs 21 s). Higher effort roughly doubles the wait.
-  // fast: Claude's fast mode for the builder - the same model, answering much sooner. On a Claude
-  // subscription it's paid from extra usage credits; with none left it runs at normal speed.
-  claude: { bin: '', model: 'opus', effort: 'low', fast: false },
+  // fast: Claude's fast mode for the main agent - the one AI of the classic way and of solo mode,
+  // the lead of a team (and team mode's fixer, checker, polisher and tester): the same model,
+  // answering much sooner. fastHelpers: fast mode for the helpers that write a team's parts (the
+  // builders), on a switch of its own. Fast mode runs on Opus and Fable only - on Sonnet and Haiku,
+  // Claude Code leaves it off - so fast helpers write with Opus instead (helperSpeed, below).
+  // Each is true or false for everything, or set apart for when the kid waits for something new,
+  // waits for a change, and plays while it's polished: { new: true, change: true, play: false }
+  // (fastIn, below). On a Claude subscription fast mode is paid from extra usage credits; with none
+  // left it runs at normal speed. What each of them cost is kept in data/usage.jsonl (usage.mjs).
+  //
+  // By default only the main agent is fast, and only for something new. That's the longest wait
+  // (about 70 s the agent way, most of it the lead's own writing: fast mode takes about a third
+  // off), and the cheapest moment to be fast: the lead has just started, so there's next to nothing
+  // to read again, and it writes a few thousand tokens. The rest isn't worth it by default:
+  //   - a change: the lead is one long conversation, and fast and normal speed each keep a cache of
+  //     their own - so a fast change reads at fast prices everything the polishing since added
+  //     (tens of thousands of tokens), to take 3 s off a small change (17 s off a big one);
+  //   - the helpers: they're Sonnet, which fast mode doesn't run on, so they'd move to Opus and
+  //     write two thirds of a creation's tokens at the highest price, for about 5 s;
+  //   - the polishing: the biggest share of the tokens, and nobody waits for it.
+  // (Estimates from the timings in the README and Claude Code's prices - Opus in fast mode is 1.6
+  // times its usual price, all of it from extra usage credits on a subscription. *What it cost* in
+  // the grown-ups' panel shows what each of these really came to.)
+  claude: { bin: '', model: 'opus', effort: 'low', fast: { new: true, change: false, play: false }, fastHelpers: false },
   // Team mode (Claude only, see server/team.mjs): instead of one AI writing the whole page, a
   // lead plans it and up to `helpers` helpers write its pieces at the same time. In blind tests
   // its creations beat the classic way's (11 of 12) and arrived much sooner (about 27 s instead of
@@ -37,10 +58,11 @@ export const DEFAULTS = {
   // enabled: false builds the classic way (one AI writes it all).
   // Each role is its own Claude Code run: model, effort, fast (fast mode), advisor (a stronger
   // model it can ask, e.g. "opus" for a sonnet helper) and args (any other `claude` options).
-  // Left empty, a role uses the Claude settings above. By default the voice, which only answers
-  // out loud, is a quick small model; helpers (small pieces, from a detailed plan) and the first
-  // look use Sonnet, which writes about 40% faster; the checker, which works after the creation
-  // is already on screen, takes more care (medium effort).
+  // Left empty, a role uses the Claude settings above (for speed: claude.fast, or for the helper,
+  // claude.fastHelpers). By default the voice, which only answers out loud, is a quick small
+  // model; helpers (small pieces, from a detailed plan) and the first look use Sonnet, which
+  // writes about 40% faster; the checker, which works after the creation is already on screen,
+  // takes more care (medium effort).
   // warm: start the team's programs while the kid is still talking.
   // check: right after a creation appears, the checker takes a careful look (is everything they
   // asked for there, do the pieces fit, do the controls work, can it be played, is it smooth) and
@@ -238,6 +260,29 @@ if (process.env.KIDBUILD_PORT) current.port = Number(process.env.KIDBUILD_PORT);
 
 export function config() {
   return current;
+}
+
+// A fast-mode setting (claude.fast, claude.fastHelpers, a role's own `fast`) is true or false for
+// everything, or says it apart for each phase - what the kid is doing while Claude works:
+//   new     waiting for something new (the screen was blank)
+//   change  waiting for a change to what's there (or for a crash to be fixed)
+//   play    playing, while the creation is grown, checked and polished: nobody waits for that
+// like { "new": true, "change": true, "play": false }.
+export const PHASES = ['new', 'change', 'play'];
+export const fastIn = (setting, phase) => Boolean(isObj(setting) ? setting[phase] : setting);
+export const fastEver = setting => PHASES.some(p => fastIn(setting, p));
+export const fastPhases = setting => Object.fromEntries(PHASES.map(p => [p, fastIn(setting, p)]));
+
+// How a helper (one of the builders: team.helper, team.agentHelper) runs for speed in a phase: in
+// fast mode or not, and with which model. Its own `fast`, when it has one, is passed on as it's
+// written. Otherwise claude.fastHelpers decides - and since Claude Code leaves fast mode off on
+// Sonnet and Haiku, a fast helper set to one of those writes with Opus instead (which in fast mode
+// writes sooner than Sonnet does at its usual speed).
+export const runsFastMode = model => !/sonnet|haiku/i.test(String(model || ''));
+export function helperSpeed(own, model = '', phase = 'change') {
+  if (own?.fast != null) return { fast: fastIn(own.fast, phase), model };
+  if (!fastIn(current.claude.fastHelpers, phase)) return { fast: false, model };
+  return { fast: true, model: runsFastMode(model) ? model : 'opus' };
 }
 
 // config.json holds only the user's own overrides; merge the patch into it.

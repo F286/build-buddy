@@ -24,7 +24,7 @@
 // screenshots of it and grows and polishes it in the same session; the kid's changes go to it too.
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.mjs';
+import { config, fastIn, fastEver } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
 import { Session } from './solo.mjs';
@@ -48,7 +48,9 @@ function lead() {
   return {
     model,
     effort: r.effort || c.claude.effort || '',
-    fast: r.fast ?? Boolean(c.claude.fast),
+    // Fast mode, phase by phase (what the kid is doing meanwhile: config.mjs): its own setting, or
+    // the main agent's. (Its helpers are programs of their own, with their own: team.mjs roleConfig.)
+    fast: r.fast ?? c.claude.fast,
     args: Array.isArray(r.args) ? r.args.map(String) : [],
     // firstModel: who leads the turn that makes something new while the kid waits (the main model
     // takes over for everything else). Only with a main model set.
@@ -275,7 +277,8 @@ function sessionArgs() {
   const args = ['-p', '--safe-mode', '--tools', '', '--strict-mcp-config', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--system-prompt', leadSystem()];
   if (r.model) args.push('--model', r.model);
   if (r.effort) args.push('--effort', r.effort);
-  if (r.fast) args.push('--settings', JSON.stringify({ fastMode: true }));
+  // (Started in fast mode if any phase is to be fast: each turn then runs at its own phase's speed.)
+  if (fastEver(r.fast)) args.push('--settings', JSON.stringify({ fastMode: true }));
   args.push(...r.args);
   return args;
 }
@@ -289,7 +292,7 @@ function sessionFor(projectId, { renew = false } = {}) {
   s?.end();
   const dir = folderOf(projectId);
   fs.mkdirSync(path.join(dir, 'parts'), { recursive: true });
-  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model });
+  session = new Session(projectId, { args: sessionArgs(), cwd: dir, label: 'agents', model: lead().model, fastFor: phase => fastIn(lead().fast, phase) });
   session.dir = dir;
   session.files = null; // the page its files held when it last worked on them (null: never)
   return session;

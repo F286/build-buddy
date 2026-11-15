@@ -24,7 +24,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { spawn, execFile } from 'node:child_process';
-import { config } from './config.mjs';
+import { config, helperSpeed, fastIn, runsFastMode } from './config.mjs';
+import * as usage from './usage.mjs';
 import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
@@ -35,16 +36,22 @@ export function enabled() {
   return Boolean(c.team?.enabled) && leadBrain() === 'claude';
 }
 
-// A role's settings. The lead, helpers and fixer default to the Claude model, effort and speed
-// chosen for the classic way (config.claude, also in the grown-ups' panel).
-function roleConfig(name) {
+// A role's settings. The lead, helpers and fixer default to the Claude model and effort chosen for
+// the classic way (config.claude, also in the grown-ups' panel). For speed, the helpers - who write
+// the parts: team mode's, and the agent way's direct ones (crew.mjs) - have a switch of their own
+// (claude.fastHelpers: helperSpeed); everyone else takes the main agent's (claude.fast). Both are
+// set phase by phase - what the kid is doing meanwhile, which the work under way knows (usage.mjs).
+const HELPERS = ['helper', 'agentHelper'];
+export function roleConfig(name, phase = usage.now().phase || usage.PHASE_UNKNOWN) {
   const c = config();
   const r = c.team?.[name] || {};
   const inherit = name !== 'voice';
+  const model = r.model || (inherit ? c.claude.model : '') || '';
+  const speed = HELPERS.includes(name) ? helperSpeed(r, model, phase) : { model, fast: fastIn(r.fast ?? (inherit ? c.claude.fast : false), phase) };
   return {
-    model: r.model || (inherit ? c.claude.model : '') || '',
+    model: speed.model,
     effort: r.effort || (inherit ? c.claude.effort : '') || '',
-    fast: r.fast ?? (inherit ? Boolean(c.claude.fast) : false),
+    fast: speed.fast,
     advisor: r.advisor || '',
     args: Array.isArray(r.args) ? r.args.map(String) : [],
   };
@@ -469,6 +476,11 @@ export const warmVoice = () => keepWarm('voice', voiceSystem(), 1);
 function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stallSec, tally, tools = '' }) {
   const args = claudeArgs(name, system, tools);
   const r = roleConfig(name);
+  // What it's for (the phase, the kid's request), for what it costs - and for what its output sets off.
+  // (Who it counts as goes by whose speed it runs at: the helpers', or else the main agent's.)
+  const what = { phase: usage.PHASE_UNKNOWN, ...usage.now() };
+  const who = name === 'voice' ? 'voice' : HELPERS.includes(name) ? 'builders' : 'main';
+  const askedAt = Date.now();
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new Error('stopped'));
     let proc;
@@ -486,7 +498,18 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stal
     let speed = '';
     let tokens = 0;
     let messageTokens = 0;
+    let read = null; // what its first message read: { in, cr, cw }
+    let counted = false;
     let quietSince = Date.now();
+    // What it used: Claude Code's own count and price, reported when the program is done - or, for
+    // one stopped before that (a second helper that lost the race, a lead that wasn't the first to
+    // plan), the tokens seen so far, with no price.
+    const count = ev => {
+      if (counted) return;
+      counted = true;
+      const done = ev ? usage.tokensOf(ev) : { ...read, out: tokens + messageTokens };
+      usage.used({ who, role: name, model: Object.keys(ev?.modelUsage || {}).join(' + ') || r.model, fast: (ev?.usage?.speed || speed) === 'fast', tokens: done, cost: ev ? ev.total_cost_usd ?? null : null, ms: Date.now() - askedAt }, what);
+    };
     const finish = err => {
       if (finished) return;
       finished = true;
@@ -494,13 +517,15 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stal
       clearInterval(stallTimer);
       signal?.removeEventListener('abort', stop);
       if (err) {
+        count(null);
         proc.child.kill('SIGKILL');
         return reject(err);
       }
       handle(buf);
       if (!result) return reject(new Error(`claude ${name} gave no answer${proc.closed?.code ? ` (exit ${proc.closed.code}: ${proc.err.trim().slice(-300)})` : ''}`));
       if (result.is_error) return reject(new Error(result.result || result.subtype || `claude ${name} error`));
-      if (r.fast) noteSpeed(result.usage?.speed || 'unknown', result.usage?.speed === 'fast' ? '' : fastNote);
+      // (Only where fast mode could have run: on Sonnet or Haiku, normal speed says nothing about it.)
+      if (r.fast && runsFastMode(r.model)) noteSpeed(result.usage?.speed || 'unknown', result.usage?.speed === 'fast' ? '' : fastNote);
       if (tally) tally.tokens += result.usage?.output_tokens || 0;
       resolve({ text: streamed || result.result, usage: result.usage });
     };
@@ -524,6 +549,8 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stal
         onText(d.text);
       } else if (se?.type === 'message_start') {
         speed = se.message?.usage?.speed || speed;
+        const u = se.message?.usage;
+        read ??= { in: u?.input_tokens || 0, cr: u?.cache_read_input_tokens || 0, cw: u?.cache_creation_input_tokens || 0 };
         messageTokens = 0;
       } else if (se?.type === 'message_delta') {
         stopReason = se.delta?.stop_reason || '';
@@ -539,6 +566,7 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stal
       } else if (ev.type === 'system' && ev.subtype === 'notification' && /fast/i.test(ev.key || '')) {
         fastNote = ev.text || ev.key;
       } else if (ev.type === 'result') {
+        count(ev); // (it may come a moment after the reply was used: the program is left to report it)
         result = ev;
         finish();
       }
@@ -555,7 +583,8 @@ function ask(name, { system, prompt, onText = () => {}, signal, timeoutSec, stal
     // (Not with an advisor: asking it pauses the reply.)
     const stallTimer = stallSec && !r.advisor ? setInterval(() => streamed && Date.now() - quietSince > stallSec * 1000 && finish(new Error(`claude ${name} stalled`)), 1000) : null;
     signal?.addEventListener('abort', stop);
-    proc.onData = onData;
+    // (A program started early has its output arrive outside this work: what it sets off belongs to it.)
+    proc.onData = chunk => usage.within(what, () => onData(chunk));
     proc.early.splice(0).forEach(onData);
     proc.onClose = () => finish(proc.closed?.error);
     if (proc.closed) return finish(proc.closed.error);

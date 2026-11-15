@@ -138,14 +138,23 @@
     <label>How Claude builds (when Claude leads)
       <select name="building"><option value="agents">A team led by one AI that remembers it - recommended</option><option value="direct">The same team with direct helpers - quicker (new)</option><option value="team">A team of AIs at once (simpler creations)</option><option value="solo">One AI that remembers it and keeps improving it</option><option value="">One AI writes it all (classic)</option></select>
     </label>
-    <div class="row">
-      <label>Claude model
-        <select name="claudeModel"><option value="opus">Opus - recommended</option><option value="fable">Fable - most capable, slower</option><option value="sonnet">Sonnet - a little faster</option></select>
-      </label>
-      <label>Claude speed
-        <select name="claudeFast"><option value="">Normal</option><option value="fast">Fast (extra usage)</option></select>
-      </label>
-    </div>
+    <label>Claude model
+      <select name="claudeModel"><option value="opus">Opus - recommended</option><option value="fable">Fable - most capable, slower</option><option value="sonnet">Sonnet - a little faster</option></select>
+    </label>
+    <!-- Claude's fast mode: for the main agent (the lead of a team, or the one AI that builds alone)
+         and for the builders (the helpers that write a team's parts), each switched on apart for
+         what the kid is doing meanwhile - waiting for something new, waiting for a change, playing. -->
+    <table class="speeds">
+      <thead>
+        <tr><th>Claude fast mode <small>paid from extra usage</small></th><th>Main agent</th><th>Builders <small>on Opus</small></th></tr>
+      </thead>
+      <tbody>
+        <tr><th>Something new <small>the first build, while they wait</small></th><td><input type="checkbox" name="fastMainNew" aria-label="Fast main agent for something new"></td><td><input type="checkbox" name="fastHelpersNew" aria-label="Fast builders for something new"></td></tr>
+        <tr><th>Changes <small>what they ask for next, while they wait</small></th><td><input type="checkbox" name="fastMainChange" aria-label="Fast main agent for changes"></td><td><input type="checkbox" name="fastHelpersChange" aria-label="Fast builders for changes"></td></tr>
+        <tr><th>Polishing <small>while they play: nobody waits</small></th><td><input type="checkbox" name="fastMainPlay" aria-label="Fast main agent for polishing"></td><td><input type="checkbox" name="fastHelpersPlay" aria-label="Fast builders for polishing"></td></tr>
+      </tbody>
+    </table>
+    <p id="fastHint" class="hint" hidden></p>
     <div class="row">
       <label>ChatGPT model <input name="codexModel" placeholder="(Codex default)"></label>
       <label>Gemini model <input name="agyModel" placeholder="(agy default)"></label>
@@ -172,10 +181,27 @@
     <div class="buttons">
       <button type="submit" class="primary">Save</button>
       <button type="button" id="parentClose">Close</button>
+      <button type="button" id="usageOpen">What it cost</button>
       <button type="button" id="quitBtn" class="danger">Quit app</button>
     </div>
     <p class="hint">Ctrl+Shift+P opens this panel. Press Enter in the app to type instead of talk.</p>
   </form>
+</section>
+
+<!-- What Claude's work cost, a day at a time (kids play about once a day), opened from the
+     grown-ups' panel: each phase by who did it, then each thing the kid asked for. -->
+<section id="usage" class="overlay" hidden>
+  <div class="panel usage">
+    <h1>What it cost</h1>
+    <label>Play session
+      <select id="usageDay"></select>
+    </label>
+    <div id="usageBody"></div>
+    <p class="hint">Prices are Claude Code's own estimates at API rates. On a Claude subscription only the fast part (⚡) is paid for, from extra usage credits; the rest counts against your plan's limits. With an API key, all of it is the bill.</p>
+    <div class="buttons">
+      <button type="button" id="usageBack" class="primary">Back to settings</button>
+    </div>
+  </div>
 </section>
 
 <form id="typeBox" hidden>
