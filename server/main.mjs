@@ -66,7 +66,8 @@ function publicConfig() {
     backends: brainsAsSet(), // (as set: the panel shows them in that order)
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
-    claudeFast: Boolean(c.claude.fast),
+    claudeFast: Boolean(c.claude.fast), // (fast mode for the main agent)
+    claudeFastHelpers: Boolean(c.claude.fastHelpers), // (and for the helpers that write a team's parts)
     team: Boolean(c.team.enabled),
     solo: Boolean(c.solo?.enabled),
     agents: Boolean(c.team.agents),
@@ -278,6 +279,7 @@ const routes = {
     if (Array.isArray(b.backends)) patch.backends = b.backends.filter(n => ai.backendNames.includes(n));
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
     if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
+    if (typeof b.claudeFastHelpers === 'boolean') patch.claude = { ...patch.claude, fastHelpers: b.claudeFastHelpers };
     if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
     if (typeof b.agents === 'boolean') patch.team = { ...patch.team, agents: b.agents };
     if (['direct', 'subagents'].includes(b.agentHelpers)) patch.team = { ...patch.team, agentHelpers: b.agentHelpers };

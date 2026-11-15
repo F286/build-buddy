@@ -16,7 +16,7 @@
 // the overwatch), it's handed the page as it is.
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.mjs';
+import { config, helperSpeed } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, field, log, isBusy, WORK_DIR } from './ai.mjs';
 import { Session } from './solo.mjs';
@@ -43,16 +43,25 @@ function helperAlias(want) {
   return ALIASES.find(a => v.includes(a)) || 'sonnet';
 }
 
-function lead() {
+export function lead() {
   const c = config();
   const r = c.team?.agentLead || {};
   const model = r.model || c.claude.model || '';
+  const fast = r.fast ?? Boolean(c.claude.fast);
+  // Its helpers are Claude Code subagents, which have no speed of their own: they run in the lead's
+  // session and take its fast mode, wherever their model can run it (Opus or Fable). So they can
+  // only be fast (claude.fastHelpers) with a fast lead - then they write with the model helperSpeed
+  // gives them, Opus in place of Sonnet. With a lead at normal speed they stay as they are: Opus at
+  // its usual speed would write slower than Sonnet. (Direct helpers - crew.mjs - are programs of
+  // their own, so their speed is set apart from the lead's.)
+  const helper = helperAlias(c.team?.agentHelper?.model);
+  const speed = helperSpeed(c.team?.agentHelper, helper);
   return {
     model,
     effort: r.effort || c.claude.effort || '',
-    fast: r.fast ?? Boolean(c.claude.fast),
+    fast,
     args: Array.isArray(r.args) ? r.args.map(String) : [],
-    helperModel: helperAlias(c.team?.agentHelper?.model),
+    helperModel: fast && speed.fast ? helperAlias(speed.model) : helper,
     // firstModel: who leads the turn that makes something new while the kid waits (the main model
     // takes over for everything else - its passes, the kid's changes, repairs). Only with a main
     // model set: without one there'd be nothing to switch back to.

@@ -27,9 +27,14 @@ export const DEFAULTS = {
   backends: ['claude', 'agy', 'codex'],
   // Opus at low effort: in tests it answered out loud faster than Sonnet (2.8 s vs 7 s) and built
   // richer pages in about the same time (25 s vs 21 s). Higher effort roughly doubles the wait.
-  // fast: Claude's fast mode for the builder - the same model, answering much sooner. On a Claude
-  // subscription it's paid from extra usage credits; with none left it runs at normal speed.
-  claude: { bin: '', model: 'opus', effort: 'low', fast: false },
+  // fast: Claude's fast mode for the main agent - the one AI of the classic way and of solo mode,
+  // the lead of a team (and team mode's fixer, checker, polisher and tester): the same model,
+  // answering much sooner. fastHelpers: fast mode for the helpers that write a team's parts (the
+  // builders), on a switch of its own. Fast mode runs on Opus and Fable only - on Sonnet and Haiku,
+  // Claude Code leaves it off - so fast helpers write with Opus instead (helperSpeed, below).
+  // On a Claude subscription fast mode is paid from extra usage credits; with none left it runs at
+  // normal speed.
+  claude: { bin: '', model: 'opus', effort: 'low', fast: false, fastHelpers: false },
   // Team mode (Claude only, see server/team.mjs): instead of one AI writing the whole page, a
   // lead plans it and up to `helpers` helpers write its pieces at the same time. In blind tests
   // its creations beat the classic way's (11 of 12) and arrived much sooner (about 27 s instead of
@@ -37,10 +42,11 @@ export const DEFAULTS = {
   // enabled: false builds the classic way (one AI writes it all).
   // Each role is its own Claude Code run: model, effort, fast (fast mode), advisor (a stronger
   // model it can ask, e.g. "opus" for a sonnet helper) and args (any other `claude` options).
-  // Left empty, a role uses the Claude settings above. By default the voice, which only answers
-  // out loud, is a quick small model; helpers (small pieces, from a detailed plan) and the first
-  // look use Sonnet, which writes about 40% faster; the checker, which works after the creation
-  // is already on screen, takes more care (medium effort).
+  // Left empty, a role uses the Claude settings above (for speed: claude.fast, or for the helper,
+  // claude.fastHelpers). By default the voice, which only answers out loud, is a quick small
+  // model; helpers (small pieces, from a detailed plan) and the first look use Sonnet, which
+  // writes about 40% faster; the checker, which works after the creation is already on screen,
+  // takes more care (medium effort).
   // warm: start the team's programs while the kid is still talking.
   // check: right after a creation appears, the checker takes a careful look (is everything they
   // asked for there, do the pieces fit, do the controls work, can it be played, is it smooth) and
@@ -238,6 +244,18 @@ if (process.env.KIDBUILD_PORT) current.port = Number(process.env.KIDBUILD_PORT);
 
 export function config() {
   return current;
+}
+
+// How a helper (one of the builders: team.helper, team.agentHelper) runs for speed: in fast mode or
+// not, and with which model. Its own `fast`, when it has one, is passed on as it's written.
+// Otherwise claude.fastHelpers decides - and since Claude Code leaves fast mode off on Sonnet and
+// Haiku, a fast helper set to one of those writes with Opus instead (which in fast mode writes
+// sooner than Sonnet does at its usual speed).
+const NO_FAST_MODE = /sonnet|haiku/i;
+export function helperSpeed(own, model = '') {
+  if (own?.fast != null) return { fast: Boolean(own.fast), model };
+  if (!current.claude.fastHelpers) return { fast: false, model };
+  return { fast: true, model: NO_FAST_MODE.test(model) ? 'opus' : model };
 }
 
 // config.json holds only the user's own overrides; merge the patch into it.

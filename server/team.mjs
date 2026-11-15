@@ -24,7 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { spawn, execFile } from 'node:child_process';
-import { config } from './config.mjs';
+import { config, helperSpeed } from './config.mjs';
 import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, gameRule, discoveryRule, buildingRules, userPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
@@ -35,16 +35,21 @@ export function enabled() {
   return Boolean(c.team?.enabled) && leadBrain() === 'claude';
 }
 
-// A role's settings. The lead, helpers and fixer default to the Claude model, effort and speed
-// chosen for the classic way (config.claude, also in the grown-ups' panel).
-function roleConfig(name) {
+// A role's settings. The lead, helpers and fixer default to the Claude model and effort chosen for
+// the classic way (config.claude, also in the grown-ups' panel). For speed, the helpers - who write
+// the parts: team mode's, and the agent way's direct ones (crew.mjs) - have a switch of their own
+// (claude.fastHelpers: helperSpeed); everyone else takes the main agent's (claude.fast).
+const HELPERS = ['helper', 'agentHelper'];
+export function roleConfig(name) {
   const c = config();
   const r = c.team?.[name] || {};
   const inherit = name !== 'voice';
+  const model = r.model || (inherit ? c.claude.model : '') || '';
+  const speed = HELPERS.includes(name) ? helperSpeed(r, model) : { model, fast: r.fast ?? (inherit ? Boolean(c.claude.fast) : false) };
   return {
-    model: r.model || (inherit ? c.claude.model : '') || '',
+    model: speed.model,
     effort: r.effort || (inherit ? c.claude.effort : '') || '',
-    fast: r.fast ?? (inherit ? Boolean(c.claude.fast) : false),
+    fast: speed.fast,
     advisor: r.advisor || '',
     args: Array.isArray(r.args) ? r.args.map(String) : [],
   };

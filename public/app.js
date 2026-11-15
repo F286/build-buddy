@@ -1567,6 +1567,7 @@ async function openParent() {
   }
   f.claudeModel.value = c.claudeModel || '';
   f.claudeFast.value = c.claudeFast ? 'fast' : '';
+  f.claudeFastHelpers.value = c.claudeFastHelpers ? 'fast' : '';
   f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? (c.agentHelpers === 'direct' ? 'direct' : 'agents') : 'team') : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
@@ -1596,6 +1597,7 @@ async function openParent() {
   f.timeLimit.value = asIs ? 'keep' : '0';
   state.fps = null;
   showParentStatus();
+  showFastHint();
   $('#parent').hidden = false;
   if (state.html) tellPage({ type: 'fps?' }); // the answer fills in the frame rate
 }
@@ -1621,13 +1623,31 @@ function brainsSaid(c) {
   return `${said.join(' and ')}, so ${has(c.lead) ? builds + way : 'nothing can build. '}`;
 }
 
+// Fast builders, where the way of building picked can't give them a speed of their own: said under
+// the two speeds, as they're picked. (Builders are the helpers that write a team's parts.)
+function showFastHint() {
+  const f = $('#parentForm');
+  const way = f.building.value;
+  const hint =
+    f.claudeFastHelpers.value !== 'fast'
+      ? ''
+      : way === 'solo' || way === ''
+        ? 'This way of building has no builders: one AI writes it all, at the main agent’s speed.'
+        : way === 'agents' && f.claudeFast.value !== 'fast'
+          ? 'In this way of building the builders run inside the main agent, so they are fast only when it is too. With direct helpers (How Claude builds) they can be fast on their own.'
+          : '';
+  $('#fastHint').textContent = hint;
+  $('#fastHint').hidden = !hint;
+}
+for (const name of ['claudeFast', 'claudeFastHelpers', 'building']) $('#parentForm')[name].addEventListener('change', showFastHint);
+
 function showParentStatus() {
   const c = state.config;
   const s = c.speech || {};
   $('#parentStatus').textContent =
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
-    (c.claudeFast && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
+    ((c.claudeFast || c.claudeFastHelpers) && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
     brainsSaid(c) +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
@@ -1643,6 +1663,7 @@ $('#parentForm').addEventListener('submit', async e => {
     ...(f.brains.value !== state.config.backends.join(',') && { backends: f.brains.value.split(',') }),
     claudeModel: f.claudeModel.value,
     claudeFast: f.claudeFast.value === 'fast',
+    claudeFastHelpers: f.claudeFastHelpers.value === 'fast',
     ...(f.building.value !== state.buildingShown && {
       team: ['team', 'agents', 'direct'].includes(f.building.value),
       agents: ['agents', 'direct'].includes(f.building.value),
