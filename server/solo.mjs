@@ -219,6 +219,20 @@ export class Session {
     this.close(new Error('stopped'));
   }
 
+  // End it at once and for good - it isn't doing what it's told. Kept once its program is gone:
+  // from then on, nothing of its can still be writing files. (A few seconds at most.)
+  kill() {
+    this.gone ??= new Promise(resolve => {
+      if (this.child.exitCode !== null || this.child.signalCode !== null) return resolve();
+      this.child.once('close', resolve);
+      setTimeout(resolve, 3000);
+    });
+    try {
+      this.child.kill('SIGKILL');
+    } catch {}
+    return this.gone;
+  }
+
   close(err) {
     this.closed = true;
     clearTimeout(this.idle);
@@ -349,7 +363,8 @@ export class Session {
 
   // Ask it something; resolves with its reply. Turns are answered one after another.
   // kind: 'build' (what the kid asked for) or 'polish' (which a build interrupts).
-  ask(prompt, { onText = () => {}, onEvent = null, timeoutSec = config().timeoutSec, stallSec = 40, priority = false, kind = 'build' } = {}) {
+  // onSent(): the turn has gone to the program (from then on, it knows what the prompt told it).
+  ask(prompt, { onText = () => {}, onEvent = null, onSent = null, timeoutSec = config().timeoutSec, stallSec = 40, priority = false, kind = 'build' } = {}) {
     this.touch();
     return new Promise((resolve, reject) => {
       const what = usage.now();
@@ -362,6 +377,7 @@ export class Session {
         what: { ...what, phase },
         out: { main: 0, helpers: 0, last: {} },
         onEvent,
+        onSent,
         timeoutSec,
         stallSec,
         text: '',
@@ -403,6 +419,7 @@ export class Session {
         return this.next();
       }
       t.sentAt = Date.now();
+      t.onSent?.();
       this.child.stdin.write(`${JSON.stringify({ type: 'user', message: { role: 'user', content: note ? `${t.prompt}\n\n${note}` : t.prompt } })}\n`);
     };
     // Its phase's speed, when that isn't the speed the session is at (settled before the turn is sent).

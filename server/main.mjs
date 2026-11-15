@@ -77,6 +77,10 @@ function publicConfig() {
     solo: Boolean(c.solo?.enabled),
     agents: Boolean(c.team.agents),
     agentHelpers: c.team.agentHelpers === 'direct' ? 'direct' : 'subagents', // (who writes the agent way's parts)
+    // (Who polishes the agent way's creations while the kid plays: the lead itself, or a polisher -
+    // an agent of its own, on a model of its own; '' is the lead's.)
+    agentPolisher: Boolean(c.team.agentPolisher?.enabled),
+    agentPolisherModel: c.team.agentPolisher?.model || '',
     teamActive: team.enabled() && !solo.enabled(),
     soloActive: solo.enabled(),
     agentsActive: ai.agentWay(),
@@ -311,6 +315,8 @@ const routes = {
     if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
     if (typeof b.agents === 'boolean') patch.team = { ...patch.team, agents: b.agents };
     if (['direct', 'subagents'].includes(b.agentHelpers)) patch.team = { ...patch.team, agentHelpers: b.agentHelpers };
+    if (typeof b.agentPolisher === 'boolean') patch.team = { ...patch.team, agentPolisher: { ...patch.team?.agentPolisher, enabled: b.agentPolisher } };
+    if (typeof b.agentPolisherModel === 'string') patch.team = { ...patch.team, agentPolisher: { ...patch.team?.agentPolisher, model: b.agentPolisherModel.trim().slice(0, 80) } };
     if (typeof b.solo === 'boolean') patch.solo = { enabled: b.solo };
     if (typeof b.codexModel === 'string') patch.codex = { model: b.codexModel.trim() };
     if (typeof b.agyModel === 'string') patch.agy = { model: b.agyModel.trim() };

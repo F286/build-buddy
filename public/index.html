@@ -141,6 +141,17 @@
     <label>Claude model
       <select name="claudeModel"><option value="opus">Opus - recommended</option><option value="fable">Fable - most capable, slower</option><option value="sonnet">Sonnet - a little faster</option></select>
     </label>
+    <!-- Who grows and polishes a creation while the kid plays, the recommended way of building: the
+         main agent, as more turns of its own conversation - or a polishing agent of its own, which
+         remembers the creation too, on a model of its own (its speed: the Polishing row below). -->
+    <div class="row">
+      <label>Polishing while they play
+        <select name="agentPolisher"><option value="">The main agent does it</option><option value="on">A polishing agent (new)</option></select>
+      </label>
+      <label>The polishing agent's model
+        <select name="agentPolisherModel"><option value="">The same as the main agent</option><option value="opus">Opus</option><option value="fable">Fable - most careful, slower</option><option value="sonnet">Sonnet</option></select>
+      </label>
+    </div>
     <!-- Claude's fast mode: for the main agent (the lead of a team, or the one AI that builds alone)
          and for the builders (the helpers that write a team's parts), each switched on apart for
          what the kid is doing meanwhile - waiting for something new, waiting for a change, playing. -->

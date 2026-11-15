@@ -264,6 +264,7 @@ voice and names can also be changed from the Ctrl+Shift+P panel.
 | `team.peek` | `true` | With direct helpers: before something new or a big change is shown, the app runs it out of sight for a moment and the lead is handed a screenshot of it (and any error it threw) together with its helpers' parts - so a school drawn black, a car hidden under a cloud or people cut off at the edge are fixed before the kid sees them. It takes a second or two with a graphics card. Without one, photographing a page can take many seconds and hold the app up meanwhile, so after one peek that takes longer than about two and a half seconds or brings no picture back, it isn't asked for again until Build Buddy restarts. `data/log.txt` says how long each one took. |
 | `team.agentLead` | `claude.model` / `claude.effort`, thinking `{ "build": 1500, "fit": 700, "look": 10000 }` | How the agent way's lead runs Claude Code (`model`, `effort`, `fast`, `args`), and how long it may think while the kid waits (`build`), when it's handed the parts to make them fit (`fit`, with direct helpers) and when it looks its creation over (`look`). Opus 5.5 and Sonnet 5.5 decide for themselves how long to think whatever these say, so the lead's instructions ask it to start writing at once. `firstModel` can lead the turn that makes something new with another model (the main one takes over after); Sonnet there was no quicker, so it's off. |
 | `team.agentHelper.model` | `"sonnet"` | The model the agent way's helpers write their parts with, as an alias: `sonnet`, `opus`, `haiku` or `fable`. Haiku writes half again as fast (532 characters a second against 336), but its parts were plainly weaker - a ramp the wrong shape, a word on a sign, things in the wrong band of the screen - so Sonnet stays. With `claude.fastHelpers` on, helpers set to Sonnet or Haiku write with Opus instead (fast mode doesn't run on those two). |
+| `team.agentPolisher` | `{ "enabled": false }` | [A polishing agent](#with-a-polishing-agent-new): with `"enabled": true`, growing and polishing the creation while the kid plays is done by a second agent that remembers the creation too, in a program of its own, instead of by the lead in its own conversation. `model` and `effort` are its own (left out, the lead's: `"model": "fable"` for a slower, more careful one), `fast` its speed (left out, the *Polishing* row of *Claude fast mode*), `thinking` how long it may think (left out, the lead's `look`), `args` any other `claude` options. It's told everything the lead was and did, and the lead is told what it changed. Also in the panel as *Polishing while they play* and *The polishing agent's model*. |
 | `solo.enabled` | `false` | [Solo mode](#solo-mode): one Claude builds each creation and remembers it, with no team. It comes before team mode when both are on. Also in the panel as *How Claude builds*, and for one run with `./start.sh --solo` (which puts Claude first for that run). Used when Claude leads. |
 | `solo.polish` | `3` | How many passes it makes over a creation while the kid plays, 1 to 4 (`false` for none): after something new, it grows it, then makes it beautiful, then looks again (with 4, looks again twice); after a change, every pass looks again. |
 | `solo.model` / `solo.effort` / `solo.fast` / `solo.args` | your `claude.model` / `claude.effort` / `claude.fast` | How solo mode runs Claude Code. |
@@ -510,6 +511,40 @@ basketball game and a bubble machine), each pair judged twice with the two shown
 (The comparisons with team mode and solo mode were measured just before a last round of review
 fixes, which changed how its files are kept in step with the page and a few lines of its prompts,
 not how it builds.)
+
+#### With a polishing agent (new)
+
+By default the lead does its own polishing: growing the creation and looking it over are more
+turns of the same conversation. To try the other way, pick *A polishing agent* under *Polishing
+while they play* in the Ctrl+Shift+P panel, or set `"team": { "agentPolisher": { "enabled": true } }`.
+The polishing then belongs to a second agent, the polisher:
+
+- **A program of its own that remembers the creation too** - one conversation per creation, like
+  the lead's, in the same folder of files. The passes are the same (it grows it, then looks it
+  over), and so is everything around them: a pass is tried out of sight before it's shown, taken
+  back if it crashes, and stopped the moment the kid asks for something, with its half-done
+  changes taken out.
+- **On its own model, at its own speed.** Nobody waits for it, so it can be a slower, more careful
+  model (*The polishing agent's model*: `"model": "fable"`), and it's fast only if the *Polishing*
+  row of *Claude fast mode* says so - whatever the lead is.
+- **Told everything the lead was and did.** Before each pass: what the kid said (and what the other
+  listener heard), what Sparky answered out loud, the jobs the lead handed to its helpers in its
+  own words, the lead's own reply, and which files it changed - with the changed lines. A new
+  polisher gets the whole conversation and reads every file first; after that, only what happened
+  since its last turn.
+- **It reports to the lead.** With its changes it writes a line for the lead - what's new or works
+  differently now - and before the lead's next turn, the lead is told which files the polisher
+  changed, why, and that line, so it reads those files and builds on them.
+
+What it's for: the lead's conversation then holds only what the kid waited for, so it can run in
+fast mode for something new *and* for changes without ever reading its conversation again at
+another speed's prices (fast and normal speed keep separate caches), and the polishing - the
+biggest share of the tokens - costs no fast mode at all. What it gives up: the polisher wasn't
+there when the lead decided things; it goes by what it's told and what it reads. Whether its
+creations judge as well as the lead's own polishing hasn't been measured yet - which is why it's
+a choice, not the default.
+
+It's for this way of building with subagents; with direct helpers the lead polishes as before.
 
 #### With direct helpers (new)
 

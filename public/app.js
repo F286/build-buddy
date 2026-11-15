@@ -1568,6 +1568,15 @@ async function openParent() {
   }
   f.claudeModel.value = c.claudeModel || '';
   for (const [who, on] of [['Main', c.claudeFast], ['Helpers', c.claudeFastHelpers]]) for (const phase of FAST_PHASES) f[`fast${who}${phase}`].checked = Boolean(on?.[phase.toLowerCase()]);
+  // (Who polishes while they play, and the polishing agent's model - one set in config.json is kept.)
+  f.agentPolisher.value = c.agentPolisher ? 'on' : '';
+  f.agentPolisherModel.querySelector('option[data-extra]')?.remove();
+  if (![...f.agentPolisherModel.options].some(o => o.value === (c.agentPolisherModel || ''))) {
+    const extra = new Option(`${c.agentPolisherModel} (from config.json)`, c.agentPolisherModel);
+    extra.dataset.extra = '1';
+    f.agentPolisherModel.append(extra);
+  }
+  f.agentPolisherModel.value = c.agentPolisherModel || '';
   f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? (c.agentHelpers === 'direct' ? 'direct' : 'agents') : 'team') : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
@@ -1632,6 +1641,7 @@ const fastPicked = who => Object.fromEntries(FAST_PHASES.map(phase => [phase.toL
 // the switches, as they're picked.
 function showFastHint() {
   const way = $('#parentForm').building.value;
+  const polisher = $('#parentForm').agentPolisher.value === 'on';
   const [main, helpers] = [fastPicked('Main'), fastPicked('Helpers')];
   const hint = [
     !Object.values(helpers).some(Boolean)
@@ -1643,13 +1653,18 @@ function showFastHint() {
           : '',
     // (Solo mode's first model - solo.firstModel in config.json - is Sonnet unless it's changed.)
     way === 'solo' && main.new && /sonnet|haiku/i.test(state.config?.soloFirstModel || '') ? 'In this way of building, something new is written with Sonnet first, which fast mode doesn’t run on: that switch does nothing here.' : '',
+    // (The polishing agent is the recommended way's: the others polish their own way.)
+    polisher && way !== 'agents' ? 'The polishing agent works with “A team led by one AI that remembers it”: this way of building polishes its own way.' : '',
+    polisher && way === 'agents' ? 'With a polishing agent, the Polishing row is its speed (and its helpers’), whatever the main agent’s.' : '',
   ]
     .filter(Boolean)
     .join(' ');
   $('#fastHint').textContent = hint;
   $('#fastHint').hidden = !hint;
+  $('#parentForm').agentPolisherModel.disabled = !polisher;
 }
 $('#parentForm').building.addEventListener('change', showFastHint);
+$('#parentForm').agentPolisher.addEventListener('change', showFastHint);
 $('#parentForm').querySelector('.speeds').addEventListener('change', showFastHint);
 
 function showParentStatus() {
@@ -1675,6 +1690,8 @@ $('#parentForm').addEventListener('submit', async e => {
     claudeModel: f.claudeModel.value,
     claudeFast: fastPicked('Main'),
     claudeFastHelpers: fastPicked('Helpers'),
+    agentPolisher: f.agentPolisher.value === 'on',
+    agentPolisherModel: f.agentPolisherModel.value,
     ...(f.building.value !== state.buildingShown && {
       team: ['team', 'agents', 'direct'].includes(f.building.value),
       agents: ['agents', 'direct'].includes(f.building.value),
