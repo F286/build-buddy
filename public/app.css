@@ -651,6 +651,28 @@ button {
 .panel .buttons .primary { background: var(--teal); color: #fff; }
 .panel .buttons .danger { margin-left: auto; background: var(--coral); color: #fff; }
 #voicePreview { padding: 11px 16px; border-radius: 12px; background: var(--violet); color: #fff; font-weight: 500; }
+/* Fast mode, phase by phase: a small grid of switches. */
+.panel .speeds { width: 100%; border-collapse: collapse; }
+.panel .speeds th { text-align: left; font-weight: 500; padding: 6px 8px 6px 0; }
+.panel .speeds thead th { border-bottom: 2px solid #d7d9ea; padding-bottom: 8px; }
+.panel .speeds thead th + th, .panel .speeds td { text-align: center; width: 132px; }
+.panel .speeds tbody tr + tr > * { border-top: 1px solid #e6e8f4; }
+.panel .speeds small { display: block; font-size: 13px; font-weight: 400; color: #8a8fb8; }
+.panel .speeds input { width: 24px; height: 24px; padding: 0; accent-color: var(--teal); }
+
+/* What it cost. */
+.panel.usage { width: min(860px, 94vw); }
+.usage table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.usage th, .usage td { padding: 7px 8px; text-align: right; white-space: nowrap; }
+.usage th:first-child, .usage td:first-child { text-align: left; white-space: normal; }
+.usage thead th { font-weight: 500; color: #5b6090; border-bottom: 2px solid #d7d9ea; }
+.usage tbody tr + tr > * { border-top: 1px solid #e6e8f4; }
+.usage tfoot td { font-weight: 600; border-top: 2px solid #d7d9ea; }
+.usage h2 { margin: 12px 0 4px; font-size: 19px; }
+.usage small { display: block; font-size: 13px; color: #8a8fb8; font-weight: 400; }
+.usage .fast { color: #c2570a; }
+.usage .none { color: #8a8fb8; }
+.usage #usageBody { display: grid; gap: 8px; }
 .panel .status { margin: 0; color: #5b6090; font-size: 15px; }
 .panel .hint { margin: 0; color: #8a8fb8; font-size: 14px; }
 

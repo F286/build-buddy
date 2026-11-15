@@ -17,7 +17,8 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.mjs';
+import { config, fastIn, fastEver } from './config.mjs';
+import * as usage from './usage.mjs';
 import { findBin, leadBrain, isQuitting } from './bins.mjs';
 import * as store from './store.mjs';
 import { systemPrompt, pickLook, parseReply, applyEdits, field, log, noteSpeed, isBusy, WORK_DIR } from './ai.mjs';
@@ -109,7 +110,8 @@ function sessionArgs() {
   const effort = r.effort || c.effort;
   if (model) args.push('--model', model);
   if (effort) args.push('--effort', effort);
-  if (r.fast ?? c.fast) args.push('--settings', JSON.stringify({ fastMode: true }));
+  // (Started in fast mode if any phase is to be fast: each turn then runs at its own phase's speed.)
+  if (fastEver(r.fast ?? c.fast)) args.push('--settings', JSON.stringify({ fastMode: true }));
   if (Array.isArray(r.args)) args.push(...r.args.map(String));
   return args;
 }
@@ -145,16 +147,31 @@ function models() {
   return { main, first: main ? config().solo?.firstModel || main : '' };
 }
 
+// Fast mode for solo mode's one AI, phase by phase (config.mjs).
+const soloFast = phase => fastIn(config().solo?.fast ?? config().claude.fast, phase);
+
+// Which family a model belongs to, whatever it's called ("opus", "claude-opus-5-5").
+const family = model => /opus|sonnet|haiku|fable/.exec(String(model || '').toLowerCase())?.[0] || '';
+
 // (Team mode's agent way - agents.mjs - runs its lead in one of these too: its own command line,
 // its own working folder and name.)
+// fastFor(phase): is a turn of that phase answered in fast mode? Each turn belongs to a phase (what
+// the kid is doing meanwhile: usage.mjs), and the session's speed is set to it before the turn is
+// sent - one session, so it remembers everything, at a speed of its own for each phase.
+// turnNote(phase): a line added to that phase's turns. helperModel(phase): the model its subagents
+// are started with (the agent way's helpers), to tell what they used apart from its own.
 export class Session {
-  constructor(projectId, { args = sessionArgs(), cwd = WORK_DIR, label = 'solo', env = null, model = null } = {}) {
+  constructor(projectId, { args = sessionArgs(), cwd = WORK_DIR, label = 'solo', env = null, model = null, fastFor = soloFast, turnNote = null, helperModel = null } = {}) {
     if (isQuitting()) throw new Error('Build Buddy is quitting'); // (nothing new starts once it quits)
     const bin = findBin('claude', config().claude.bin);
     this.label = label;
     if (!bin) throw new Error('Claude Code CLI not found (install it and run `claude` once to sign in)');
     this.key = JSON.stringify(args);
-    this.fast = args.includes('--settings');
+    this.fastNow = args.includes('--settings'); // the speed its next answer would have
+    this.fastFor = fastFor;
+    this.turnNote = turnNote;
+    this.helperModel = helperModel;
+    this.spent = { cost: 0, models: {} }; // what Claude Code has reported for it so far, in all
     this.model = model ?? models().main; // the model answering now
     this.projectId = projectId;
     this.page = null; // the page as it knows it (null: it's handed the page on its next turn)
@@ -231,10 +248,64 @@ export class Session {
       return;
     }
     if (ev.type === 'system' && ev.subtype === 'notification' && /fast/i.test(ev.key || '')) this.fastNote = ev.text || ev.key;
-    if (ev.type === 'result' && this.fast) noteSpeed(ev.usage?.speed || 'unknown', ev.usage?.speed === 'fast' ? '' : this.fastNote || '');
     const t = this.current;
+    if (ev.type === 'result') {
+      if (t?.fast) noteSpeed(ev.usage?.speed || 'unknown', ev.usage?.speed === 'fast' ? '' : this.fastNote || '');
+      this.used(ev, t);
+    }
     if (!t) return;
+    // (Its output arrives outside the work that asked for it: what it sets off - a helper started
+    // on a job it just wrote - belongs to that work.)
+    usage.within(t.what, () => this.answer(t, ev));
+  }
+
+  // What a turn used. Claude Code reports the session's running totals with each result, model by
+  // model - its subagents' among them - so a turn's share is what was added since the last one.
+  // The helpers' part is told by their model; when it's the lead's own (fast helpers write with
+  // Opus), by how much of the turn's writing was theirs.
+  used(ev, t) {
+    const before = this.spent;
+    const models = {};
+    for (const [name, m] of Object.entries(ev.modelUsage || {})) models[name] = { ...usage.modelTokens(m), cost: m.costUSD || 0 };
+    this.spent = { cost: ev.total_cost_usd ?? before.cost, models };
+    if (!t) return;
+    const helpers = family(this.helperModel?.(t.phase));
+    const shared = helpers && helpers === family(this.model || Object.keys(models)[0]);
+    const share = shared && t.out.main + t.out.helpers > 0 ? t.out.helpers / (t.out.main + t.out.helpers) : 0;
+    const sum = { main: { in: 0, out: 0, cr: 0, cw: 0, cost: 0 }, builders: { in: 0, out: 0, cr: 0, cw: 0, cost: 0 } };
+    const names = { main: new Set(), builders: new Set() };
+    for (const [name, m] of Object.entries(models)) {
+      const was = before.models[name] || {};
+      const part = helpers && !shared && family(name) === helpers ? 1 : shared && family(name) === helpers ? share : 0;
+      let any = false;
+      for (const k of ['in', 'out', 'cr', 'cw', 'cost']) {
+        const d = Math.max(0, m[k] - (was[k] || 0));
+        any ||= d > 0;
+        sum.builders[k] += d * part;
+        sum.main[k] += d * (1 - part);
+      }
+      if (any && part > 0) names.builders.add(name);
+      if (any && part < 1) names.main.add(name);
+    }
+    const fast = ev.usage?.speed === 'fast';
+    const row = (who, fastToo) => {
+      const { cost, ...tokens } = sum[who];
+      for (const k of Object.keys(tokens)) tokens[k] = Math.round(tokens[k]);
+      usage.used({ who, role: this.label, model: [...names[who]].join(' + '), fast: fastToo, tokens, cost, ms: who === 'main' ? Date.now() - t.sentAt : 0, approx: Boolean(shared) }, t.what);
+    };
+    row('main', fast);
+    // (Subagents take the lead's speed, where their model can run fast mode.)
+    row('builders', fast && !/sonnet|haiku/.test(helpers));
+  }
+
+  answer(t, ev) {
     t.quietSince = Date.now();
+    // How much of the turn's writing was the lead's and how much its helpers' (see used()).
+    if (ev.type === 'stream_event' && ev.event?.type === 'message_delta') t.out.last[ev.parent_tool_use_id || ''] = ev.event.usage?.output_tokens || 0;
+    if (ev.type === 'stream_event' && ev.event?.type === 'message_stop') {
+      t.out[ev.parent_tool_use_id ? 'helpers' : 'main'] += t.out.last[ev.parent_tool_use_id || ''] || 0;
+      t.out.last[ev.parent_tool_use_id || ''] = 0;
+    }
     t.onEvent?.(ev);
     const se = ev.type === 'stream_event' && !ev.parent_tool_use_id ? ev.event : null;
     if (se?.type === 'message_start') {
@@ -262,9 +333,15 @@ export class Session {
   ask(prompt, { onText = () => {}, onEvent = null, timeoutSec = config().timeoutSec, stallSec = 40, priority = false, kind = 'build' } = {}) {
     this.touch();
     return new Promise((resolve, reject) => {
+      const what = usage.now();
+      // (Outside any request - it shouldn't happen - a pass counts as play, anything else as a change.)
+      const phase = what.phase || (kind === 'polish' ? 'play' : 'change');
       const t = {
         prompt,
         kind,
+        phase,
+        what: { ...what, phase },
+        out: { main: 0, helpers: 0, last: {} },
         onEvent,
         timeoutSec,
         stallSec,
@@ -296,7 +373,23 @@ export class Session {
     t.timer = setTimeout(() => this.fail(t, `took longer than ${t.timeoutSec}s`), t.timeoutSec * 1000);
     // Once it has started writing, a reply that goes quiet that long has stalled.
     t.stall = setInterval(() => t.text && Date.now() - t.quietSince > t.stallSec * 1000 && this.fail(t, 'stalled'), 2000);
-    this.child.stdin.write(`${JSON.stringify({ type: 'user', message: { role: 'user', content: t.prompt } })}\n`);
+    t.fast = Boolean(this.fastFor(t.phase));
+    const note = typeof t.prompt === 'string' ? this.turnNote?.(t.phase) || '' : '';
+    const send = () => {
+      if (this.closed || this.current !== t) return;
+      // (Stopped while its speed was being set: it was never sent, so no answer will end it.)
+      if (t.interrupted) {
+        t.finish(new Error('interrupted'));
+        this.current = null;
+        return this.next();
+      }
+      t.sentAt = Date.now();
+      this.child.stdin.write(`${JSON.stringify({ type: 'user', message: { role: 'user', content: note ? `${t.prompt}\n\n${note}` : t.prompt } })}\n`);
+    };
+    // Its phase's speed, when that isn't the speed the session is at (settled before the turn is sent).
+    if (t.fast === this.fastNow) return send();
+    this.fastNow = t.fast;
+    this.control({ subtype: 'apply_flag_settings', settings: { fastMode: t.fast } }).then(send);
   }
 
   // A turn that's stuck: the session can't be trusted any more.

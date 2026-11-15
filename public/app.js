@@ -1469,6 +1469,7 @@ const overlayOpen = () => !$('#gallery').hidden || !$('#parent').hidden || !$('#
 function closeOverlays() {
   $('#gallery').hidden = true;
   $('#parent').hidden = true;
+  $('#usage').hidden = true; // (what it cost: opened over the grown-ups' panel)
   $('#typeBox').hidden = true;
   focusStage();
 }
@@ -1566,8 +1567,7 @@ async function openParent() {
     f.claudeModel.append(extra);
   }
   f.claudeModel.value = c.claudeModel || '';
-  f.claudeFast.value = c.claudeFast ? 'fast' : '';
-  f.claudeFastHelpers.value = c.claudeFastHelpers ? 'fast' : '';
+  for (const [who, on] of [['Main', c.claudeFast], ['Helpers', c.claudeFastHelpers]]) for (const phase of FAST_PHASES) f[`fast${who}${phase}`].checked = Boolean(on?.[phase.toLowerCase()]);
   f.building.value = c.solo ? 'solo' : c.team ? (c.agents ? (c.agentHelpers === 'direct' ? 'direct' : 'agents') : 'team') : '';
   state.buildingShown = f.building.value; // a one-run --team/--classic stays one-run unless changed here
   f.creationsButton.value = c.creationsButton ? 'show' : '';
@@ -1623,23 +1623,28 @@ function brainsSaid(c) {
   return `${said.join(' and ')}, so ${has(c.lead) ? builds + way : 'nothing can build. '}`;
 }
 
+// Fast mode is switched on apart for the main agent and for the builders (the helpers that write a
+// team's parts), in each phase: while the kid waits for something new, waits for a change, or plays.
+const FAST_PHASES = ['New', 'Change', 'Play'];
+const fastPicked = who => Object.fromEntries(FAST_PHASES.map(phase => [phase.toLowerCase(), $('#parentForm')[`fast${who}${phase}`].checked]));
+
 // Fast builders, where the way of building picked can't give them a speed of their own: said under
-// the two speeds, as they're picked. (Builders are the helpers that write a team's parts.)
+// the switches, as they're picked.
 function showFastHint() {
-  const f = $('#parentForm');
-  const way = f.building.value;
-  const hint =
-    f.claudeFastHelpers.value !== 'fast'
-      ? ''
-      : way === 'solo' || way === ''
-        ? 'This way of building has no builders: one AI writes it all, at the main agent’s speed.'
-        : way === 'agents' && f.claudeFast.value !== 'fast'
-          ? 'In this way of building the builders run inside the main agent, so they are fast only when it is too. With direct helpers (How Claude builds) they can be fast on their own.'
-          : '';
+  const way = $('#parentForm').building.value;
+  const [main, helpers] = [fastPicked('Main'), fastPicked('Helpers')];
+  const hint = !Object.values(helpers).some(Boolean)
+    ? ''
+    : way === 'solo' || way === ''
+      ? 'This way of building has no builders: one AI writes it all, at the main agent’s speed.'
+      : way === 'agents' && Object.keys(helpers).some(phase => helpers[phase] && !main[phase])
+        ? 'In this way of building the builders run inside the main agent, so they are fast only where it is too. With direct helpers (How Claude builds) they can be fast on their own.'
+        : '';
   $('#fastHint').textContent = hint;
   $('#fastHint').hidden = !hint;
 }
-for (const name of ['claudeFast', 'claudeFastHelpers', 'building']) $('#parentForm')[name].addEventListener('change', showFastHint);
+$('#parentForm').building.addEventListener('change', showFastHint);
+$('#parentForm').querySelector('.speeds').addEventListener('change', showFastHint);
 
 function showParentStatus() {
   const c = state.config;
@@ -1647,7 +1652,7 @@ function showParentStatus() {
   $('#parentStatus').textContent =
     `Listening: ${s.stt === false ? `${c.stt} NOT installed (run setup.sh)` : c.stt}. ` +
     `Talking: ${s.tts === false ? `${c.tts} NOT installed (run setup.sh)` : c.tts}. ` +
-    ((c.claudeFast || c.claudeFastHelpers) && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
+    ([c.claudeFast, c.claudeFastHelpers].some(on => Object.values(on || {}).some(Boolean)) && c.fastStatus?.note ? `Claude fast mode didn't run last time: ${c.fastStatus.note}. ` : '') +
     brainsSaid(c) +
     `Showing: ${state.project?.title || 'blank page'}` +
     (state.fps ? `, running at ${state.fps} frames per second.` : '.') +
@@ -1662,8 +1667,8 @@ $('#parentForm').addEventListener('submit', async e => {
     // (A brain order for one run - --agents, --team, --solo, KIDBUILD_BACKENDS - isn't saved unless changed here.)
     ...(f.brains.value !== state.config.backends.join(',') && { backends: f.brains.value.split(',') }),
     claudeModel: f.claudeModel.value,
-    claudeFast: f.claudeFast.value === 'fast',
-    claudeFastHelpers: f.claudeFastHelpers.value === 'fast',
+    claudeFast: fastPicked('Main'),
+    claudeFastHelpers: fastPicked('Helpers'),
     ...(f.building.value !== state.buildingShown && {
       team: ['team', 'agents', 'direct'].includes(f.building.value),
       agents: ['agents', 'direct'].includes(f.building.value),
@@ -1696,6 +1701,79 @@ $('#voicePreview').addEventListener('click', async () => {
   say(`Hi! I'm ${state.config.buddyName}. What do you want to build today?`);
 });
 $('#quitBtn').addEventListener('click', () => api('/api/quit', {}).finally(() => window.close()));
+
+// ------------------------------------------------------------------------------------- what it cost
+
+// What Claude's work cost, a day at a time (a day is a play session): each phase by who did it,
+// then each thing the kid asked for - what its wait cost, and the polishing that came after it.
+const money = v => (v ? `$${v.toFixed(v < 0.995 ? 3 : 2)}` : '–');
+const kilo = n => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(n < 9950 ? 1 : 0)}k` : String(Math.round(n)));
+const secs = ms => (ms == null ? '' : `${(ms / 1000).toFixed(ms < 9950 ? 1 : 0)} s`);
+function make(tag, props, ...kids) {
+  const e = Object.assign(document.createElement(tag), props || {});
+  e.append(...kids.flat().filter(k => k != null && k !== ''));
+  return e;
+}
+// A price, with the part of it that ran in fast mode under it.
+const priced = c => make('td', { className: c.cost ? '' : 'none' }, money(c.cost), c.fast ? make('small', { className: 'fast' }, `⚡ ${money(c.fast)}`) : '');
+// The tokens behind a price: what was written, and under it what was read to write it.
+const written = c => make('td', null, kilo(c.out), make('small', null, `${kilo(c.in + c.cr + c.cw)} read`));
+
+function showUsage(u) {
+  const body = $('#usageBody');
+  const days = $('#usageDay');
+  const dayName = d => new Date(`${d}T12:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  days.replaceChildren(...u.days.map(d => new Option(`${dayName(d.day)} - ${d.asks} thing${d.asks === 1 ? '' : 's'} asked for, ${money(d.cost)}${d.fast ? ` (⚡ ${money(d.fast)})` : ''}`, d.day)));
+  days.value = u.day || '';
+  if (!u.day) return body.replaceChildren(make('p', { className: 'hint' }, 'Nothing yet: it fills in as Claude builds.'));
+
+  const names = { new: ['Something new', 'the first build, while they wait'], change: ['Changes', 'what they asked for next, while they wait'], play: ['Polishing', 'while they play: nobody waits'] };
+  const phaseRow = p => {
+    const ph = u.phases[p];
+    const about = p === 'play' ? `after ${ph.asks} of them` : `${ph.asks} asked for${ph.waitMs == null ? '' : `, ${secs(ph.waitMs)} wait on average`}`;
+    return make('tr', null, make('td', null, names[p][0], make('small', null, `${names[p][1]} - ${about}`)), priced(ph.main), priced(ph.builders), priced(ph.other), priced(ph.total), written(ph.total));
+  };
+  const byPhase = make(
+    'table',
+    null,
+    make('thead', null, make('tr', null, ...['', 'Main agent', 'Builders', 'Voice, overwatch', 'Total', 'Tokens written'].map(h => make('th', null, h)))),
+    make('tbody', null, ...Object.keys(names).map(phaseRow)),
+    make('tfoot', null, make('tr', null, make('td', null, 'The whole session'), make('td'), make('td'), make('td'), priced(u.total), written(u.total))),
+  );
+
+  const askRow = a => {
+    const what = [a.phase === 'new' ? 'something new' : 'a change', a.title, ...a.models].filter(Boolean).join(' · ');
+    const parts = [a.wait.main.cost && `main ${money(a.wait.main.cost)}`, a.wait.builders.cost && `builders ${money(a.wait.builders.cost)}`].filter(Boolean).join(', ');
+    return make(
+      'tr',
+      null,
+      make('td', null, `${new Date(a.t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} “${a.text}”`, make('small', null, what)),
+      make('td', null, a.ok === false ? 'failed' : secs(a.waitMs)),
+      make('td', { className: a.wait.total.cost ? '' : 'none' }, money(a.wait.total.cost), make('small', null, parts), a.wait.total.fast ? make('small', { className: 'fast' }, `⚡ ${money(a.wait.total.fast)}`) : ''),
+      written(a.wait.total),
+      priced(a.play),
+    );
+  };
+  const byAsk = make(
+    'table',
+    null,
+    make('thead', null, make('tr', null, ...['What they asked for', 'They waited', 'The wait cost', 'Tokens written', 'Polishing after'].map(h => make('th', null, h)))),
+    make('tbody', null, ...u.asks.map(askRow)),
+  );
+  const notes = [
+    u.total.unpriced && `${u.total.unpriced} program${u.total.unpriced === 1 ? ' was' : 's were'} stopped before reporting a price (a helper that lost a race, a turn cut short): their tokens are counted, their price isn't.`,
+    u.loose.cost && `${money(u.loose.cost)} of the session belongs to none of these requests (the overwatch, or polishing that began the day before).`,
+  ].filter(Boolean);
+  body.replaceChildren(byPhase, make('h2', null, 'Each thing they asked for'), u.asks.length ? byAsk : make('p', { className: 'hint' }, 'Nothing was asked for that day.'), ...notes.map(n => make('p', { className: 'hint' }, n)));
+}
+
+async function openUsage(day) {
+  showUsage(await api(`/api/usage${day ? `?day=${encodeURIComponent(day)}` : ''}`));
+  $('#usage').hidden = false;
+}
+$('#usageOpen').addEventListener('click', () => openUsage());
+$('#usageDay').addEventListener('change', e => openUsage(e.target.value));
+$('#usageBack').addEventListener('click', () => ($('#usage').hidden = true));
 
 // ------------------------------------------------------------------------------------- start
 

@@ -32,8 +32,10 @@ export const DEFAULTS = {
   // answering much sooner. fastHelpers: fast mode for the helpers that write a team's parts (the
   // builders), on a switch of its own. Fast mode runs on Opus and Fable only - on Sonnet and Haiku,
   // Claude Code leaves it off - so fast helpers write with Opus instead (helperSpeed, below).
-  // On a Claude subscription fast mode is paid from extra usage credits; with none left it runs at
-  // normal speed.
+  // Each is true or false for everything, or set apart for when the kid waits for something new,
+  // waits for a change, and plays while it's polished: { new: true, change: true, play: false }
+  // (fastIn, below). On a Claude subscription fast mode is paid from extra usage credits; with none
+  // left it runs at normal speed. What each of them cost is kept in data/usage.jsonl (usage.mjs).
   claude: { bin: '', model: 'opus', effort: 'low', fast: false, fastHelpers: false },
   // Team mode (Claude only, see server/team.mjs): instead of one AI writing the whole page, a
   // lead plans it and up to `helpers` helpers write its pieces at the same time. In blind tests
@@ -246,15 +248,26 @@ export function config() {
   return current;
 }
 
-// How a helper (one of the builders: team.helper, team.agentHelper) runs for speed: in fast mode or
-// not, and with which model. Its own `fast`, when it has one, is passed on as it's written.
-// Otherwise claude.fastHelpers decides - and since Claude Code leaves fast mode off on Sonnet and
-// Haiku, a fast helper set to one of those writes with Opus instead (which in fast mode writes
-// sooner than Sonnet does at its usual speed).
+// A fast-mode setting (claude.fast, claude.fastHelpers, a role's own `fast`) is true or false for
+// everything, or says it apart for each phase - what the kid is doing while Claude works:
+//   new     waiting for something new (the screen was blank)
+//   change  waiting for a change to what's there (or for a crash to be fixed)
+//   play    playing, while the creation is grown, checked and polished: nobody waits for that
+// like { "new": true, "change": true, "play": false }.
+export const PHASES = ['new', 'change', 'play'];
+export const fastIn = (setting, phase) => Boolean(isObj(setting) ? setting[phase] : setting);
+export const fastEver = setting => PHASES.some(p => fastIn(setting, p));
+export const fastPhases = setting => Object.fromEntries(PHASES.map(p => [p, fastIn(setting, p)]));
+
+// How a helper (one of the builders: team.helper, team.agentHelper) runs for speed in a phase: in
+// fast mode or not, and with which model. Its own `fast`, when it has one, is passed on as it's
+// written. Otherwise claude.fastHelpers decides - and since Claude Code leaves fast mode off on
+// Sonnet and Haiku, a fast helper set to one of those writes with Opus instead (which in fast mode
+// writes sooner than Sonnet does at its usual speed).
 const NO_FAST_MODE = /sonnet|haiku/i;
-export function helperSpeed(own, model = '') {
-  if (own?.fast != null) return { fast: Boolean(own.fast), model };
-  if (!current.claude.fastHelpers) return { fast: false, model };
+export function helperSpeed(own, model = '', phase = 'change') {
+  if (own?.fast != null) return { fast: fastIn(own.fast, phase), model };
+  if (!fastIn(current.claude.fastHelpers, phase)) return { fast: false, model };
   return { fast: true, model: NO_FAST_MODE.test(model) ? 'opus' : model };
 }
 

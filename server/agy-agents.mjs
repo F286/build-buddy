@@ -16,7 +16,7 @@
 // the overwatch), it's handed the page as it is.
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from './config.mjs';
+import { config, fastEver } from './config.mjs';
 import * as store from './store.mjs';
 import { buddyIntro, talkingRules, worldRules, buildingRules, pickLook, parseReply, applyLineEdits, field, log, isBusy, WORK_DIR, AgySession, askAgy, agyHelper, agyVoice, keepAgyWarm } from './ai.mjs';
 import { Session } from './solo.mjs';
@@ -61,7 +61,7 @@ function lead() {
   return {
     model,
     effort: r.effort || c.claude.effort || '',
-    fast: r.fast ?? Boolean(c.claude.fast),
+    fast: fastEver(r.fast ?? c.claude.fast),
     args: Array.isArray(r.args) ? r.args.map(String) : [],
     helperModel: helperAlias(c.team?.agentHelper?.model),
     // firstModel: who leads the turn that makes something new while the kid waits (the main model

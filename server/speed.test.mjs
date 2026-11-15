@@ -27,7 +27,7 @@ test('both off: nobody is fast, and the helpers write with Sonnet', () => {
     for (const name of ['lead', 'fixer', 'checker', 'polisher', 'tester']) assert.equal(roleConfig(name).fast, false, name);
     assert.deepEqual(speedOf('helper'), ['sonnet', false]);
     assert.deepEqual(speedOf('agentHelper'), ['sonnet', false]);
-    assert.deepEqual([lead().fast, lead().helperModel], [false, 'sonnet']);
+    assert.deepEqual([lead().fastIn('change'), lead().helperModelIn('change')], [false, 'sonnet']);
   });
 });
 
@@ -37,7 +37,7 @@ test('the main agent only: the lead is fast, the helpers stay as they are', () =
     for (const name of ['fixer', 'checker', 'polisher', 'tester']) assert.equal(roleConfig(name).fast, true, name);
     assert.deepEqual(speedOf('helper'), ['sonnet', false]);
     assert.deepEqual(speedOf('agentHelper'), ['sonnet', false]);
-    assert.deepEqual([lead().fast, lead().helperModel], [true, 'sonnet']);
+    assert.deepEqual([lead().fastIn('change'), lead().helperModelIn('change')], [true, 'sonnet']);
   });
 });
 
@@ -48,7 +48,7 @@ test('the builders only: helpers of their own are fast, on Opus; the lead is not
     assert.deepEqual(speedOf('agentHelper'), ['opus', true]);
     assert.equal(roleConfig('helper').effort, 'low');
     // Subagents take the lead's speed: with a lead at normal speed they can't be fast, and stay on Sonnet.
-    assert.deepEqual([lead().fast, lead().helperModel], [false, 'sonnet']);
+    assert.deepEqual([lead().fastIn('change'), lead().helperModelIn('change')], [false, 'sonnet']);
   });
 });
 
@@ -57,7 +57,7 @@ test('both: the lead is fast, and so are its helpers - subagents too, on Opus', 
     assert.deepEqual(speedOf('lead'), ['opus', true]);
     assert.deepEqual(speedOf('helper'), ['opus', true]);
     assert.deepEqual(speedOf('agentHelper'), ['opus', true]);
-    assert.deepEqual([lead().fast, lead().helperModel], [true, 'opus']);
+    assert.deepEqual([lead().fastIn('change'), lead().helperModelIn('change')], [true, 'opus']);
   });
 });
 
@@ -69,7 +69,7 @@ test('fast helpers keep a model fast mode runs on, and leave Sonnet and Haiku fo
     assert.deepEqual(helperSpeed({}, 'claude-sonnet-5-5'), { fast: true, model: 'opus' });
     assert.deepEqual(helperSpeed(undefined, 'haiku'), { fast: true, model: 'opus' });
   });
-  withSettings({ fast: true, fastHelpers: true, team: { agentHelper: { model: 'fable' } } }, () => assert.equal(lead().helperModel, 'fable'));
+  withSettings({ fast: true, fastHelpers: true, team: { agentHelper: { model: 'fable' } } }, () => assert.equal(lead().helperModelIn('new'), 'fable'));
 });
 
 test("a role's own fast is passed on as written, whatever the switches say", () => {
@@ -77,12 +77,12 @@ test("a role's own fast is passed on as written, whatever the switches say", () 
     assert.deepEqual(speedOf('lead'), ['opus', false]);
     assert.deepEqual(speedOf('helper'), ['sonnet', false]);
     assert.deepEqual(speedOf('agentHelper'), ['haiku', false]);
-    assert.deepEqual([lead().fast, lead().helperModel], [false, 'haiku']);
+    assert.deepEqual([lead().fastIn('change'), lead().helperModelIn('change')], [false, 'haiku']);
   });
   // (Its own model too: fast mode asked for on Sonnet is Claude Code's to leave off.)
   withSettings({ team: { helper: { model: 'sonnet', fast: true }, agentLead: { fast: true } } }, () => {
     assert.deepEqual(speedOf('helper'), ['sonnet', true]);
-    assert.deepEqual([lead().fast, lead().helperModel], [true, 'sonnet']);
+    assert.deepEqual([lead().fastIn('change'), lead().helperModelIn('change')], [true, 'sonnet']);
   });
 });
 

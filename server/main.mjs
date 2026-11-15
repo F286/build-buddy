@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
-import { config, saveConfig, brainsAsSet, ROOT, DATA } from './config.mjs';
+import { config, saveConfig, brainsAsSet, fastPhases, ROOT, DATA } from './config.mjs';
+import * as usage from './usage.mjs';
 import * as store from './store.mjs';
 import * as ai from './ai.mjs';
 import * as speech from './speech.mjs';
@@ -66,8 +67,10 @@ function publicConfig() {
     backends: brainsAsSet(), // (as set: the panel shows them in that order)
     allBackends: ai.backendNames,
     claudeModel: c.claude.model,
-    claudeFast: Boolean(c.claude.fast), // (fast mode for the main agent)
-    claudeFastHelpers: Boolean(c.claude.fastHelpers), // (and for the helpers that write a team's parts)
+    // Fast mode for the main agent, and for the helpers that write a team's parts - each said apart
+    // for when the kid waits for something new, waits for a change, and plays: { new, change, play }.
+    claudeFast: fastPhases(c.claude.fast),
+    claudeFastHelpers: fastPhases(c.claude.fastHelpers),
     team: Boolean(c.team.enabled),
     solo: Boolean(c.solo?.enabled),
     agents: Boolean(c.team.agents),
@@ -197,12 +200,19 @@ const routes = {
 
   // The kid started talking (or typing): in team mode, start the team's programs now so they're
   // ready when the request arrives.
-  'POST /api/warm': () => (timeIsUp() && !graceOpen() ? { warm: 0 } : solo.enabled() ? solo.warm() : ai.agentWay() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm()),
+  // (What they're about to ask for is something new on a blank screen, or else a change: the
+  // programs are started at that phase's speed.)
+  'POST /api/warm': () =>
+    usage.during({ phase: store.html(store.currentProject()) ? 'change' : 'new' }, () =>
+      timeIsUp() && !graceOpen() ? { warm: 0 } : solo.enabled() ? solo.warm() : ai.agentWay() ? agents.warm() : leadBrain() === 'agy' ? ai.warmAgy() : team.warm(),
+    ),
 
   // A team-built page crashed when the app tried it before showing it: repair it first.
+  // (The kid is still waiting for what they asked for: it's part of that request, at its speed.)
   'POST /api/repair': async req => {
     const b = await readJson(req);
-    return builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.repair(b)) : team.repair(b);
+    const ask = usage.lastAsk();
+    return usage.during({ phase: ask?.phase || 'change', ask: ask?.id }, () => (builtSolo(b.version) ? solo.repair(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.repair(b)) : team.repair(b)));
   },
 
   // The app's answer to a 'peek' event of a build under way: how the page looks and runs, out of
@@ -210,13 +220,20 @@ const routes = {
   'POST /api/peeked': async req => agents.peeked(await readJson(req)),
 
   // A team-built creation just appeared: take a careful look and fix what would spoil it.
+  // (The kid plays meanwhile: nobody waits for it.)
   'POST /api/check': async req => {
     const b = await readJson(req);
-    return builtSolo(b.version) ? solo.check(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.check(b)) : team.check(b);
+    return usage.during({ phase: 'play', ask: usage.lastAsk()?.id }, () => (builtSolo(b.version) ? solo.check(b) : builtAgents(b.version) ? watch.whileAgents(() => agents.check(b)) : team.check(b)));
   },
 
   // The page reports how the creation is running (and a screenshot); see watch.mjs.
-  'POST /api/watch': async req => watch.review(await readJson(req)),
+  'POST /api/watch': async req => {
+    const b = await readJson(req);
+    return usage.during({ phase: 'play', who: 'watch', ask: usage.lastAsk()?.id }, () => watch.review(b));
+  },
+
+  // What Claude's work cost, a day at a time (the latest day, or ?day=2026-11-15), for the panel.
+  'GET /api/usage': (req, res, url) => usage.summary(url.searchParams.get('day')),
 
   'POST /api/transcribe': async (req, res, url) => {
     const t0 = Date.now();
@@ -278,8 +295,10 @@ const routes = {
     const patch = {};
     if (Array.isArray(b.backends)) patch.backends = b.backends.filter(n => ai.backendNames.includes(n));
     if (typeof b.claudeModel === 'string') patch.claude = { model: b.claudeModel.trim() };
-    if (typeof b.claudeFast === 'boolean') patch.claude = { ...patch.claude, fast: b.claudeFast };
-    if (typeof b.claudeFastHelpers === 'boolean') patch.claude = { ...patch.claude, fastHelpers: b.claudeFastHelpers };
+    // (Fast mode: true or false for everything, or { new, change, play } - saved phase by phase.)
+    const phases = v => (typeof v === 'boolean' || (v && typeof v === 'object' && !Array.isArray(v)) ? fastPhases(v) : null);
+    if (phases(b.claudeFast)) patch.claude = { ...patch.claude, fast: phases(b.claudeFast) };
+    if (phases(b.claudeFastHelpers)) patch.claude = { ...patch.claude, fastHelpers: phases(b.claudeFastHelpers) };
     if (typeof b.team === 'boolean') patch.team = { enabled: b.team };
     if (typeof b.agents === 'boolean') patch.team = { ...patch.team, agents: b.agents };
     if (['direct', 'subagents'].includes(b.agentHelpers)) patch.team = { ...patch.team, agentHelpers: b.agentHelpers };
